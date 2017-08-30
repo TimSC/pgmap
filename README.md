@@ -1,9 +1,17 @@
 pgmap-query
 ===========
 
-SWIG module for accessing microcosm's postgis OSM map GIS schema.
+C++ SWIG module for accessing microcosm's postgis OSM map GIS schema. SWIG can produce a python module containing the functionality, as well as for several other languages.
+
+The tools to configure and import the postgis database are here: https://github.com/TimSC/osm2pgcopy
+
+To use this library:
 
 	sudo apt install libpqxx-dev rapidjson-dev
+
+	git clone https://github.com/TimSC/pgmap-query.git --recursive
+
+	cd pgmap-query
 
 	make
 

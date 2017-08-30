@@ -1,4 +1,5 @@
 dump
+extract
 *.o5m.gz
 config.cfg
 
