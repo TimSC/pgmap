@@ -7,6 +7,10 @@ SWIG module for accessing microcosm's postgis OSM map GIS schema.
 
 	make
 
+	cp config.cfg.template config.cfg
+
+Add your database config info to config.cfg then:
+
 	./dump
 
 

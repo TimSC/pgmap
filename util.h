@@ -1,3 +1,5 @@
+#ifndef _UTIL_H
+#define _UTIL_H
 
 #include <string>
 #include <vector>
@@ -224,4 +226,5 @@ public:
 		return true; }
 };
 
+#endif //_UTIL_H
 
