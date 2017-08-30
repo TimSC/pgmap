@@ -45,7 +45,11 @@ int main(int argc, char **argv)
 		cout << "Can't open database" << endl;
 		return 1;
 	}
-/*	
+
+	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
+	GetNodesInBbox(dbconn, config, bbox, enc); 
+
+/*
 	DumpNodes(dbconn, config, enc);
 
 	enc.Reset();
@@ -55,8 +59,8 @@ int main(int argc, char **argv)
 	enc.Reset();
 		
 	DumpRelations(dbconn, config, enc);
-
-	enc.Finish();*/
+*/
+	enc.Finish();
 
 	delete gzipEnc;
 	outfi.close();

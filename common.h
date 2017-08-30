@@ -20,6 +20,9 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
+void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
+	const std::vector<double> &bbox, O5mEncode &enc);
+
 void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc);
 void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc);
 void DumpRelations(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc);

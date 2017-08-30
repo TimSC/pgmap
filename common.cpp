@@ -70,16 +70,8 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 	}
 }
 
-void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc)
+void NodeResultsToEncoder(pqxx::icursorstream &cursor, O5mEncode &enc)
 {
-	cout << "Dump nodes" << endl;
-	stringstream sql;
-	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << config["dbtableprefix"];
-	sql << "nodes WHERE visible=true and current=true;";
-
-	pqxx::work work(dbconn);
-	pqxx::icursorstream cursor( work, sql.str(), "nodecursor", 1000 );	
 	uint64_t count = 0;
 	class MetaData metaData;
 	JsonToStringMap tagHandler;
@@ -142,6 +134,39 @@ void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, O5mEn
 			enc.StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
 		}
 	}
+}
+
+void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
+	const std::vector<double> &bbox, O5mEncode &enc)
+{
+	if(bbox.size() != 4)
+		throw invalid_argument("Bbox has wrong length");
+	pqxx::work work(dbconn);
+
+	cout << "Dump nodes" << endl;
+	stringstream sql;
+	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+	sql << config["dbtableprefix"];
+	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
+	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326);";
+
+	pqxx::icursorstream cursor( work, sql.str(), "nodesinbbox", 1000 );	
+
+	NodeResultsToEncoder(cursor, enc);
+}
+
+void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc)
+{
+	cout << "Dump nodes" << endl;
+	stringstream sql;
+	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+	sql << config["dbtableprefix"];
+	sql << "nodes WHERE visible=true and current=true;";
+
+	pqxx::work work(dbconn);
+	pqxx::icursorstream cursor( work, sql.str(), "nodecursor", 1000 );	
+
+	NodeResultsToEncoder(cursor, enc);
 }
 
 void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc)
