@@ -322,7 +322,7 @@ void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 
 // ************* Basic API methods ***************
 
-void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::vector<double> &bbox, IDataStreamHandler &enc)
 {
 	if(bbox.size() != 4)
@@ -340,12 +340,12 @@ void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config,
 	NodeResultsToEncoder(cursor, enc);
 }
 
-void GetWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
 {
 	pqxx::work work(dbconn);
 
-	string wayTable = config["dbtableprefix"] + "ways";
+	string wayTable = config["dbtableprefix"] + "liveways";
 	string wayMemTable = config["dbtableprefix"] + "way_mems";
 	int step = 1000;	
 
@@ -362,7 +362,7 @@ void GetWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> 
 			count ++;
 		}
 
-		string sql = "SELECT "+wayTable+".* FROM "+wayMemTable+" INNER JOIN "+wayTable+" ON "+wayMemTable+".id = "+wayTable+".id AND "+wayMemTable+".version = "+wayTable+".version WHERE current = true and visible = true AND ("+sqlFrags.str()+");";
+		string sql = "SELECT "+wayTable+".* FROM "+wayMemTable+" INNER JOIN "+wayTable+" ON "+wayMemTable+".id = "+wayTable+".id AND "+wayMemTable+".version = "+wayTable+".version WHERE ("+sqlFrags.str()+");";
 
 		pqxx::icursorstream cursor( work, sql, "wayscontainingnodes", 1000 );	
 
@@ -397,6 +397,39 @@ void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config
 
 		NodeResultsToEncoder(cursor, enc);
 	}
+}
+
+void GetLiveRelationsForObjects(pqxx::connection &dbconn, std::map<string, string> &config, 
+	char qtype, const set<int64_t> &qids, set<int64_t> &skipIds, 
+	IDataStreamHandler &enc)
+{
+/*	#print qids
+	sqlFrags = []
+	relTable = "{0}relations".format(config.dbtableprefix)
+	relMemTable = "{0}relation_mems_{1}".format(config.dbtableprefix, qtype)
+	for qid in qids:
+		sqlFrags.append("{0}.member = %s".format(relMemTable))
+	sql = "SELECT {0}.* FROM {1} INNER JOIN {0} ON {1}.id = {0}.id AND {1}.version = {0}.version WHERE current = true and visible = true AND ({2});".format(relTable, relMemTable, " OR ".join(sqlFrags));
+
+	cur = conn.cursor('relation-cursor', cursor_factory=psycopg2.extras.DictCursor)
+	psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, cur)
+	cur.execute(sql, qids)
+	count = 0
+	for row in cur:
+		count += 1
+		rid = row["id"]
+		if rid not in knownRelationIds:
+			relationIdsOut.add(rid)
+			mems = []
+			for (memTy, memId), memRole in zip(row["members"], row["memberroles"]):
+				mems.append((memTy, memId, memRole))
+			metaData = (row["version"], datetime.datetime.fromtimestamp(row["timestamp"]),
+				row["changeset"], row["uid"], row["username"], row["visible"])
+			encOut.StoreRelation(rid, metaData, row["tags"], mems)
+			knownRelationIds.add(rid)
+
+	cur.close()
+*/
 }
 
 // ************* Dump specific code *************

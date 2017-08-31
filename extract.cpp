@@ -51,13 +51,13 @@ int main(int argc, char **argv)
 	//Get nodes in bbox
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
 	DataStreamRetainIds retainIds(enc);
-	GetNodesInBbox(dbconn, config, bbox, retainIds); 
+	GetLiveNodesInBbox(dbconn, config, bbox, retainIds); 
 	cout << "Found " << retainIds.nodeIds.size() << " nodes in bbox" << endl;
 
 	//Get way objects that reference these nodes
 	class OsmData wayObjects;
 	DataStreamRetainMemIds retainMemIds(wayObjects);
-	GetWaysThatContainNodes(dbconn, config, retainIds.nodeIds, retainMemIds);
+	GetLiveWaysThatContainNodes(dbconn, config, retainIds.nodeIds, retainMemIds);
 	cout << "Ways depend on " << retainMemIds.nodeIds.size() << " nodes" << endl;
 
 	//Identify extra node IDs to complete ways

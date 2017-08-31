@@ -63,9 +63,9 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
-void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::vector<double> &bbox, IDataStreamHandler &enc);
-void GetWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
