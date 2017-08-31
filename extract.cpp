@@ -46,8 +46,17 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	//Get nodes in bbox
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
-	GetNodesInBbox(dbconn, config, bbox, enc); 
+	DataStreamRetainIds dataStreamRetainIds(enc);
+	GetNodesInBbox(dbconn, config, bbox, dataStreamRetainIds); 
+	cout << "Found " << dataStreamRetainIds.nodeIds.size() << " nodes in bbox" << endl;
+
+	//Get way objects that reference these nodes
+	enc.Reset();
+	GetWaysThatContainNodes(dbconn, config, dataStreamRetainIds.nodeIds, enc);
+
+	//Get node objects to complete these ways
 
 /*
 	DumpNodes(dbconn, config, enc);

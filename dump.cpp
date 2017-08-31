@@ -45,16 +45,17 @@ int main(int argc, char **argv)
 		cout << "Can't open database" << endl;
 		return 1;
 	}
-	
-	DumpNodes(dbconn, config, enc);
+	bool onlyLiveData = false;	
+
+	DumpNodes(dbconn, config, onlyLiveData, enc);
 
 	enc.Reset();
 
-	DumpWays(dbconn, config, enc);
+	DumpWays(dbconn, config, onlyLiveData, enc);
 
 	enc.Reset();
 		
-	DumpRelations(dbconn, config, enc);
+	DumpRelations(dbconn, config, onlyLiveData, enc);
 
 	enc.Finish();
 	delete gzipEnc;

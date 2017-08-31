@@ -7,6 +7,59 @@
 #include <time.h>
 using namespace std;
 
+// *********** Filters and decorators *****************
+
+DataStreamRetainIds::DataStreamRetainIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
+{
+
+}
+
+DataStreamRetainIds::DataStreamRetainIds(const DataStreamRetainIds &obj) : IDataStreamHandler(), out(obj.out)
+{
+	nodeIds = obj.nodeIds;
+	wayIds = obj.wayIds;
+	relationIds = obj.relationIds;
+}
+
+DataStreamRetainIds::~DataStreamRetainIds()
+{
+
+}
+
+void DataStreamRetainIds::StoreIsDiff(bool diff)
+{
+	out.StoreIsDiff(diff);
+}
+
+void DataStreamRetainIds::StoreBounds(double x1, double y1, double x2, double y2)
+{
+	out.StoreBounds(x1, y1, x2, y2);
+}
+
+void DataStreamRetainIds::StoreNode(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, double lat, double lon)
+{
+	out.StoreNode(objId, metaData, tags, lat, lon);
+	this->nodeIds.insert(objId);
+}
+
+void DataStreamRetainIds::StoreWay(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, const std::vector<int64_t> &refs)
+{
+	out.StoreWay(objId, metaData, tags, refs);
+	this->wayIds.insert(objId);
+}
+
+void DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
+	const std::vector<std::string> &refRoles)
+{
+	out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
+	this->relationIds.insert(objId);
+}
+
+// ****************** Encoding, decoding and converting of objects *****************
+
 void DecodeMetadata(const pqxx::result::const_iterator &c, const MetaDataCols &metaDataCols, class MetaData &metaData)
 {
 	metaData.version = c[metaDataCols.versionCol].as<uint64_t>();
@@ -70,7 +123,7 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 	}
 }
 
-void NodeResultsToEncoder(pqxx::icursorstream &cursor, O5mEncode &enc)
+void NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -136,49 +189,8 @@ void NodeResultsToEncoder(pqxx::icursorstream &cursor, O5mEncode &enc)
 	}
 }
 
-void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
-	const std::vector<double> &bbox, O5mEncode &enc)
+void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 {
-	if(bbox.size() != 4)
-		throw invalid_argument("Bbox has wrong length");
-	pqxx::work work(dbconn);
-
-	cout << "Dump nodes" << endl;
-	stringstream sql;
-	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << config["dbtableprefix"];
-	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
-	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326);";
-
-	pqxx::icursorstream cursor( work, sql.str(), "nodesinbbox", 1000 );	
-
-	NodeResultsToEncoder(cursor, enc);
-}
-
-void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc)
-{
-	cout << "Dump nodes" << endl;
-	stringstream sql;
-	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << config["dbtableprefix"];
-	sql << "nodes WHERE visible=true and current=true;";
-
-	pqxx::work work(dbconn);
-	pqxx::icursorstream cursor( work, sql.str(), "nodecursor", 1000 );	
-
-	NodeResultsToEncoder(cursor, enc);
-}
-
-void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc)
-{
-	cout << "Dump ways" << endl;
-	stringstream sql;
-	sql << "SELECT * FROM ";
-	sql << config["dbtableprefix"];
-	sql << "ways WHERE visible=true and current=true;";
-
-	pqxx::work work(dbconn);
-	pqxx::icursorstream cursor( work, sql.str(), "waycursor", 1000 );	
 	uint64_t count = 0;
 	class MetaData metaData;
 	JsonToStringMap tagHandler;
@@ -186,12 +198,13 @@ void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, O5mEnc
 	const std::vector<int64_t> refs;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
 	uint64_t lastUpdateCount = 0;
+	bool verbose = false;
 	for ( size_t batch = 0; true; batch ++ )
 	{
 		pqxx::result rows;
 		cursor.get(rows);
 		if ( rows.empty() ) break; // nothing left to read
-		if(batch == 0)
+		if(batch == 0 and verbose)
 		{
 			size_t numCols = rows.columns();
 			for(size_t i = 0; i < numCols; i++)
@@ -228,13 +241,14 @@ void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, O5mEnc
 			DecodeWayMembers(c, membersCol, wayMemHandler);
 
 			count ++;
-			if(count % 1000000 == 0)
+			if(count % 1000000 == 0 and verbose)
 				cout << count << " ways" << endl;
 
 			double timeNow = (double)clock() / CLOCKS_PER_SEC;
 			if (timeNow - lastUpdateTime > 30.0)
 			{
-				cout << (count - lastUpdateCount)/30.0 << " ways/sec" << endl;
+				if(verbose)
+					cout << (count - lastUpdateCount)/30.0 << " ways/sec" << endl;
 				lastUpdateCount = count;
 				lastUpdateTime = timeNow;
 			}
@@ -245,13 +259,108 @@ void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, O5mEnc
 	}
 }
 
-void DumpRelations(pqxx::connection &dbconn, std::map<string, string> &config, O5mEncode &enc)
+// ************* Basic API methods ***************
+
+void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
+	const std::vector<double> &bbox, IDataStreamHandler &enc)
+{
+	if(bbox.size() != 4)
+		throw invalid_argument("Bbox has wrong length");
+	pqxx::work work(dbconn);
+
+	stringstream sql;
+	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+	sql << config["dbtableprefix"];
+	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
+	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326);";
+
+	pqxx::icursorstream cursor( work, sql.str(), "nodesinbbox", 1000 );	
+
+	NodeResultsToEncoder(cursor, enc);
+}
+
+void GetWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
+	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
+{
+	pqxx::work work(dbconn);
+
+	string wayTable = config["dbtableprefix"] + "ways";
+	string wayMemTable = config["dbtableprefix"] + "way_mems";
+	int step = 1000;	
+
+	auto it=nodeIds.begin();
+	while(it != nodeIds.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != nodeIds.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << wayMemTable << ".member = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT "+wayTable+".* FROM "+wayMemTable+" INNER JOIN "+wayTable+" ON "+wayMemTable+".id = "+wayTable+".id AND "+wayMemTable+".version = "+wayTable+".version WHERE current = true and visible = true AND ("+sqlFrags.str()+");";
+
+		pqxx::icursorstream cursor( work, sql, "wayscontainingnodes", 1000 );	
+
+		WayResultsToEncoder(cursor, enc);
+	}
+}
+
+// ************* Dump specific code *************
+
+void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)
+{
+	cout << "Dump nodes" << endl;
+	stringstream sql;
+	if(onlyLiveData)
+	{
+		sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+		sql << config["dbtableprefix"];
+		sql << "livenodes;";
+	}
+	else
+	{
+		sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+		sql << config["dbtableprefix"];
+		sql << "nodes;";
+	}
+
+	pqxx::work work(dbconn);
+	pqxx::icursorstream cursor( work, sql.str(), "nodecursor", 1000 );	
+
+	NodeResultsToEncoder(cursor, enc);
+}
+
+void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)
+{
+	cout << "Dump ways" << endl;
+	stringstream sql;
+	sql << "SELECT * FROM ";
+	sql << config["dbtableprefix"];
+	sql << "ways";
+	if(onlyLiveData)
+		sql << " WHERE visible=true and current=true";
+	sql << ";";
+
+	pqxx::work work(dbconn);
+	pqxx::icursorstream cursor( work, sql.str(), "waycursor", 1000 );	
+
+	WayResultsToEncoder(cursor, enc);
+}
+
+void DumpRelations(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)
 {
 	cout << "Dump relations" << endl;
 	stringstream sql;
 	sql << "SELECT * FROM ";
 	sql << config["dbtableprefix"];
-	sql << "relations WHERE visible=true and current=true;";
+	sql << "relations";
+	if(onlyLiveData)
+		sql << " WHERE visible=true and current=true";
+	sql << ";";
 
 	pqxx::work work(dbconn);
 	pqxx::icursorstream cursor( work, sql.str(), "relationcursor", 1000 );	
@@ -325,4 +434,5 @@ void DumpRelations(pqxx::connection &dbconn, std::map<string, string> &config, O
 
 	}
 }
+
 
