@@ -48,22 +48,26 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	//Lock database for reading
+	//TODO
+
 	//Get nodes in bbox
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
-	DataStreamRetainIds retainIds(enc);
-	GetLiveNodesInBbox(dbconn, config, bbox, retainIds); 
-	cout << "Found " << retainIds.nodeIds.size() << " nodes in bbox" << endl;
+	DataStreamRetainIds retainNodeIds(enc);
+	GetLiveNodesInBbox(dbconn, config, bbox, retainNodeIds); 
+	cout << "Found " << retainNodeIds.nodeIds.size() << " nodes in bbox" << endl;
 
 	//Get way objects that reference these nodes
 	class OsmData wayObjects;
-	DataStreamRetainMemIds retainMemIds(wayObjects);
-	GetLiveWaysThatContainNodes(dbconn, config, retainIds.nodeIds, retainMemIds);
-	cout << "Ways depend on " << retainMemIds.nodeIds.size() << " nodes" << endl;
+	DataStreamRetainIds retainWayIds(wayObjects);
+	DataStreamRetainMemIds retainWayMemIds(retainWayIds);
+	GetLiveWaysThatContainNodes(dbconn, config, retainNodeIds.nodeIds, retainWayMemIds);
+	cout << "Ways depend on " << retainWayMemIds.nodeIds.size() << " nodes" << endl;
 
 	//Identify extra node IDs to complete ways
 	set<int64_t> extraNodes;
-	std::set_difference(retainMemIds.nodeIds.begin(), retainMemIds.nodeIds.end(), 
-		retainIds.nodeIds.begin(), retainIds.nodeIds.end(),
+	std::set_difference(retainWayMemIds.nodeIds.begin(), retainWayMemIds.nodeIds.end(), 
+		retainNodeIds.nodeIds.begin(), retainNodeIds.nodeIds.end(),
 	    std::inserter(extraNodes, extraNodes.end()));
 	cout << "num extraNodes " << extraNodes.size() << endl;
 
@@ -74,11 +78,23 @@ int main(int argc, char **argv)
 	enc.Reset();
 	wayObjects.StreamTo(enc);
 
-/*
+	//Get relations that reference any of the above nodes
 	enc.Reset();
-		
-	DumpRelations(dbconn, config, enc);
-*/
+	set<int64_t> empty;
+	DataStreamRetainIds retainRelationIds(enc);
+	GetLiveRelationsForObjects(dbconn, config, 
+		'n', retainNodeIds.nodeIds, empty, retainRelationIds);
+	GetLiveRelationsForObjects(dbconn, config, 
+		'n', extraNodes, retainRelationIds.relationIds, retainRelationIds);
+
+	//Get relations that reference any of the above ways
+	GetLiveRelationsForObjects(dbconn, config, 
+		'w', retainWayIds.wayIds, retainRelationIds.relationIds, retainRelationIds);
+	cout << "found " << retainRelationIds.relationIds.size() << " initial relations" << endl;
+
+	//Release database lock
+	//TODO
+
 	enc.Finish();
 
 	delete gzipEnc;

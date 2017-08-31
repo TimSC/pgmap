@@ -69,6 +69,9 @@ void GetLiveWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, stri
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
+void GetLiveRelationsForObjects(pqxx::connection &dbconn, std::map<string, string> &config, 
+	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
+	IDataStreamHandler &enc);
 
 void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);

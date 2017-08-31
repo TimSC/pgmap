@@ -191,12 +191,14 @@ void NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 	JsonToStringMap tagHandler;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
 	uint64_t lastUpdateCount = 0;
+	bool verbose = false;
+
 	for ( size_t batch = 0; true; batch ++ )
 	{
 		pqxx::result rows;
 		cursor.get(rows);
 		if ( rows.empty() ) break; // nothing left to read
-		if(batch == 0)
+		if(batch == 0 and verbose)
 		{
 			size_t numCols = rows.columns();
 			for(size_t i = 0; i < numCols; i++)
@@ -234,13 +236,14 @@ void NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 			DecodeTags(c, tagsCol, tagHandler);
 
 			count ++;
-			if(count % 1000000 == 0)
+			if(count % 1000000 == 0 and verbose)
 				cout << count << " nodes" << endl;
 
 			double timeNow = (double)clock() / CLOCKS_PER_SEC;
 			if (timeNow - lastUpdateTime > 30.0)
 			{
-				cout << (count - lastUpdateCount)/30.0 << " nodes/sec" << endl;
+				if(verbose)
+					cout << (count - lastUpdateCount)/30.0 << " nodes/sec" << endl;
 				lastUpdateCount = count;
 				lastUpdateTime = timeNow;
 			}
@@ -317,6 +320,82 @@ void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 			enc.StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
 		}
 
+	}
+}
+
+void RelationResultsToEnc(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, IDataStreamHandler &enc)
+{
+	uint64_t count = 0;
+	class MetaData metaData;
+	JsonToStringMap tagHandler;
+	JsonToRelMembers relMemHandler;
+	JsonToRelMemberRoles relMemRolesHandler;
+	std::vector<std::string> refRoles;
+	const std::vector<int64_t> refs;
+	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
+	uint64_t lastUpdateCount = 0;
+	bool verbose = false;
+	for ( size_t batch = 0; true; batch ++ )
+	{
+		pqxx::result rows;
+		cursor.get(rows);
+		if ( rows.empty() ) break; // nothing left to read
+		if(batch == 0 and verbose)
+		{
+			size_t numCols = rows.columns();
+			for(size_t i = 0; i < numCols; i++)
+			{
+				cout << i << "\t" << rows.column_name(i) << "\t" << (unsigned int)rows.column_type((pqxx::tuple::size_type)i) << endl;
+			}
+		}
+
+		MetaDataCols metaDataCols;
+
+		int idCol = rows.column_number("id");
+		metaDataCols.changesetCol = rows.column_number("changeset");
+		metaDataCols.usernameCol = rows.column_number("username");
+		metaDataCols.uidCol = rows.column_number("uid");
+		int visibleCol = rows.column_number("visible");
+		metaDataCols.timestampCol = rows.column_number("timestamp");
+		metaDataCols.versionCol = rows.column_number("version");
+		int currentCol = rows.column_number("current");
+		int tagsCol = rows.column_number("tags");
+		int membersCol = rows.column_number("members");
+		int membersRolesCol = rows.column_number("memberroles");
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+			bool visible = c[visibleCol].as<bool>();
+			bool current = c[currentCol].as<bool>();
+			assert(visible && current);
+
+			int64_t objId = c[idCol].as<int64_t>();
+			if(skipIds.find(objId) != skipIds.end())
+				continue;
+
+			DecodeMetadata(c, metaDataCols, metaData);
+			
+			DecodeTags(c, tagsCol, tagHandler);
+
+			DecodeRelMembers(c, membersCol, membersRolesCol, 
+				relMemHandler, relMemRolesHandler);
+
+			count ++;
+			if(count % 1000000 == 0 and verbose)
+				cout << count << " relations" << endl;
+
+			double timeNow = (double)clock() / CLOCKS_PER_SEC;
+			if (timeNow - lastUpdateTime > 30.0)
+			{
+				if(verbose)
+					cout << (count - lastUpdateCount)/30.0 << " relations/sec" << endl;
+				lastUpdateCount = count;
+				lastUpdateTime = timeNow;
+			}
+
+			enc.StoreRelation(objId, metaData, tagHandler.tagMap, 
+				relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
+		}
 	}
 }
 
@@ -400,36 +479,35 @@ void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config
 }
 
 void GetLiveRelationsForObjects(pqxx::connection &dbconn, std::map<string, string> &config, 
-	char qtype, const set<int64_t> &qids, set<int64_t> &skipIds, 
+	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
 	IDataStreamHandler &enc)
 {
-/*	#print qids
-	sqlFrags = []
-	relTable = "{0}relations".format(config.dbtableprefix)
-	relMemTable = "{0}relation_mems_{1}".format(config.dbtableprefix, qtype)
-	for qid in qids:
-		sqlFrags.append("{0}.member = %s".format(relMemTable))
-	sql = "SELECT {0}.* FROM {1} INNER JOIN {0} ON {1}.id = {0}.id AND {1}.version = {0}.version WHERE current = true and visible = true AND ({2});".format(relTable, relMemTable, " OR ".join(sqlFrags));
+	pqxx::work work(dbconn);
 
-	cur = conn.cursor('relation-cursor', cursor_factory=psycopg2.extras.DictCursor)
-	psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, cur)
-	cur.execute(sql, qids)
-	count = 0
-	for row in cur:
-		count += 1
-		rid = row["id"]
-		if rid not in knownRelationIds:
-			relationIdsOut.add(rid)
-			mems = []
-			for (memTy, memId), memRole in zip(row["members"], row["memberroles"]):
-				mems.append((memTy, memId, memRole))
-			metaData = (row["version"], datetime.datetime.fromtimestamp(row["timestamp"]),
-				row["changeset"], row["uid"], row["username"], row["visible"])
-			encOut.StoreRelation(rid, metaData, row["tags"], mems)
-			knownRelationIds.add(rid)
+	string relTable = config["dbtableprefix"] + "liverelations";
+	string relMemTable = config["dbtableprefix"] + "relation_mems_" + qtype;
+	cout << relMemTable << endl;
+	int step = 1000;	
 
-	cur.close()
-*/
+	auto it=qids.begin();
+	while(it != qids.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != qids.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << relMemTable << ".member = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT "+relTable+".* FROM "+relMemTable+" INNER JOIN "+relTable+" ON "+relMemTable+".id = "+relTable+".id AND "+relMemTable+".version = "+relTable+".version WHERE ("+sqlFrags.str()+");";
+
+		pqxx::icursorstream cursor( work, sql, "relationscontainingobjects", 1000 );	
+
+		RelationResultsToEnc(cursor, skipIds, enc);
+	}
 }
 
 // ************* Dump specific code *************
@@ -487,75 +565,8 @@ void DumpRelations(pqxx::connection &dbconn, std::map<string, string> &config, b
 
 	pqxx::work work(dbconn);
 	pqxx::icursorstream cursor( work, sql.str(), "relationcursor", 1000 );	
-	uint64_t count = 0;
-	class MetaData metaData;
-	JsonToStringMap tagHandler;
-	JsonToRelMembers relMemHandler;
-	JsonToRelMemberRoles relMemRolesHandler;
-	std::vector<std::string> refRoles;
-	const std::vector<int64_t> refs;
-	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
-	uint64_t lastUpdateCount = 0;
-	for ( size_t batch = 0; true; batch ++ )
-	{
-		pqxx::result rows;
-		cursor.get(rows);
-		if ( rows.empty() ) break; // nothing left to read
-		if(batch == 0)
-		{
-			size_t numCols = rows.columns();
-			for(size_t i = 0; i < numCols; i++)
-			{
-				cout << i << "\t" << rows.column_name(i) << "\t" << (unsigned int)rows.column_type((pqxx::tuple::size_type)i) << endl;
-			}
-		}
 
-		MetaDataCols metaDataCols;
-
-		int idCol = rows.column_number("id");
-		metaDataCols.changesetCol = rows.column_number("changeset");
-		metaDataCols.usernameCol = rows.column_number("username");
-		metaDataCols.uidCol = rows.column_number("uid");
-		int visibleCol = rows.column_number("visible");
-		metaDataCols.timestampCol = rows.column_number("timestamp");
-		metaDataCols.versionCol = rows.column_number("version");
-		int currentCol = rows.column_number("current");
-		int tagsCol = rows.column_number("tags");
-		int membersCol = rows.column_number("members");
-		int membersRolesCol = rows.column_number("memberroles");
-
-		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-			bool visible = c[visibleCol].as<bool>();
-			bool current = c[currentCol].as<bool>();
-			assert(visible && current);
-
-			int64_t objId = c[idCol].as<int64_t>();
-
-			DecodeMetadata(c, metaDataCols, metaData);
-			
-			DecodeTags(c, tagsCol, tagHandler);
-
-			DecodeRelMembers(c, membersCol, membersRolesCol, 
-				relMemHandler, relMemRolesHandler);
-
-			count ++;
-			if(count % 1000000 == 0)
-				cout << count << " relations" << endl;
-
-			double timeNow = (double)clock() / CLOCKS_PER_SEC;
-			if (timeNow - lastUpdateTime > 30.0)
-			{
-				cout << (count - lastUpdateCount)/30.0 << " relations/sec" << endl;
-				lastUpdateCount = count;
-				lastUpdateTime = timeNow;
-			}
-
-			enc.StoreRelation(objId, metaData, tagHandler.tagMap, 
-				relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
-		}
-
-	}
+	set<int64_t> empty;
+	RelationResultsToEnc(cursor, empty, enc);
 }
-
 
