@@ -58,6 +58,67 @@ void DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &met
 	this->relationIds.insert(objId);
 }
 
+// ******************************
+
+DataStreamRetainMemIds::DataStreamRetainMemIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
+{
+
+}
+
+DataStreamRetainMemIds::DataStreamRetainMemIds(const DataStreamRetainMemIds &obj) : IDataStreamHandler(), out(obj.out)
+{
+	nodeIds = obj.nodeIds;
+	wayIds = obj.wayIds;
+	relationIds = obj.relationIds;
+}
+
+DataStreamRetainMemIds::~DataStreamRetainMemIds()
+{
+
+}
+
+void DataStreamRetainMemIds::StoreIsDiff(bool diff)
+{
+	out.StoreIsDiff(diff);
+}
+
+void DataStreamRetainMemIds::StoreBounds(double x1, double y1, double x2, double y2)
+{
+	out.StoreBounds(x1, y1, x2, y2);
+}
+
+void DataStreamRetainMemIds::StoreNode(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, double lat, double lon)
+{
+	out.StoreNode(objId, metaData, tags, lat, lon);
+}
+
+void DataStreamRetainMemIds::StoreWay(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, const std::vector<int64_t> &refs)
+{
+	out.StoreWay(objId, metaData, tags, refs);
+	for(size_t i=0; i < refs.size(); i++)
+		this->nodeIds.insert(refs[i]);
+}
+
+void DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
+	const std::vector<std::string> &refRoles)
+{
+	out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
+	for(size_t i=0; i < refTypeStrs.size(); i++)
+	{
+		if(refTypeStrs[i] == "node")
+			this->nodeIds.insert(objId);
+		else if(refTypeStrs[i] == "way")
+			this->wayIds.insert(objId);
+		else if(refTypeStrs[i] == "relation")
+			this->relationIds.insert(objId);
+		else
+			throw runtime_error("Unknown member type in relation");
+	}
+}
+
 // ****************** Encoding, decoding and converting of objects *****************
 
 void DecodeMetadata(const pqxx::result::const_iterator &c, const MetaDataCols &metaDataCols, class MetaData &metaData)
