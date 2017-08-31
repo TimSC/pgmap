@@ -4,6 +4,7 @@
 #include "common.h"
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
+#include "cppo5m/OsmData.h"
 
 int main(int argc, char **argv)
 {	
@@ -54,9 +55,8 @@ int main(int argc, char **argv)
 	cout << "Found " << retainIds.nodeIds.size() << " nodes in bbox" << endl;
 
 	//Get way objects that reference these nodes
-	//TODO retain these ways in memory
-	enc.Reset();
-	DataStreamRetainMemIds retainMemIds(enc);
+	class OsmData wayObjects;
+	DataStreamRetainMemIds retainMemIds(wayObjects);
 	GetWaysThatContainNodes(dbconn, config, retainIds.nodeIds, retainMemIds);
 	cout << "Ways depend on " << retainMemIds.nodeIds.size() << " nodes" << endl;
 
@@ -68,6 +68,11 @@ int main(int argc, char **argv)
 	cout << "num extraNodes " << extraNodes.size() << endl;
 
 	//Get node objects to complete these ways
+	GetLiveNodesById(dbconn, config, extraNodes, enc);
+
+	//Write ways to output
+	enc.Reset();
+	wayObjects.StreamTo(enc);
 
 /*
 	enc.Reset();

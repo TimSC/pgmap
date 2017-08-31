@@ -370,6 +370,35 @@ void GetWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> 
 	}
 }
 
+void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config, 
+	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
+{
+	pqxx::work work(dbconn);
+	string nodeTable = config["dbtableprefix"] + "livenodes";
+	int step = 1000;
+
+	auto it=nodeIds.begin();
+	while(it != nodeIds.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != nodeIds.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << "id = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ nodeTable
+			+ " WHERE ("+sqlFrags.str()+");";
+
+		pqxx::icursorstream cursor( work, sql, "nodecursor", 1000 );	
+
+		NodeResultsToEncoder(cursor, enc);
+	}
+}
+
 // ************* Dump specific code *************
 
 void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)

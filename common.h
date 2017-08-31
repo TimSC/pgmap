@@ -67,6 +67,8 @@ void GetNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config,
 	const std::vector<double> &bbox, IDataStreamHandler &enc);
 void GetWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
+void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config, 
+	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 
 void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
