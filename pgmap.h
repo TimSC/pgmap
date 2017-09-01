@@ -4,6 +4,7 @@
 #include <string>
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include "cppo5m/o5m.h"
+#include "cppo5m/osmxml.h"
 
 class PgMap
 {

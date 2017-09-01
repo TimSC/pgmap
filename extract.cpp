@@ -3,15 +3,24 @@
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
 #include "cppo5m/OsmData.h"
+#include "cppo5m/osmxml.h"
 #include "pgmap.h"
 
 int main(int argc, char **argv)
 {	
 	std::filebuf outfi;
+
+#if 0
 	outfi.open("extract.o5m.gz", std::ios::out);
 	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
 
 	O5mEncode enc(*gzipEnc);
+#else
+	outfi.open("extract.osm.gz", std::ios::out);
+	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
+
+	OsmXmlEncode enc(*gzipEnc);
+#endif
 
 	string configContent;
 	cout << "Reading settings from config.cfg" << endl;

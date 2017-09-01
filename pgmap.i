@@ -42,11 +42,17 @@ public:
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 };
 
-class O5mEncode : public IDataStreamHandler
+class PyO5mEncode : public IDataStreamHandler
 {
 public:
-	O5mEncode(std::streambuf &handle);
-	O5mEncode(PyObject* obj);
-	virtual ~O5mEncode();
+	PyO5mEncode(PyObject* obj);
+	virtual ~PyO5mEncode();
+};
+
+class PyOsmXmlEncode : public IDataStreamHandler
+{
+public:
+	PyOsmXmlEncode(PyObject* obj);
+	virtual ~PyOsmXmlEncode();	
 };
 

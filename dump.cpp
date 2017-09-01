@@ -3,6 +3,7 @@
 #include "pgmap.h"
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
+#include "cppo5m/osmxml.h"
 
 int main(int argc, char **argv)
 {	
