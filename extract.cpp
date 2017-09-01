@@ -97,10 +97,7 @@ int main(int argc, char **argv)
 	//Get relations that reference any of the above ways
 	GetLiveRelationsForObjects(work, config, 
 		'w', retainWayIds.wayIds, retainRelationIds.relationIds, retainRelationIds);
-	cout << "found " << retainRelationIds.relationIds.size() << " initial relations" << endl;
-
-	//Get relations that are part of the above relations
-	//TODO
+	cout << "found " << retainRelationIds.relationIds.size() << " relations" << endl;
 
 	//Release database lock by finishing the transaction
 	work.commit();

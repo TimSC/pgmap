@@ -72,6 +72,8 @@ void GetLiveNodesById(pqxx::work &work, std::map<string, string> &config,
 void GetLiveRelationsForObjects(pqxx::work &work, std::map<string, string> &config, 
 	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
 	IDataStreamHandler &enc);
+void GetLiveRelationsById(pqxx::work &work, std::map<string, string> &config, 
+	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 
 void DumpNodes(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpWays(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);

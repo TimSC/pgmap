@@ -323,7 +323,7 @@ void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 	}
 }
 
-void RelationResultsToEnc(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, IDataStreamHandler &enc)
+void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, IDataStreamHandler &enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -500,7 +500,36 @@ void GetLiveRelationsForObjects(pqxx::work &work, std::map<string, string> &conf
 
 		pqxx::icursorstream cursor( work, sql, "relationscontainingobjects", 1000 );	
 
-		RelationResultsToEnc(cursor, skipIds, enc);
+		RelationResultsToEncoder(cursor, skipIds, enc);
+	}
+}
+
+void GetLiveRelationsById(pqxx::work &work, std::map<string, string> &config, 
+	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
+{
+	string relationTable = config["dbtableprefix"] + "liverelations";
+	int step = 1000;
+
+	auto it=nodeIds.begin();
+	while(it != nodeIds.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != nodeIds.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << "id = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT * FROM "+ relationTable
+			+ " WHERE ("+sqlFrags.str()+");";
+
+		pqxx::icursorstream cursor( work, sql, "relationcursor", 1000 );	
+
+		set<int64_t> empty;
+		RelationResultsToEncoder(cursor, empty, enc);
 	}
 }
 
@@ -558,6 +587,6 @@ void DumpRelations(pqxx::work &work, std::map<string, string> &config, bool only
 	pqxx::icursorstream cursor( work, sql.str(), "relationcursor", 1000 );	
 
 	set<int64_t> empty;
-	RelationResultsToEnc(cursor, empty, enc);
+	RelationResultsToEncoder(cursor, empty, enc);
 }
 
