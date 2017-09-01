@@ -63,21 +63,21 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
-void GetLiveNodesInBbox(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
 	const std::vector<double> &bbox, IDataStreamHandler &enc);
-void GetLiveWaysThatContainNodes(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
-void GetLiveNodesById(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
-void GetLiveRelationsForObjects(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
 	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
 	IDataStreamHandler &enc);
-void GetLiveRelationsById(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 
-void DumpNodes(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
-void DumpWays(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
-void DumpRelations(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
+void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
+void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
+void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
 
 #endif //_COMMON_H
 

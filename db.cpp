@@ -1,4 +1,4 @@
-#include "common.h"
+#include "db.h"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -401,7 +401,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 
 // ************* Basic API methods ***************
 
-void GetLiveNodesInBbox(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
 	const std::vector<double> &bbox, IDataStreamHandler &enc)
 {
 	if(bbox.size() != 4)
@@ -409,7 +409,7 @@ void GetLiveNodesInBbox(pqxx::work &work, std::map<string, string> &config,
 
 	stringstream sql;
 	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << config["dbtableprefix"];
+	sql << tablePrefix;
 	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326);";
 
@@ -418,11 +418,11 @@ void GetLiveNodesInBbox(pqxx::work &work, std::map<string, string> &config,
 	NodeResultsToEncoder(cursor, enc);
 }
 
-void GetLiveWaysThatContainNodes(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
 {
-	string wayTable = config["dbtableprefix"] + "liveways";
-	string wayMemTable = config["dbtableprefix"] + "way_mems";
+	string wayTable = tablePrefix + "liveways";
+	string wayMemTable = tablePrefix + "way_mems";
 	int step = 1000;	
 
 	auto it=nodeIds.begin();
@@ -446,10 +446,10 @@ void GetLiveWaysThatContainNodes(pqxx::work &work, std::map<string, string> &con
 	}
 }
 
-void GetLiveNodesById(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
 {
-	string nodeTable = config["dbtableprefix"] + "livenodes";
+	string nodeTable = tablePrefix + "livenodes";
 	int step = 1000;
 
 	auto it=nodeIds.begin();
@@ -474,12 +474,12 @@ void GetLiveNodesById(pqxx::work &work, std::map<string, string> &config,
 	}
 }
 
-void GetLiveRelationsForObjects(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
 	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
 	IDataStreamHandler &enc)
 {
-	string relTable = config["dbtableprefix"] + "liverelations";
-	string relMemTable = config["dbtableprefix"] + "relation_mems_" + qtype;
+	string relTable = tablePrefix + "liverelations";
+	string relMemTable = tablePrefix + "relation_mems_" + qtype;
 	cout << relMemTable << endl;
 	int step = 1000;	
 
@@ -504,10 +504,10 @@ void GetLiveRelationsForObjects(pqxx::work &work, std::map<string, string> &conf
 	}
 }
 
-void GetLiveRelationsById(pqxx::work &work, std::map<string, string> &config, 
+void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
 {
-	string relationTable = config["dbtableprefix"] + "liverelations";
+	string relationTable = tablePrefix + "liverelations";
 	int step = 1000;
 
 	auto it=nodeIds.begin();
@@ -535,20 +535,20 @@ void GetLiveRelationsById(pqxx::work &work, std::map<string, string> &config,
 
 // ************* Dump specific code *************
 
-void DumpNodes(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)
+void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
 {
 	cout << "Dump nodes" << endl;
 	stringstream sql;
 	if(onlyLiveData)
 	{
 		sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-		sql << config["dbtableprefix"];
+		sql << tablePrefix;
 		sql << "livenodes;";
 	}
 	else
 	{
 		sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-		sql << config["dbtableprefix"];
+		sql << tablePrefix;
 		sql << "nodes;";
 	}
 
@@ -557,12 +557,12 @@ void DumpNodes(pqxx::work &work, std::map<string, string> &config, bool onlyLive
 	NodeResultsToEncoder(cursor, enc);
 }
 
-void DumpWays(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)
+void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
 {
 	cout << "Dump ways" << endl;
 	stringstream sql;
 	sql << "SELECT * FROM ";
-	sql << config["dbtableprefix"];
+	sql << tablePrefix;
 	sql << "ways";
 	if(onlyLiveData)
 		sql << " WHERE visible=true and current=true";
@@ -573,12 +573,12 @@ void DumpWays(pqxx::work &work, std::map<string, string> &config, bool onlyLiveD
 	WayResultsToEncoder(cursor, enc);
 }
 
-void DumpRelations(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc)
+void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
 {
 	cout << "Dump relations" << endl;
 	stringstream sql;
 	sql << "SELECT * FROM ";
-	sql << config["dbtableprefix"];
+	sql << tablePrefix;
 	sql << "relations";
 	if(onlyLiveData)
 		sql << " WHERE visible=true and current=true";

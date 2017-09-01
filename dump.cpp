@@ -1,6 +1,6 @@
 #include <fstream>
 #include <iostream>
-#include "common.h"
+#include "pgmap.h"
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
 
@@ -11,7 +11,6 @@ int main(int argc, char **argv)
 	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
 
 	O5mEncode enc(*gzipEnc);
-	enc.StoreIsDiff(false);
 
 	string configContent;
 	cout << "Reading settings from config.cfg" << endl;
@@ -38,37 +37,20 @@ int main(int argc, char **argv)
 	ss << " port=";
 	ss << "5432";
 	
-	pqxx::connection dbconn(ss.str());
-	if (dbconn.is_open()) {
-		cout << "Opened database successfully: " << dbconn.dbname() << endl;
+	class PgMap pgMap(ss.str(), config["dbtableprefix"]);
+
+	if (pgMap.Ready()) {
+		cout << "Opened database successfully" << endl;
 	} else {
 		cout << "Can't open database" << endl;
 		return 1;
 	}
 	bool onlyLiveData = false;	
 
-	//Lock database for reading (this must always be done in a set order)
-	pqxx::work work(dbconn);
-	work.exec("LOCK TABLE "+config["dbtableprefix"] + "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+config["dbtableprefix"] + "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+config["dbtableprefix"] + "relations IN ACCESS SHARE MODE;");
+	pgMap.Dump(onlyLiveData, enc);
 
-	DumpNodes(work, config, onlyLiveData, enc);
-
-	enc.Reset();
-
-	DumpWays(work, config, onlyLiveData, enc);
-
-	enc.Reset();
-		
-	DumpRelations(work, config, onlyLiveData, enc);
-
-	//Release locks
-	work.commit();
-
-	enc.Finish();
 	delete gzipEnc;
 	outfi.close();
-	dbconn.disconnect ();
+	
 	return 0;
 }
