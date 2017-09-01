@@ -2,4 +2,9 @@ dump
 extract
 *.o5m.gz
 config.cfg
+__pycache__/
+_pgmap.so
+pgmap.py
+pgmap.pyc
+pgmap_wrap.cxx
 
