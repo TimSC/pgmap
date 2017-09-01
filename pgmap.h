@@ -9,14 +9,15 @@ class PgMap
 {
 private:
 	pqxx::connection dbconn;
-	string tablePrefix;
+	std::string tablePrefix;
+	std::string connectionString;
 
 public:
-	PgMap(const std::string &connection, const string &tablePrefixIn);
+	PgMap(const std::string &connection, const std::string &tablePrefixIn);
 	virtual ~PgMap();
 
 	bool Ready();
-	void MapQuery(const vector<double> &bbox, IDataStreamHandler &enc);
+	void MapQuery(const std::vector<double> &bbox, IDataStreamHandler &enc);
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 };
 

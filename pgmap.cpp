@@ -8,6 +8,7 @@ using namespace std;
 
 PgMap::PgMap(const string &connection, const string &tablePrefixIn) : dbconn(connection)
 {
+	connectionString = connection;
 	tablePrefix = tablePrefixIn;
 }
 
