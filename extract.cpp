@@ -48,20 +48,27 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	//Lock database for reading
-	//TODO
+	//Lock database for reading (this must always be done in a set order)
+	pqxx::work work(dbconn);
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "nodes IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "ways IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "relations IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "way_mems IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "relation_mems_n IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "relation_mems_w IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "relation_mems_r IN ACCESS SHARE MODE;");
 
 	//Get nodes in bbox
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
 	DataStreamRetainIds retainNodeIds(enc);
-	GetLiveNodesInBbox(dbconn, config, bbox, retainNodeIds); 
+	GetLiveNodesInBbox(work, config, bbox, retainNodeIds); 
 	cout << "Found " << retainNodeIds.nodeIds.size() << " nodes in bbox" << endl;
 
 	//Get way objects that reference these nodes
 	class OsmData wayObjects;
 	DataStreamRetainIds retainWayIds(wayObjects);
 	DataStreamRetainMemIds retainWayMemIds(retainWayIds);
-	GetLiveWaysThatContainNodes(dbconn, config, retainNodeIds.nodeIds, retainWayMemIds);
+	GetLiveWaysThatContainNodes(work, config, retainNodeIds.nodeIds, retainWayMemIds);
 	cout << "Ways depend on " << retainWayMemIds.nodeIds.size() << " nodes" << endl;
 
 	//Identify extra node IDs to complete ways
@@ -72,28 +79,31 @@ int main(int argc, char **argv)
 	cout << "num extraNodes " << extraNodes.size() << endl;
 
 	//Get node objects to complete these ways
-	GetLiveNodesById(dbconn, config, extraNodes, enc);
+	GetLiveNodesById(work, config, extraNodes, enc);
 
 	//Write ways to output
 	enc.Reset();
-	wayObjects.StreamTo(enc);
+	wayObjects.StreamTo(enc, false);
 
 	//Get relations that reference any of the above nodes
 	enc.Reset();
 	set<int64_t> empty;
 	DataStreamRetainIds retainRelationIds(enc);
-	GetLiveRelationsForObjects(dbconn, config, 
+	GetLiveRelationsForObjects(work, config, 
 		'n', retainNodeIds.nodeIds, empty, retainRelationIds);
-	GetLiveRelationsForObjects(dbconn, config, 
+	GetLiveRelationsForObjects(work, config, 
 		'n', extraNodes, retainRelationIds.relationIds, retainRelationIds);
 
 	//Get relations that reference any of the above ways
-	GetLiveRelationsForObjects(dbconn, config, 
+	GetLiveRelationsForObjects(work, config, 
 		'w', retainWayIds.wayIds, retainRelationIds.relationIds, retainRelationIds);
 	cout << "found " << retainRelationIds.relationIds.size() << " initial relations" << endl;
 
-	//Release database lock
+	//Get relations that are part of the above relations
 	//TODO
+
+	//Release database lock by finishing the transaction
+	work.commit();
 
 	enc.Finish();
 

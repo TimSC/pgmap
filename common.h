@@ -63,19 +63,19 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
-void GetLiveNodesInBbox(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveNodesInBbox(pqxx::work &work, std::map<string, string> &config, 
 	const std::vector<double> &bbox, IDataStreamHandler &enc);
-void GetLiveWaysThatContainNodes(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveWaysThatContainNodes(pqxx::work &work, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
-void GetLiveNodesById(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveNodesById(pqxx::work &work, std::map<string, string> &config, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
-void GetLiveRelationsForObjects(pqxx::connection &dbconn, std::map<string, string> &config, 
+void GetLiveRelationsForObjects(pqxx::work &work, std::map<string, string> &config, 
 	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
 	IDataStreamHandler &enc);
 
-void DumpNodes(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
-void DumpWays(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
-void DumpRelations(pqxx::connection &dbconn, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
+void DumpNodes(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
+void DumpWays(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
+void DumpRelations(pqxx::work &work, std::map<string, string> &config, bool onlyLiveData, IDataStreamHandler &enc);
 
 #endif //_COMMON_H
 

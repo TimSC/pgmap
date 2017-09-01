@@ -47,15 +47,24 @@ int main(int argc, char **argv)
 	}
 	bool onlyLiveData = false;	
 
-	DumpNodes(dbconn, config, onlyLiveData, enc);
+	//Lock database for reading (this must always be done in a set order)
+	pqxx::work work(dbconn);
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "nodes IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "ways IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+config["dbtableprefix"] + "relations IN ACCESS SHARE MODE;");
+
+	DumpNodes(work, config, onlyLiveData, enc);
 
 	enc.Reset();
 
-	DumpWays(dbconn, config, onlyLiveData, enc);
+	DumpWays(work, config, onlyLiveData, enc);
 
 	enc.Reset();
 		
-	DumpRelations(dbconn, config, onlyLiveData, enc);
+	DumpRelations(work, config, onlyLiveData, enc);
+
+	//Release locks
+	work.commit();
 
 	enc.Finish();
 	delete gzipEnc;
