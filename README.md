@@ -13,12 +13,12 @@ To use this library:
 
 	cd pgmap-query
 
-	make
+	python setup.py build_ext --inplace
 
 	cp config.cfg.template config.cfg
 
 Add your database config info to config.cfg then:
 
-	./dump
+	python test.py
 
 
