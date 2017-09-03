@@ -18,7 +18,7 @@ public:
 	virtual ~PgMap();
 
 	bool Ready();
-	void MapQuery(const std::vector<double> &bbox, IDataStreamHandler &enc);
+	int MapQuery(const std::vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc);
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 };
 

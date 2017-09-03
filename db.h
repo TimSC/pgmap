@@ -64,7 +64,9 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
 void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
-	const std::vector<double> &bbox, IDataStreamHandler &enc);
+	const std::vector<double> &bbox, 
+	unsigned int maxNodes,
+	IDataStreamHandler &enc);
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 

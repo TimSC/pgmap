@@ -13,6 +13,8 @@ To use this library:
 
 	cd pgmap-query
 
+	swig -python -c++ -DPYTHON_AWARE pgmap.i
+
 	python setup.py build_ext --inplace
 
 	cp config.cfg.template config.cfg

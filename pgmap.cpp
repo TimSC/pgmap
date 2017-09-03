@@ -22,7 +22,7 @@ bool PgMap::Ready()
 	return dbconn.is_open();
 }
 
-void PgMap::MapQuery(const vector<double> &bbox, IDataStreamHandler &enc)
+int PgMap::MapQuery(const vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc)
 {
 	enc.StoreIsDiff(false);
 
@@ -38,8 +38,13 @@ void PgMap::MapQuery(const vector<double> &bbox, IDataStreamHandler &enc)
 
 	//Get nodes in bbox
 	DataStreamRetainIds retainNodeIds(enc);
-	GetLiveNodesInBbox(work, this->tablePrefix, bbox, retainNodeIds); 
+	GetLiveNodesInBbox(work, this->tablePrefix, bbox, maxNodes+1, retainNodeIds); 
 	cout << "Found " << retainNodeIds.nodeIds.size() << " nodes in bbox" << endl;
+	if(maxNodes > 0 && retainNodeIds.nodeIds.size() > maxNodes)
+	{
+		work.commit();
+		return -1; //Too many nodes
+	}
 
 	//Get way objects that reference these nodes
 	class OsmData wayObjects;
@@ -54,6 +59,11 @@ void PgMap::MapQuery(const vector<double> &bbox, IDataStreamHandler &enc)
 		retainNodeIds.nodeIds.begin(), retainNodeIds.nodeIds.end(),
 	    std::inserter(extraNodes, extraNodes.end()));
 	cout << "num extraNodes " << extraNodes.size() << endl;
+	if(maxNodes > 0 && retainNodeIds.nodeIds.size() + extraNodes.size() > maxNodes)
+	{
+		work.commit();
+		return -1; //Too many nodes
+	}
 
 	//Get node objects to complete these ways
 	GetLiveNodesById(work, this->tablePrefix, extraNodes, enc);
@@ -80,6 +90,7 @@ void PgMap::MapQuery(const vector<double> &bbox, IDataStreamHandler &enc)
 	work.commit();
 
 	enc.Finish();
+	return 0;
 }
 
 void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)

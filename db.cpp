@@ -402,7 +402,9 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 // ************* Basic API methods ***************
 
 void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
-	const std::vector<double> &bbox, IDataStreamHandler &enc)
+	const std::vector<double> &bbox, 
+	unsigned int maxNodes,
+	IDataStreamHandler &enc)
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
@@ -411,7 +413,8 @@ void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix,
 	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
 	sql << tablePrefix;
 	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
-	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326);";
+	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
+	sql << " LIMIT " << maxNodes <<";";
 
 	pqxx::icursorstream cursor( work, sql.str(), "nodesinbbox", 1000 );	
 
