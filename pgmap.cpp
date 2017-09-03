@@ -25,6 +25,7 @@ bool PgMap::Ready()
 int PgMap::MapQuery(const vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc)
 {
 	enc.StoreIsDiff(false);
+	enc.StoreBounds(bbox[0], bbox[1], bbox[2], bbox[3]);
 
 	//Lock database for reading (this must always be done in a set order)
 	pqxx::work work(dbconn);
