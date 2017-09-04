@@ -39,7 +39,10 @@ int PgMap::MapQuery(const vector<double> &bbox, unsigned int maxNodes, IDataStre
 
 	//Get nodes in bbox
 	DataStreamRetainIds retainNodeIds(enc);
-	GetLiveNodesInBbox(work, this->tablePrefix, bbox, maxNodes+1, retainNodeIds); 
+	if(maxNodes == 0)
+		GetLiveNodesInBbox(work, this->tablePrefix, bbox, 0, retainNodeIds); 
+	else
+		GetLiveNodesInBbox(work, this->tablePrefix, bbox, maxNodes+1, retainNodeIds); 
 	cout << "Found " << retainNodeIds.nodeIds.size() << " nodes in bbox" << endl;
 	if(maxNodes > 0 && retainNodeIds.nodeIds.size() > maxNodes)
 	{

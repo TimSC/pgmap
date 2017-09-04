@@ -414,7 +414,9 @@ void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix,
 	sql << tablePrefix;
 	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
-	sql << " LIMIT " << maxNodes <<";";
+	if(maxNodes > 0)
+		sql << " LIMIT " << maxNodes;
+	sql <<";";
 
 	pqxx::icursorstream cursor( work, sql.str(), "nodesinbbox", 1000 );	
 
