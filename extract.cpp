@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
 
-	pgMap.MapQuery(bbox, 50000, enc);
+	pgMap.MapQuery(bbox, 0, enc);
 
 	delete gzipEnc;
 	outfi.close();

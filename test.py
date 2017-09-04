@@ -10,7 +10,7 @@ if __name__=="__main__":
 	#enc = pgmap.PyO5mEncode(sio)
 	enc = pgmap.PyOsmXmlEncode(sio)
 
-	print (p.MapQuery((-1.1473846,50.7360206,-0.9901428,50.8649113), 50000, enc))
+	print (p.MapQuery((-1.1473846,50.7360206,-0.9901428,50.8649113), 0, enc))
 
 	data = sio.getvalue()
 	print (len(data), "bytes")
