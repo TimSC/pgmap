@@ -5,17 +5,23 @@
 %include "std_vector.i"
 using std::string;
 
-namespace std {
-   %template(vectori) vector<int>;
-   %template(vectori64) vector<int64_t>;
-   %template(vectord) vector<double>;
-};
-
 %{
 /* Put header files here */
 #include "pgmap.h"
 #include "cppo5m/OsmData.h"
 %}
+
+namespace std {
+	%template(vectori) vector<int>;
+	%template(vectori64) vector<int64_t>;
+	%template(vectord) vector<double>;
+	%template(vectorstring) vector<string>;
+
+	%template(vectorosmnode) vector<class OsmNode>;
+	%template(vectorosmway) vector<class OsmWay>;
+	%template(vectorosmrelation) vector<class OsmRelation>;
+	%template(vectordd) vector<vector<double> >;
+};
 
 class IDataStreamHandler
 {

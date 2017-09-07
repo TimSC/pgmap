@@ -36,4 +36,5 @@ if __name__=="__main__":
 		osmData = pgmap.OsmData()
 		objectIds = [1000594005591, 1000595178493, 1000594446551]
 		p.GetObjectsById("node", objectIds, osmData);
+		print (len(osmData.nodes))
 
