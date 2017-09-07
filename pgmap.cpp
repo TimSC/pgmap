@@ -124,3 +124,8 @@ void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
 
 }
 
+void PgMap::GetObjectsById(const std::string &type, const std::vector<int64_t> &objectIds, class OsmData &out)
+{
+
+}
+

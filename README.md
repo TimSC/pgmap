@@ -13,7 +13,7 @@ To use this library:
 
 	cd pgmap-query
 
-	swig -python -c++ -DPYTHON_AWARE pgmap.i
+	swig -python -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
 
 	python setup.py build_ext --inplace
 
@@ -22,5 +22,7 @@ To use this library:
 Add your database config info to config.cfg then:
 
 	python test.py
+
+SWIGWORDSIZE64 assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
 
 

@@ -20,6 +20,8 @@ public:
 	bool Ready();
 	int MapQuery(const std::vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc);
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
+
+	void GetObjectsById(const std::string &type, const std::vector<int64_t> &objectIds, class OsmData &out);
 };
 
 #endif //_PGMAP_H
