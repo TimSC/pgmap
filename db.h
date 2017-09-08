@@ -69,13 +69,16 @@ void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix,
 	IDataStreamHandler &enc);
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
-void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
 	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
 	IDataStreamHandler &enc);
-void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
+
+void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
+void GetLiveWaysById(pqxx::work &work, const string &tablePrefix, 
+	const std::set<int64_t> &wayIds, IDataStreamHandler &enc);
+void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
+	const std::set<int64_t> &relationIds, IDataStreamHandler &enc);
 
 void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);

@@ -3,6 +3,8 @@
 %include "stdint.i"
 %include "std_string.i"
 %include "std_vector.i"
+%include "std_map.i"
+%include "std_set.i"
 using std::string;
 
 %{
@@ -16,11 +18,26 @@ namespace std {
 	%template(vectori64) vector<int64_t>;
 	%template(vectord) vector<double>;
 	%template(vectorstring) vector<string>;
-
-	%template(vectorosmnode) vector<class OsmNode>;
-	%template(vectorosmway) vector<class OsmWay>;
-	%template(vectorosmrelation) vector<class OsmRelation>;
 	%template(vectordd) vector<vector<double> >;
+
+	%template(mapstringstring) std::map<std::string, std::string>;
+	%template(seti64) std::set<int64_t>;
+};
+typedef std::map<std::string, std::string> TagMap;
+
+class MetaData
+{
+public:
+	uint64_t version;
+	int64_t timestamp, changeset;
+	uint64_t uid;
+	std::string username;
+	bool visible;
+
+	MetaData();
+	virtual ~MetaData();
+	MetaData( const MetaData &obj);
+	MetaData& operator=(const MetaData &arg);
 };
 
 class IDataStreamHandler
@@ -51,7 +68,7 @@ public:
 	int MapQuery(const std::vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc);
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 
-	void GetObjectsById(const std::string &type, const std::vector<int64_t> &objectIds, class OsmData &out);
+	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
 };
 
 class PyO5mEncode : public IDataStreamHandler
@@ -111,6 +128,12 @@ public:
 	virtual ~OsmRelation();
 	OsmRelation( const OsmRelation &obj);
 	OsmRelation& operator=(const OsmRelation &arg);
+};
+
+namespace std {
+	%template(vectorosmnode) vector<class OsmNode>;
+	%template(vectorosmway) vector<class OsmWay>;
+	%template(vectorosmrelation) vector<class OsmRelation>;
 };
 
 class OsmData : public IDataStreamHandler

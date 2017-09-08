@@ -124,8 +124,23 @@ void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
 
 }
 
-void PgMap::GetObjectsById(const std::string &type, const std::vector<int64_t> &objectIds, class OsmData &out)
+void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out)
 {
+	pqxx::work work(dbconn);
 
+	if(type == "node")
+		GetLiveNodesById(work, this->tablePrefix, 
+			objectIds, out);
+	else if(type == "way")
+		GetLiveWaysById(work, this->tablePrefix, 
+			objectIds, out);
+	else if(type == "relation")
+		GetLiveRelationsById(work, this->tablePrefix, 
+			objectIds, out);
+	else
+		throw invalid_argument("Known object type");
+
+	//Release locks
+	work.commit();
 }
 

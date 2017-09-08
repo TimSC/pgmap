@@ -509,18 +509,47 @@ void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix,
 	}
 }
 
+void GetLiveWaysById(pqxx::work &work, const string &tablePrefix, 
+	const std::set<int64_t> &wayIds, IDataStreamHandler &enc)
+{
+	string wayTable = tablePrefix + "liveways";
+	int step = 1000;
+
+	auto it=wayIds.begin();
+	while(it != wayIds.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != wayIds.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << "id = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT * FROM "+ wayTable
+			+ " WHERE ("+sqlFrags.str()+");";
+
+		pqxx::icursorstream cursor( work, sql, "waycursor", 1000 );	
+
+		set<int64_t> empty;
+		WayResultsToEncoder(cursor, enc);
+	}
+}
+
 void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
+	const std::set<int64_t> &relationIds, IDataStreamHandler &enc)
 {
 	string relationTable = tablePrefix + "liverelations";
 	int step = 1000;
 
-	auto it=nodeIds.begin();
-	while(it != nodeIds.end())
+	auto it=relationIds.begin();
+	while(it != relationIds.end())
 	{
 		stringstream sqlFrags;
 		int count = 0;
-		for(; it != nodeIds.end() && count < step; it++)
+		for(; it != relationIds.end() && count < step; it++)
 		{
 			if(count >= 1)
 				sqlFrags << " OR ";
