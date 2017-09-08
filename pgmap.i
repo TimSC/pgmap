@@ -147,6 +147,8 @@ public:
 
 	OsmData();
 	virtual ~OsmData();
+
+	void StreamTo(class IDataStreamHandler &out, bool finishStream = true);
 	void Clear();
 };
 

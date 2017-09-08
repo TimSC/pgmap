@@ -23,6 +23,7 @@ public:
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
+
 };
 
 #endif //_PGMAP_H
