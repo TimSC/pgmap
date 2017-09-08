@@ -38,7 +38,7 @@ int main(int argc, char **argv)
 	ss << " port=";
 	ss << "5432";
 	
-	class PgMap pgMap(ss.str(), config["dbtableprefix"]);
+	class PgMap pgMap(ss.str(), config["dbtableprefix"], config["dbtablemodifyprefix"]);
 
 	if (pgMap.Ready()) {
 		cout << "Opened database successfully" << endl;

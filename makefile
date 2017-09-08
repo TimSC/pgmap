@@ -11,10 +11,10 @@ extract: extract.cpp $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lz -o $@
 
 swigpy2: pgmap.i $(common)
-	swig -python -c++ -DPYTHON_AWARE pgmap.i
+	swig -python -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
 	g++ -shared -fPIC -std=c++11 -DPYTHON_AWARE pgmap_wrap.cxx $(common) ${shell python2-config --includes --libs} -lpqxx -lz -o _pgmap.so
 
 swigpy3: pgmap.i $(common)
-	swig -python -py3 -c++ -DPYTHON_AWARE pgmap.i
+	swig -python -py3 -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
 	g++ -shared -fPIC -std=c++11 -DPYTHON_AWARE pgmap_wrap.cxx $(common) ${shell python3-config --includes --libs} -lpqxx -lz -g -o _pgmap.so
 

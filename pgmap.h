@@ -11,11 +11,13 @@ class PgMap
 {
 private:
 	pqxx::connection dbconn;
-	std::string tablePrefix;
+	std::string tableStaticPrefix;
+	std::string tableModifyPrefix;
 	std::string connectionString;
 
 public:
-	PgMap(const std::string &connection, const std::string &tablePrefixIn);
+	PgMap(const string &connection, const string &tableStaticPrefixIn, 
+		const string &tableModifyPrefixIn);
 	virtual ~PgMap();
 
 	bool Ready();

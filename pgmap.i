@@ -61,7 +61,7 @@ public:
 class PgMap
 {
 public:
-	PgMap(const std::string &connection, const string &tablePrefixIn);
+	PgMap(const std::string &connection, const string &tableStaticPrefixIn, const string &tableModifyPrefixIn);
 	virtual ~PgMap();
 
 	bool Ready();
