@@ -7,11 +7,11 @@
 using namespace std;
 
 PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableModifyPrefixIn) : dbconn(connection)
+	const string &tableActivePrefixIn) : dbconn(connection)
 {
 	connectionString = connection;
 	this->tableStaticPrefix = tableStaticPrefixIn;
-	this->tableModifyPrefix = tableModifyPrefixIn;
+	this->tableActivePrefix = tableActivePrefixIn;
 }
 
 PgMap::~PgMap()
@@ -39,13 +39,13 @@ int PgMap::MapQuery(const vector<double> &bbox, unsigned int maxNodes, IDataStre
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relation_mems_w IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relation_mems_r IN ACCESS SHARE MODE;");
 
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "relations IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "way_mems IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "relation_mems_n IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "relation_mems_w IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "relation_mems_r IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "way_mems IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relation_mems_n IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relation_mems_w IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relation_mems_r IN ACCESS SHARE MODE;");
 
 	//Get nodes in bbox
 	DataStreamRetainIds retainNodeIds(enc);
@@ -117,9 +117,9 @@ void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
 
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableModifyPrefix+ "relations IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
 
 	DumpNodes(work, this->tableStaticPrefix, onlyLiveData, enc);
 
@@ -141,6 +141,13 @@ void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
 void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out)
 {
 	pqxx::work work(dbconn);
+	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
+
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
 
 	if(type == "node")
 		GetLiveNodesById(work, this->tableStaticPrefix, 
@@ -155,6 +162,22 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 		throw invalid_argument("Known object type");
 
 	//Release locks
+	work.commit();
+}
+
+void PgMap::StoreObjects(class OsmData &data, 
+	std::map<int64_t, int64_t> &createdNodeIds, 
+	std::map<int64_t, int64_t> &createdWayIds,
+	std::map<int64_t, int64_t> &createdRelationIds)
+{
+	pqxx::work work(dbconn);
+
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS EXCLUSIVE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS EXCLUSIVE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS EXCLUSIVE MODE;");
+
+	::StoreObjects(dbconn, work, this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds);
+
 	work.commit();
 }
 

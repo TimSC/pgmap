@@ -4,6 +4,7 @@
 #include "util.h"
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include "cppo5m/o5m.h"
+#include "cppo5m/OsmData.h"
 #include <set>
 
 struct MetaDataCols
@@ -83,6 +84,13 @@ void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix,
 void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
+
+void StoreObjects(pqxx::connection &c, pqxx::work &work, 
+	const string &tablePrefix, 
+	const class OsmData &osmData, 
+	std::map<int64_t, int64_t> &createdNodeIds, 
+	std::map<int64_t, int64_t> &createdWaysIds,
+	std::map<int64_t, int64_t> &createdRelationsIds);
 
 #endif //_COMMON_H
 

@@ -4,3 +4,4 @@ dbuser:microcosm
 dbpass:k8AY^p$Ytnrh
 dbtableprefix:planet_
 dbtablemodifyprefix:portsmouth_mod_
+dbtabletestprefix:portsmouth_test_

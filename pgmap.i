@@ -21,6 +21,8 @@ namespace std {
 	%template(vectordd) vector<vector<double> >;
 
 	%template(mapstringstring) std::map<std::string, std::string>;
+	%template(mapi64i64) std::map<int64_t, int64_t>;
+
 	%template(seti64) std::set<int64_t>;
 };
 typedef std::map<std::string, std::string> TagMap;
@@ -56,19 +58,6 @@ public:
 	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles) {};
-};
-
-class PgMap
-{
-public:
-	PgMap(const std::string &connection, const string &tableStaticPrefixIn, const string &tableModifyPrefixIn);
-	virtual ~PgMap();
-
-	bool Ready();
-	int MapQuery(const std::vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc);
-	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
-
-	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
 };
 
 class PyO5mEncode : public IDataStreamHandler
@@ -150,5 +139,23 @@ public:
 
 	void StreamTo(class IDataStreamHandler &out, bool finishStream = true);
 	void Clear();
+};
+
+class PgMap
+{
+public:
+	PgMap(const string &connection, const string &tableStaticPrefixIn, 
+		const string &tableActivePrefixIn);
+	virtual ~PgMap();
+
+	bool Ready();
+	int MapQuery(const std::vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc);
+	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
+
+	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
+	void StoreObjects(class OsmData &data, 
+		std::map<int64_t, int64_t> &createdNodeIds, 
+		std::map<int64_t, int64_t> &createdWayIds,
+		std::map<int64_t, int64_t> &createdRelationIds);
 };
 

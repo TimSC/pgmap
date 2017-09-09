@@ -1,4 +1,5 @@
 #include "db.h"
+#include <rapidjson/writer.h> //rapidjson-dev
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -146,6 +147,20 @@ void DecodeTags(const pqxx::result::const_iterator &c, int tagsCol, JsonToString
 		StringStream ss(tagsJson.c_str());
 		reader.Parse(ss, handler);
 	}
+}
+
+void EncodeTags(const TagMap &tagmap, string &out)
+{
+	StringBuffer buffer;
+	Writer<StringBuffer> writer(buffer);
+	writer.StartObject();
+	for(auto it=tagmap.begin(); it!=tagmap.end(); it++)
+	{
+		writer.Key(it->first.c_str());
+		writer.String(it->second.c_str());
+	}
+	writer.EndObject();
+	out = buffer.GetString();
 }
 
 void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, JsonToWayMembers &handler)
@@ -399,6 +414,47 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 	}
 }
 
+// *********** Convert to database SQL *************
+
+void NodesToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmNode> &nodes, std::map<int64_t, int64_t> &createdNodeIds)
+{
+	char trueStr[] = "true";
+	char falseStr[] = "true";
+
+	for(size_t i=0; i<nodes.size(); i++)
+	{
+		const class OsmNode &node = nodes[i];
+
+		stringstream ss;
+		ss << "INSERT INTO "<< tablePrefix <<"nodes (id, changeset, username, uid, visible, timestamp, version, current, tags, geom) VALUES ";
+		char *visibleStr = node.metaData.visible ? trueStr : falseStr;
+		string tagsJson;
+		EncodeTags(node.tags, tagsJson);
+
+		ss << "(" << node.objId << ","<< node.metaData.changeset <<",$1,"<< visibleStr <<","
+			<< node.metaData.timestamp << "," << node.metaData.version 
+			<< ",true,$2,SRID=4326;POINT("<< node.lon <<" "<< node.lat <<");";
+		c.prepare("insertnode", ss.str());
+		work.prepared("insertnode")(node.metaData.username)(tagsJson).exec();
+	}
+}
+
+void WaysToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmWay> &ways, std::map<int64_t, int64_t> &createdWayIds)
+{
+	for(size_t i=0; i<ways.size(); i++)
+	{
+		const class OsmWay &way = ways[i];
+	}
+}
+
+void RelationsToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmRelation> &relations, std::map<int64_t, int64_t> &createdRelationIds)
+{
+	for(size_t i=0; i<relations.size(); i++)
+	{
+		const class OsmRelation &relation = relations[i];
+	}
+}
+
 // ************* Basic API methods ***************
 
 void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
@@ -622,5 +678,17 @@ void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveDat
 
 	set<int64_t> empty;
 	RelationResultsToEncoder(cursor, empty, enc);
+}
+
+void StoreObjects(pqxx::connection &c, pqxx::work &work, 
+	const string &tablePrefix, 
+	const class OsmData &osmData, 
+	std::map<int64_t, int64_t> &createdNodeIds, 
+	std::map<int64_t, int64_t> &createdWayIds,
+	std::map<int64_t, int64_t> &createdRelationIds)
+{
+	NodesToDatabase(c, work, tablePrefix, osmData.nodes, createdNodeIds);
+	WaysToDatabase(c, work, tablePrefix, osmData.ways, createdWayIds);
+	RelationsToDatabase(c, work, tablePrefix, osmData.relations, createdRelationIds);
 }
 
