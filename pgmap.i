@@ -141,6 +141,17 @@ public:
 	void Clear();
 };
 
+class PgMapError
+{
+public:
+	PgMapError();
+	PgMapError(const string &connection);
+	PgMapError(const PgMapError &obj);
+	virtual ~PgMapError();
+
+	std::string errStr;
+};
+
 class PgMap
 {
 public:
@@ -153,9 +164,10 @@ public:
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
-	void StoreObjects(class OsmData &data, 
+	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWayIds,
-		std::map<int64_t, int64_t> &createdRelationIds);
+		std::map<int64_t, int64_t> &createdRelationIds,
+		class PgMapError &errStr);
 };
 

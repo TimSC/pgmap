@@ -416,10 +416,16 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 
 // *********** Convert to database SQL *************
 
-void NodesToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmNode> &nodes, std::map<int64_t, int64_t> &createdNodeIds)
+bool NodesToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, 
+	const std::vector<class OsmNode> &nodes, 
+	std::map<int64_t, int64_t> &createdNodeIds,
+	map<string, int64_t> &nextIdMap,
+	std::string &errStr)
 {
 	char trueStr[] = "true";
 	char falseStr[] = "true";
+	auto it = nextIdMap.find("node");
+	int64_t &nextNodeId = it->second;
 
 	for(size_t i=0; i<nodes.size(); i++)
 	{
@@ -431,12 +437,29 @@ void NodesToDatabase(pqxx::connection &c, pqxx::work &work, const string &tableP
 		string tagsJson;
 		EncodeTags(node.tags, tagsJson);
 
-		ss << "(" << node.objId << ","<< node.metaData.changeset <<",$1,"<< visibleStr <<","
+		ss << "("<<nextNodeId<<"," << node.metaData.changeset <<",$1,"<<node.metaData.uid<<","<< visibleStr <<","
 			<< node.metaData.timestamp << "," << node.metaData.version 
-			<< ",true,$2,SRID=4326;POINT("<< node.lon <<" "<< node.lat <<");";
+			<< ",true,$2,ST_GeometryFromText('POINT("<< node.lon <<" "<< node.lat <<")', 4326));";
+		cout << ss.str() << endl;
 		c.prepare("insertnode", ss.str());
-		work.prepared("insertnode")(node.metaData.username)(tagsJson).exec();
+
+		try
+		{
+			work.prepared("insertnode")(node.metaData.username)(tagsJson).exec();
+		}
+		catch (const pqxx::sql_error &e)
+		{
+			errStr = errStr;
+			return false;
+		}
+		catch (const std::exception &e)
+		{
+			errStr = errStr;
+			return false;
+		}
+		nextNodeId ++;
 	}
+	return true;
 }
 
 void WaysToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmWay> &ways, std::map<int64_t, int64_t> &createdWayIds)
@@ -453,6 +476,87 @@ void RelationsToDatabase(pqxx::connection &c, pqxx::work &work, const string &ta
 	{
 		const class OsmRelation &relation = relations[i];
 	}
+}
+
+// ************* Next ID functions **************
+
+bool GetNextObjectIds(pqxx::work &work, 
+	const string &tablePrefix,
+	map<string, int64_t> &nextIdMap,
+	string &errStr)
+{
+	nextIdMap.clear();
+	stringstream sstr;
+	sstr << "SELECT RTRIM(id), maxid FROM "<< tablePrefix <<"nextids;";
+
+	pqxx::result r;
+	try{
+		r = work.exec(sstr.str());
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = errStr;
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = errStr;
+		return false;
+	}
+
+	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+	{
+		const pqxx::result::tuple row = r[rownum];
+		string id;
+		int64_t maxid = 0;
+		for (unsigned int colnum=0; colnum < row.size(); ++colnum)
+		{
+			const pqxx::result::field field = row[colnum];
+			if(field.num()==0)
+			{
+				id = pqxx::to_string(field);
+			}
+			else if(field.num()==1)
+				maxid = field.as<int64_t>();
+		}
+		nextIdMap[id] = maxid;
+	}
+	return true;
+}
+
+bool UpdateNextObjectIds(pqxx::work &work, 
+	const string &tablePrefix,
+	const map<string, int64_t> &nextIdMap,
+	const map<string, int64_t> &nextIdMapOriginal,
+	string &errStr)
+{
+	//Update next IDs
+	for(auto it=nextIdMap.begin(); it != nextIdMap.end(); it++)
+	{
+		auto it2 = nextIdMapOriginal.find(it->first);
+		assert(it2 != nextIdMapOriginal.end());
+		if(it->second != it2->second)
+		{
+			stringstream ss;
+			ss << "UPDATE "<< tablePrefix <<"nextids SET maxid = "<< it->second <<" WHERE id='node';"; 
+
+			try
+			{
+				work.exec(ss.str());
+			}
+			catch (const pqxx::sql_error &e)
+			{
+				errStr = errStr;
+				return false;
+			}
+			catch (const std::exception &e)
+			{
+				errStr = errStr;
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 // ************* Basic API methods ***************
@@ -680,15 +784,29 @@ void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveDat
 	RelationResultsToEncoder(cursor, empty, enc);
 }
 
-void StoreObjects(pqxx::connection &c, pqxx::work &work, 
+bool StoreObjects(pqxx::connection &c, pqxx::work &work, 
 	const string &tablePrefix, 
 	const class OsmData &osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
-	std::map<int64_t, int64_t> &createdRelationIds)
+	std::map<int64_t, int64_t> &createdRelationIds,
+	std::string &errStr)
 {
-	NodesToDatabase(c, work, tablePrefix, osmData.nodes, createdNodeIds);
+	map<string, int64_t> nextIdMapOriginal, nextIdMap;
+	bool ok = GetNextObjectIds(work, tablePrefix, nextIdMapOriginal, errStr);
+	if(!ok)
+		return false;
+	nextIdMap = nextIdMapOriginal;
+
+	ok = NodesToDatabase(c, work, tablePrefix, osmData.nodes, createdNodeIds, nextIdMap, errStr);
+	if(!ok)
+		return false;
 	WaysToDatabase(c, work, tablePrefix, osmData.ways, createdWayIds);
 	RelationsToDatabase(c, work, tablePrefix, osmData.relations, createdRelationIds);
+
+	ok = UpdateNextObjectIds(work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
+	if(!ok)
+		return false;
+	return true;
 }
 

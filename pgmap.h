@@ -8,6 +8,17 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/osmxml.h"
 
+class PgMapError
+{
+public:
+	PgMapError();
+	PgMapError(const string &connection);
+	PgMapError(const PgMapError &obj);
+	virtual ~PgMapError();
+
+	std::string errStr;
+};
+
 class PgMap
 {
 private:
@@ -26,10 +37,11 @@ public:
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
-	void StoreObjects(class OsmData &data, 
+	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,
-		std::map<int64_t, int64_t> &createdRelationsIds);
+		std::map<int64_t, int64_t> &createdRelationsIds,
+		class PgMapError &errStr);
 };
 
 #endif //_PGMAP_H

@@ -6,6 +6,28 @@
 #include <algorithm>
 using namespace std;
 
+PgMapError::PgMapError()
+{
+
+}
+
+PgMapError::PgMapError(const string &connection)
+{
+	this->errStr = connection;
+}
+
+PgMapError::PgMapError(const PgMapError &obj)
+{
+	this->errStr = obj.errStr;
+}
+
+PgMapError::~PgMapError()
+{
+
+}
+
+// **********************************************
+
 PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
 	const string &tableActivePrefixIn) : dbconn(connection)
 {
@@ -165,19 +187,25 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 	work.commit();
 }
 
-void PgMap::StoreObjects(class OsmData &data, 
+bool PgMap::StoreObjects(class OsmData &data, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
-	std::map<int64_t, int64_t> &createdRelationIds)
+	std::map<int64_t, int64_t> &createdRelationIds,
+	class PgMapError &errStr)
 {
+	std::string nativeErrStr;
 	pqxx::work work(dbconn);
 
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS EXCLUSIVE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS EXCLUSIVE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS EXCLUSIVE MODE;");
+	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nextids IN ACCESS EXCLUSIVE MODE;");
 
-	::StoreObjects(dbconn, work, this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds);
+	bool ok = ::StoreObjects(dbconn, work, this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
+	errStr.errStr = nativeErrStr;
 
-	work.commit();
+	if(ok)
+		work.commit();
+	return ok;
 }
 

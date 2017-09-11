@@ -85,12 +85,13 @@ void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, I
 void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
 void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc);
 
-void StoreObjects(pqxx::connection &c, pqxx::work &work, 
+bool StoreObjects(pqxx::connection &c, pqxx::work &work, 
 	const string &tablePrefix, 
 	const class OsmData &osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWaysIds,
-	std::map<int64_t, int64_t> &createdRelationsIds);
+	std::map<int64_t, int64_t> &createdRelationsIds,
+	std::string &errStr);
 
 #endif //_COMMON_H
 
