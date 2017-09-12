@@ -141,6 +141,19 @@ public:
 	void Clear();
 };
 
+class OsmXmlDecodeString
+{
+public:
+	class IDataStreamHandler *output;
+	std::string errString;
+	bool parseCompletedOk;
+
+	OsmXmlDecodeString();
+	virtual ~OsmXmlDecodeString();
+
+	bool DecodeSubString(const char *xml, size_t len, bool done);
+};
+
 class PgMapError
 {
 public:
