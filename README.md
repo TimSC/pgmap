@@ -7,8 +7,8 @@ The tools to configure and import the postgis database are here: https://github.
 
 To use this library:
 
-	sudo apt install libpqxx-dev rapidjson-dev
-
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev
+ 
 	git clone https://github.com/TimSC/pgmap-query.git --recursive
 
 	cd pgmap-query
