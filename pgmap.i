@@ -173,7 +173,11 @@ public:
 	virtual ~PgMap();
 
 	bool Ready();
-	int MapQuery(const std::vector<double> &bbox, unsigned int maxNodes, IDataStreamHandler &enc);
+
+	int MapQueryStart(const std::vector<double> &bbox, IDataStreamHandler &enc);
+	int MapQueryContinue();
+	void MapQueryAbort();
+
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
