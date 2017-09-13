@@ -19,6 +19,30 @@ public:
 	std::string errStr;
 };
 
+class PgMapQuery
+{
+private:
+	std::string tableStaticPrefix;
+	std::string tableActivePrefix;
+	pqxx::connection *dbconn; //Borrowed reference
+	bool mapQueryActive;
+	int mapQueryPhase;
+	class DataStreamRetainIds *retainNodeIds;
+	IDataStreamHandler *mapQueryEnc; //Borrowed reference
+	vector<double> mapQueryBbox;
+	pqxx::work *mapQueryWork;
+
+public:
+	PgMapQuery(const string &tableStaticPrefixIn, 
+		const string &tableActivePrefixIn);
+	virtual ~PgMapQuery();
+
+	void SetDbConn(pqxx::connection &db);
+	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);
+	int Continue();
+	void Abort();
+};
+
 class PgMap
 {
 private:
@@ -27,23 +51,14 @@ private:
 	std::string tableActivePrefix;
 	std::string connectionString;
 
-	bool mapQueryActive;
-	int mapQueryPhase;
-	class DataStreamRetainIds *retainNodeIds;
-	IDataStreamHandler *mapQueryEnc; //Borrowed reference
-	vector<double> mapQueryBbox;
-	pqxx::work *mapQueryWork;
-	
 public:
+	class PgMapQuery pgMapQuery;
+
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn);
 	virtual ~PgMap();
 
 	bool Ready();
-
-	int MapQueryStart(const std::vector<double> &bbox, IDataStreamHandler &enc);
-	int MapQueryContinue();
-	void MapQueryAbort();
 
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 

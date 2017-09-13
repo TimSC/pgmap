@@ -165,18 +165,28 @@ public:
 	std::string errStr;
 };
 
+class PgMapQuery
+{
+public:
+	PgMapQuery(const string &tableStaticPrefixIn, 
+		const string &tableActivePrefixIn);
+	virtual ~PgMapQuery();
+
+	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);
+	int Continue();
+	void Abort();
+};
+
 class PgMap
 {
 public:
+	class PgMapQuery pgMapQuery;
+
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn);
 	virtual ~PgMap();
 
 	bool Ready();
-
-	int MapQueryStart(const std::vector<double> &bbox, IDataStreamHandler &enc);
-	int MapQueryContinue();
-	void MapQueryAbort();
 
 	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
 

@@ -28,46 +28,37 @@ PgMapError::~PgMapError()
 
 // **********************************************
 
-PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableActivePrefixIn) : dbconn(connection)
+PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
+		const string &tableActivePrefixIn)
 {
-	connectionString = connection;
-	this->tableStaticPrefix = tableStaticPrefixIn;
-	this->tableActivePrefix = tableActivePrefixIn;
-
 	mapQueryActive = false;
 	retainNodeIds = NULL;
 	mapQueryEnc = NULL;
+	dbconn = NULL;
+	tableStaticPrefix = tableStaticPrefixIn;
+	tableActivePrefix = tableActivePrefixIn;
 }
 
-PgMap::~PgMap()
+PgMapQuery::~PgMapQuery()
 {
-	dbconn.disconnect();
-	if(this->retainNodeIds != NULL)
-	{
-		delete this->retainNodeIds;
-		this->retainNodeIds = NULL;
-	}
-	if(this->mapQueryWork != NULL)
-	{
-		delete this->mapQueryWork;
-		this->mapQueryWork = NULL;
-	}
+	this->Abort();
 }
 
-bool PgMap::Ready()
+void PgMapQuery::SetDbConn(pqxx::connection &db)
 {
-	return dbconn.is_open();
+	dbconn = &db;
 }
 
-int PgMap::MapQueryStart(const vector<double> &bbox, IDataStreamHandler &enc)
+int PgMapQuery::Start(const vector<double> &bbox, IDataStreamHandler &enc)
 {
 	if(mapQueryActive)
 		throw runtime_error("Query already active");
+	if(dbconn == NULL)
+		throw runtime_error("DB pointer not set for PgMapQuery");
 	mapQueryActive = true;
 	this->mapQueryPhase = 0;
 	this->mapQueryBbox = bbox;
-	this->mapQueryWork = new pqxx::work(dbconn);
+	this->mapQueryWork = new pqxx::work(*dbconn);
 
 	assert(this->retainNodeIds == NULL);
 	this->mapQueryEnc = &enc;
@@ -92,7 +83,7 @@ int PgMap::MapQueryStart(const vector<double> &bbox, IDataStreamHandler &enc)
 	return 0;
 }
 
-int PgMap::MapQueryContinue()
+int PgMapQuery::Continue()
 {
 	if(!mapQueryActive)
 		throw runtime_error("Query not active");
@@ -177,7 +168,7 @@ int PgMap::MapQueryContinue()
 	return -1;
 }
 
-void PgMap::MapQueryAbort()
+void PgMapQuery::Abort()
 {
 	this->mapQueryPhase = 0;
 	this->mapQueryActive = false;
@@ -193,6 +184,29 @@ void PgMap::MapQueryAbort()
 		delete this->mapQueryWork;
 		this->mapQueryWork = NULL;
 	}
+}
+
+// **********************************************
+
+PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
+	const string &tableActivePrefixIn) : dbconn(connection),
+	pgMapQuery(tableStaticPrefixIn, tableActivePrefixIn)
+{
+	connectionString = connection;
+	this->tableStaticPrefix = tableStaticPrefixIn;
+	this->tableActivePrefix = tableActivePrefixIn;
+	
+	this->pgMapQuery.SetDbConn(this->dbconn);
+}
+
+PgMap::~PgMap()
+{
+	dbconn.disconnect();
+}
+
+bool PgMap::Ready()
+{
+	return dbconn.is_open();
 }
 
 void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
