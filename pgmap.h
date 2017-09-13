@@ -32,9 +32,9 @@ private:
 	IDataStreamHandler *mapQueryEnc; //Borrowed reference
 	vector<double> mapQueryBbox;
 	pqxx::work *mapQueryWork;
-	class OsmData wayObjects;
 	set<int64_t> extraNodes;
-	DataStreamRetainIds *retainWayIds;
+	class DataStreamRetainIds *retainWayIds;
+	class DataStreamRetainMemIds *retainWayMemIds;
 
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 

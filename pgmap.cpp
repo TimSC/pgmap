@@ -35,6 +35,9 @@ PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn,
 	retainNodeIds = NULL;
 	mapQueryEnc = NULL;
 	dbconn = NULL;
+	mapQueryWork = NULL;
+	retainWayIds = NULL;
+	retainWayMemIds = NULL;
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
@@ -64,7 +67,8 @@ int PgMapQuery::Start(const vector<double> &bbox, IDataStreamHandler &enc)
 	assert(this->retainNodeIds == NULL);
 	this->mapQueryEnc = &enc;
 	this->retainNodeIds = new class DataStreamRetainIds(enc);
-	this->retainWayIds = new class DataStreamRetainIds(this->wayObjects);
+	this->retainWayIds = new class DataStreamRetainIds(enc);
+	this->retainWayMemIds = new class DataStreamRetainMemIds(*this->retainWayIds);
 
 	//Lock database for reading (this must always be done in a set order)
 	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
@@ -113,14 +117,12 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
-		this->wayObjects.Clear();
-		DataStreamRetainMemIds retainWayMemIds(*this->retainWayIds);
-		GetLiveWaysThatContainNodes(*this->mapQueryWork, this->tableStaticPrefix, retainNodeIds->nodeIds, retainWayMemIds);
-		cout << "Ways depend on " << retainWayMemIds.nodeIds.size() << " nodes" << endl;
+		GetLiveWaysThatContainNodes(*this->mapQueryWork, this->tableStaticPrefix, retainNodeIds->nodeIds, *retainWayMemIds);
+		cout << "Ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
 		this->extraNodes.clear();
-		std::set_difference(retainWayMemIds.nodeIds.begin(), retainWayMemIds.nodeIds.end(), 
+		std::set_difference(retainWayMemIds->nodeIds.begin(), retainWayMemIds->nodeIds.end(), 
 			retainNodeIds->nodeIds.begin(), retainNodeIds->nodeIds.end(),
 			std::inserter(this->extraNodes, this->extraNodes.end()));
 		cout << "num extraNodes " << this->extraNodes.size() << endl;
@@ -137,8 +139,9 @@ int PgMapQuery::Continue()
 	
 		//Write ways to output
 		this->mapQueryEnc->Reset();
-		this->wayObjects.StreamTo(*this->mapQueryEnc, false);
-		this->wayObjects.Clear();
+		
+		GetLiveWaysById(*this->mapQueryWork, this->tableStaticPrefix, 
+			this->retainWayIds->wayIds, *this->mapQueryEnc);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -194,6 +197,11 @@ void PgMapQuery::Reset()
 	{
 		delete this->retainWayIds;
 		this->retainWayIds = NULL;
+	}
+	if(this->retainWayMemIds != NULL)
+	{
+		delete this->retainWayMemIds;
+		this->retainWayMemIds = NULL;
 	}
 }
 

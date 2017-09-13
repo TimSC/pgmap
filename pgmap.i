@@ -72,6 +72,8 @@ class PyOsmXmlEncode : public IDataStreamHandler
 public:
 	PyOsmXmlEncode(PyObject* obj);
 	virtual ~PyOsmXmlEncode();	
+
+	void SetOutput(PyObject* obj);
 };
 
 class OsmNode
