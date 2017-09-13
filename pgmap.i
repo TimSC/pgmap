@@ -174,7 +174,7 @@ public:
 
 	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);
 	int Continue();
-	void Abort();
+	void Reset();
 };
 
 class PgMap

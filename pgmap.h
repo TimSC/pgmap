@@ -7,6 +7,7 @@
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include "cppo5m/o5m.h"
 #include "cppo5m/osmxml.h"
+#include "cppo5m/OsmData.h"
 
 class PgMapError
 {
@@ -31,6 +32,9 @@ private:
 	IDataStreamHandler *mapQueryEnc; //Borrowed reference
 	vector<double> mapQueryBbox;
 	pqxx::work *mapQueryWork;
+	class OsmData wayObjects;
+	set<int64_t> extraNodes;
+	DataStreamRetainIds *retainWayIds;
 
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
@@ -40,7 +44,7 @@ public:
 	void SetDbConn(pqxx::connection &db);
 	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);
 	int Continue();
-	void Abort();
+	void Reset();
 };
 
 class PgMap
