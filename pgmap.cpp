@@ -28,6 +28,24 @@ PgMapError::~PgMapError()
 
 // **********************************************
 
+void LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const std::string &accessMode)
+{
+	//It is important resources are locked in a consistent order to avoid deadlock
+	work->exec("LOCK TABLE "+prefix+ "oldnodes IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "oldways IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "oldrelations IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "livenodes IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "liveways IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "liverelations IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "way_mems IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "relation_mems_n IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "nextids IN ACCESS "+accessMode+";");
+}
+
+// **********************************************
+
 PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db)
@@ -67,21 +85,9 @@ int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHan
 	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
 
 	//Lock database for reading (this must always be done in a set order)
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "way_mems IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "relation_mems_n IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "relation_mems_w IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "relation_mems_r IN ACCESS SHARE MODE;");
+	LockMap(this->mapQueryWork, this->tableStaticPrefix, "SHARE MODE");
+	LockMap(this->mapQueryWork, this->tableActivePrefix, "SHARE MODE");
 
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "way_mems IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "relation_mems_n IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "relation_mems_w IN ACCESS SHARE MODE;");
-	this->mapQueryWork->exec("LOCK TABLE "+this->tableActivePrefix+ "relation_mems_r IN ACCESS SHARE MODE;");
 	return 0;
 }
 
@@ -100,8 +106,8 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 1)
 	{
-		//Get nodes in bbox
-		cursor = LiveNodesInBboxStart(*this->mapQueryWork, this->tableStaticPrefix, this->mapQueryBbox, 0);
+		//Get nodes in bbox (static db)
+		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableStaticPrefix, this->mapQueryBbox, 0);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -117,7 +123,7 @@ int PgMapQuery::Continue()
 			return -1; 
 
 		cursor.reset();
-		cout << "Found " << retainNodeIds->nodeIds.size() << " nodes in bbox" << endl;
+		cout << "Found " << retainNodeIds->nodeIds.size() << " static nodes in bbox" << endl;
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -125,9 +131,33 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 3)
 	{
+		//Get nodes in bbox (active db)
+		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableActivePrefix, this->mapQueryBbox, 0);
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 4)
+	{
+		int ret = LiveNodesInBboxContinue(cursor, retainNodeIds);
+		if(ret > 0)
+			return 0;
+		if(ret < 0)
+			return -1; 
+
+		cursor.reset();
+		cout << "Found " << retainNodeIds->nodeIds.size() << " active nodes in bbox" << endl;
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 5)
+	{
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
-		GetLiveWaysThatContainNodes(*this->mapQueryWork, this->tableStaticPrefix, retainNodeIds->nodeIds, retainWayMemIds);
+		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableStaticPrefix, retainNodeIds->nodeIds, retainWayMemIds);
 		cout << "Ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
@@ -144,11 +174,11 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 4)
+	if(this->mapQueryPhase == 6)
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(*this->mapQueryWork, this->tableStaticPrefix, this->extraNodes, 
+			GetLiveNodesById(this->mapQueryWork.get(), this->tableStaticPrefix, this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -157,7 +187,7 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 5)
+	if(this->mapQueryPhase == 7)
 	{
 		this->setIterator = this->retainWayIds->wayIds.begin();
 
@@ -168,11 +198,11 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 6)
+	if(this->mapQueryPhase == 8)
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(*this->mapQueryWork, this->tableStaticPrefix, 
+			GetLiveWaysById(this->mapQueryWork.get(), this->tableStaticPrefix, 
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -181,7 +211,7 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 7)
+	if(this->mapQueryPhase == 9)
 	{
 
 		//Get relations that reference any of the above nodes
@@ -192,12 +222,12 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 8)
+	if(this->mapQueryPhase == 10)
 	{
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
 			set<int64_t> empty;
-			GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
 				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
 			return 0;
 		}
@@ -206,7 +236,7 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 9)
+	if(this->mapQueryPhase == 11)
 	{
 		this->setIterator = this->extraNodes.begin();
 
@@ -214,11 +244,11 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 10)
+	if(this->mapQueryPhase == 12)
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
 				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
 		}
@@ -229,7 +259,7 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 11)
+	if(this->mapQueryPhase == 13)
 	{
 		//Get relations that reference any of the above ways
 		this->setIterator = this->retainWayIds->wayIds.begin();
@@ -238,11 +268,11 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 12)
+	if(this->mapQueryPhase == 14)
 	{
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
 				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
 				retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -301,27 +331,22 @@ void PgMap::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
 	enc->StoreIsDiff(false);
 
 	//Lock database for reading (this must always be done in a set order)
-	pqxx::work work(*dbconn);
-	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	LockMap(work, this->tableStaticPrefix, "SHARED MODE");
+	LockMap(work, this->tableActivePrefix, "SHARED MODE");
 
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
-
-	DumpNodes(work, this->tableStaticPrefix, onlyLiveData, enc);
+	DumpNodes(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
 
 	enc->Reset();
 
-	DumpWays(work, this->tableStaticPrefix, onlyLiveData, enc);
+	DumpWays(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
 
 	enc->Reset();
 		
-	DumpRelations(work, this->tableStaticPrefix, onlyLiveData, enc);
+	DumpRelations(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
 
 	//Release locks
-	work.commit();
+	work->commit();
 
 	enc->Finish();
 
@@ -335,34 +360,29 @@ shared_ptr<class PgMapQuery> PgMap::GetQueryMgr()
 
 void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out)
 {
-	pqxx::work work(*dbconn);
-	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
-
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	LockMap(work, this->tableStaticPrefix, "SHARED MODE");
+	LockMap(work, this->tableActivePrefix, "SHARED MODE");
 
 	if(type == "node")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveNodesById(work, this->tableStaticPrefix, objectIds, 
+			GetLiveNodesById(work.get(), this->tableStaticPrefix, objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "way")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveWaysById(work, this->tableStaticPrefix, objectIds, 
+			GetLiveWaysById(work.get(), this->tableStaticPrefix, objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "relation")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveRelationsById(work, this->tableStaticPrefix, 
+			GetLiveRelationsById(work.get(), this->tableStaticPrefix, 
 				objectIds, 
 				it, 1000, out);
 	}
@@ -370,7 +390,7 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 		throw invalid_argument("Known object type");
 
 	//Release locks
-	work.commit();
+	work->commit();
 }
 
 bool PgMap::StoreObjects(class OsmData &data, 
@@ -380,18 +400,15 @@ bool PgMap::StoreObjects(class OsmData &data,
 	class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	pqxx::work work(*dbconn);
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	LockMap(work, this->tableStaticPrefix, "EXCLUSIVE MODE");
+	LockMap(work, this->tableActivePrefix, "EXCLUSIVE MODE");
 
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS EXCLUSIVE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS EXCLUSIVE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS EXCLUSIVE MODE;");
-	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nextids IN ACCESS EXCLUSIVE MODE;");
-
-	bool ok = ::StoreObjects(*dbconn, work, this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
+	bool ok = ::StoreObjects(*dbconn, work.get(), this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	if(ok)
-		work.commit();
+		work->commit();
 	return ok;
 }
 

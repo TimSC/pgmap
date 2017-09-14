@@ -218,19 +218,15 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	metaDataCols.changesetCol = rows.column_number("changeset");
 	metaDataCols.usernameCol = rows.column_number("username");
 	metaDataCols.uidCol = rows.column_number("uid");
-	int visibleCol = rows.column_number("visible");
+	//int visibleCol = rows.column_number("visible");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
-	int currentCol = rows.column_number("current");
+	//int currentCol = rows.column_number("current");
 	int tagsCol = rows.column_number("tags");
 	int latCol = rows.column_number("lat");
 	int lonCol = rows.column_number("lon");
 
 	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-		bool visible = c[visibleCol].as<bool>();
-		bool current = c[currentCol].as<bool>();
-		assert(visible && current);
 
 		int64_t objId = c[idCol].as<int64_t>();
 		double lat = atof(c[latCol].c_str());
@@ -279,18 +275,14 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 	metaDataCols.changesetCol = rows.column_number("changeset");
 	metaDataCols.usernameCol = rows.column_number("username");
 	metaDataCols.uidCol = rows.column_number("uid");
-	int visibleCol = rows.column_number("visible");
+	//int visibleCol = rows.column_number("visible");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
-	int currentCol = rows.column_number("current");
+	//int currentCol = rows.column_number("current");
 	int tagsCol = rows.column_number("tags");
 	int membersCol = rows.column_number("members");
 
 	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-		bool visible = c[visibleCol].as<bool>();
-		bool current = c[currentCol].as<bool>();
-		assert(visible && current);
 
 		int64_t objId = c[idCol].as<int64_t>();
 
@@ -350,19 +342,15 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 		metaDataCols.changesetCol = rows.column_number("changeset");
 		metaDataCols.usernameCol = rows.column_number("username");
 		metaDataCols.uidCol = rows.column_number("uid");
-		int visibleCol = rows.column_number("visible");
+		//int visibleCol = rows.column_number("visible");
 		metaDataCols.timestampCol = rows.column_number("timestamp");
 		metaDataCols.versionCol = rows.column_number("version");
-		int currentCol = rows.column_number("current");
+		//int currentCol = rows.column_number("current");
 		int tagsCol = rows.column_number("tags");
 		int membersCol = rows.column_number("members");
 		int membersRolesCol = rows.column_number("memberroles");
 
 		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-			bool visible = c[visibleCol].as<bool>();
-			bool current = c[currentCol].as<bool>();
-			assert(visible && current);
 
 			int64_t objId = c[idCol].as<int64_t>();
 			if(skipIds.find(objId) != skipIds.end())
@@ -396,7 +384,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 
 // *********** Convert to database SQL *************
 
-bool NodesToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, 
+bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
 	const std::vector<class OsmNode> &nodes, 
 	std::map<int64_t, int64_t> &createdNodeIds,
 	map<string, int64_t> &nextIdMap,
@@ -411,38 +399,47 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work &work, const string &tableP
 	{
 		const class OsmNode &node = nodes[i];
 
-		stringstream ss;
-		ss << "INSERT INTO "<< tablePrefix <<"nodes (id, changeset, username, uid, visible, timestamp, version, current, tags, geom) VALUES ";
-		char *visibleStr = node.metaData.visible ? trueStr : falseStr;
-		string tagsJson;
-		EncodeTags(node.tags, tagsJson);
+		if(node.metaData.visible)
+		{
+			stringstream ss;
+			ss << "INSERT INTO "<< tablePrefix <<"livenodes (id, changeset, username, uid, timestamp, version, tags, geom) VALUES ";
+			//char *visibleStr = node.metaData.visible ? trueStr : falseStr;
+			string tagsJson;
+			EncodeTags(node.tags, tagsJson);
+			int64_t objId = node.objId;
+			if(objId < 0)
+			{
+				objId = nextNodeId;
+				createdNodeIds[node.objId] = nextNodeId;
+				nextNodeId ++;
+			}
 
-		ss << "("<<nextNodeId<<"," << node.metaData.changeset <<",$1,"<<node.metaData.uid<<","<< visibleStr <<","
-			<< node.metaData.timestamp << "," << node.metaData.version 
-			<< ",true,$2,ST_GeometryFromText('POINT("<< node.lon <<" "<< node.lat <<")', 4326));";
-		cout << ss.str() << endl;
-		c.prepare("insertnode", ss.str());
+			ss << "("<<objId<<"," << node.metaData.changeset <<",$1,"<<node.metaData.uid <<","
+				<< node.metaData.timestamp << "," << node.metaData.version 
+				<< ",$2,ST_GeometryFromText('POINT("<< node.lon <<" "<< node.lat <<")', 4326));";
+			cout << ss.str() << endl;
+			c.prepare("insertnode", ss.str());
 
-		try
-		{
-			work.prepared("insertnode")(node.metaData.username)(tagsJson).exec();
+			try
+			{
+				work->prepared("insertnode")(node.metaData.username)(tagsJson).exec();
+			}
+			catch (const pqxx::sql_error &e)
+			{
+				errStr = errStr;
+				return false;
+			}
+			catch (const std::exception &e)
+			{
+				errStr = errStr;
+				return false;
+			}
 		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = errStr;
-			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = errStr;
-			return false;
-		}
-		nextNodeId ++;
 	}
 	return true;
 }
 
-void WaysToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmWay> &ways, std::map<int64_t, int64_t> &createdWayIds)
+void WaysToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, const std::vector<class OsmWay> &ways, std::map<int64_t, int64_t> &createdWayIds)
 {
 	for(size_t i=0; i<ways.size(); i++)
 	{
@@ -450,7 +447,7 @@ void WaysToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePr
 	}
 }
 
-void RelationsToDatabase(pqxx::connection &c, pqxx::work &work, const string &tablePrefix, const std::vector<class OsmRelation> &relations, std::map<int64_t, int64_t> &createdRelationIds)
+void RelationsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, const std::vector<class OsmRelation> &relations, std::map<int64_t, int64_t> &createdRelationIds)
 {
 	for(size_t i=0; i<relations.size(); i++)
 	{
@@ -460,7 +457,7 @@ void RelationsToDatabase(pqxx::connection &c, pqxx::work &work, const string &ta
 
 // ************* Next ID functions **************
 
-bool GetNextObjectIds(pqxx::work &work, 
+bool GetNextObjectIds(pqxx::work *work, 
 	const string &tablePrefix,
 	map<string, int64_t> &nextIdMap,
 	string &errStr)
@@ -471,7 +468,7 @@ bool GetNextObjectIds(pqxx::work &work,
 
 	pqxx::result r;
 	try{
-		r = work.exec(sstr.str());
+		r = work->exec(sstr.str());
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -504,7 +501,7 @@ bool GetNextObjectIds(pqxx::work &work,
 	return true;
 }
 
-bool UpdateNextObjectIds(pqxx::work &work, 
+bool UpdateNextObjectIds(pqxx::work *work, 
 	const string &tablePrefix,
 	const map<string, int64_t> &nextIdMap,
 	const map<string, int64_t> &nextIdMapOriginal,
@@ -522,7 +519,7 @@ bool UpdateNextObjectIds(pqxx::work &work,
 
 			try
 			{
-				work.exec(ss.str());
+				work->exec(ss.str());
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -541,7 +538,7 @@ bool UpdateNextObjectIds(pqxx::work &work,
 
 // ************* Basic API methods ***************
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	unsigned int maxNodes)
 {
@@ -557,7 +554,7 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, cons
 		sql << " LIMIT " << maxNodes;
 	sql <<";";
 
-	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( work, sql.str(), "nodesinbbox", 1000 ));
+	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
 }
 
 int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::shared_ptr<IDataStreamHandler> enc)
@@ -566,7 +563,7 @@ int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::sh
 	return NodeResultsToEncoder(*c, enc);
 }
 
-void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
+void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = tablePrefix + "liveways";
@@ -588,7 +585,7 @@ void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix,
 
 		string sql = "SELECT "+wayTable+".* FROM "+wayMemTable+" INNER JOIN "+wayTable+" ON "+wayMemTable+".id = "+wayTable+".id AND "+wayMemTable+".version = "+wayTable+".version WHERE ("+sqlFrags.str()+");";
 
-		pqxx::icursorstream cursor( work, sql, "wayscontainingnodes", 1000 );	
+		pqxx::icursorstream cursor( *work, sql, "wayscontainingnodes", 1000 );	
 
 		int records = 1;
 		while (records>0)
@@ -596,7 +593,7 @@ void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix,
 	}
 }
 
-void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
+void GetLiveNodesById(pqxx::work *work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
@@ -615,14 +612,14 @@ void GetLiveNodesById(pqxx::work &work, const string &tablePrefix,
 	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ nodeTable
 		+ " WHERE ("+sqlFrags.str()+");";
 
-	pqxx::icursorstream cursor( work, sql, "nodecursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );	
 
 	count = 1;
 	while(count > 0)
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
+void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix, 
 	char qtype, const set<int64_t> &qids, 
 	set<int64_t>::const_iterator &it, size_t step,
 	const set<int64_t> &skipIds, 
@@ -643,12 +640,12 @@ void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix,
 
 	string sql = "SELECT "+relTable+".* FROM "+relMemTable+" INNER JOIN "+relTable+" ON "+relMemTable+".id = "+relTable+".id AND "+relMemTable+".version = "+relTable+".version WHERE ("+sqlFrags.str()+");";
 
-	pqxx::icursorstream cursor( work, sql, "relationscontainingobjects", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "relationscontainingobjects", 1000 );	
 
 	RelationResultsToEncoder(cursor, skipIds, enc);
 }
 
-void GetLiveWaysById(pqxx::work &work, const string &tablePrefix, 
+void GetLiveWaysById(pqxx::work *work, const string &tablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
@@ -667,7 +664,7 @@ void GetLiveWaysById(pqxx::work &work, const string &tablePrefix,
 	string sql = "SELECT * FROM "+ wayTable
 		+ " WHERE ("+sqlFrags.str()+");";
 
-	pqxx::icursorstream cursor( work, sql, "waycursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "waycursor", 1000 );	
 
 	set<int64_t> empty;
 	int records = 1;
@@ -675,7 +672,7 @@ void GetLiveWaysById(pqxx::work &work, const string &tablePrefix,
 		records = WayResultsToEncoder(cursor, enc);
 }
 
-void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
+void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
@@ -694,7 +691,7 @@ void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix,
 	string sql = "SELECT * FROM "+ relationTable
 		+ " WHERE ("+sqlFrags.str()+");";
 
-	pqxx::icursorstream cursor( work, sql, "relationcursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "relationcursor", 1000 );	
 
 	set<int64_t> empty;
 	RelationResultsToEncoder(cursor, empty, enc);
@@ -702,66 +699,60 @@ void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix,
 
 // ************* Dump specific code *************
 
-void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
+void DumpNodes(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
 {
+	if(!onlyLiveData)
+		throw runtime_error("Not implemented");
 	cout << "Dump nodes" << endl;
-	stringstream sql;
-	if(onlyLiveData)
-	{
-		sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-		sql << tablePrefix;
-		sql << "livenodes;";
-	}
-	else
-	{
-		sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-		sql << tablePrefix;
-		sql << "nodes;";
-	}
 
-	pqxx::icursorstream cursor( work, sql.str(), "nodecursor", 1000 );	
+	stringstream sql;
+	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+	sql << tablePrefix;
+	sql << "livenodes;";
+
+	pqxx::icursorstream cursor( *work, sql.str(), "nodecursor", 1000 );	
 
 	int count = 1;
 	while(count > 0)
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
+void DumpWays(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
 {
+	if(!onlyLiveData)
+		throw runtime_error("Not implemented");
 	cout << "Dump ways" << endl;
 	stringstream sql;
 	sql << "SELECT * FROM ";
 	sql << tablePrefix;
-	sql << "ways";
-	if(onlyLiveData)
-		sql << " WHERE visible=true and current=true";
+	sql << "liveways";
 	sql << ";";
 
-	pqxx::icursorstream cursor( work, sql.str(), "waycursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", 1000 );	
 
 	int count = 1;
 	while (count > 0)
 		count = WayResultsToEncoder(cursor, enc);
 }
 
-void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
+void DumpRelations(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
 {
+	if(!onlyLiveData)
+		throw runtime_error("Not implemented");
 	cout << "Dump relations" << endl;
 	stringstream sql;
 	sql << "SELECT * FROM ";
 	sql << tablePrefix;
-	sql << "relations";
-	if(onlyLiveData)
-		sql << " WHERE visible=true and current=true";
+	sql << "liverelations";
 	sql << ";";
 
-	pqxx::icursorstream cursor( work, sql.str(), "relationcursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql.str(), "relationcursor", 1000 );	
 
 	set<int64_t> empty;
 	RelationResultsToEncoder(cursor, empty, enc);
 }
 
-bool StoreObjects(pqxx::connection &c, pqxx::work &work, 
+bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
 	const string &tablePrefix, 
 	const class OsmData &osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
