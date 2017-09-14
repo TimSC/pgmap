@@ -258,7 +258,7 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	return count;
 }
 
-void WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc)
+int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -268,64 +268,54 @@ void WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
 	uint64_t lastUpdateCount = 0;
 	bool verbose = false;
-	for ( size_t batch = 0; true; batch ++ )
-	{
-		pqxx::result rows;
-		cursor.get(rows);
-		if ( rows.empty() ) break; // nothing left to read
-		if(batch == 0 and verbose)
+
+	pqxx::result rows;
+	cursor.get(rows);
+	if ( rows.empty() ) return 0; // nothing left to read
+
+	MetaDataCols metaDataCols;
+
+	int idCol = rows.column_number("id");
+	metaDataCols.changesetCol = rows.column_number("changeset");
+	metaDataCols.usernameCol = rows.column_number("username");
+	metaDataCols.uidCol = rows.column_number("uid");
+	int visibleCol = rows.column_number("visible");
+	metaDataCols.timestampCol = rows.column_number("timestamp");
+	metaDataCols.versionCol = rows.column_number("version");
+	int currentCol = rows.column_number("current");
+	int tagsCol = rows.column_number("tags");
+	int membersCol = rows.column_number("members");
+
+	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+		bool visible = c[visibleCol].as<bool>();
+		bool current = c[currentCol].as<bool>();
+		assert(visible && current);
+
+		int64_t objId = c[idCol].as<int64_t>();
+
+		DecodeMetadata(c, metaDataCols, metaData);
+		
+		DecodeTags(c, tagsCol, tagHandler);
+
+		DecodeWayMembers(c, membersCol, wayMemHandler);
+
+		count ++;
+		if(count % 1000000 == 0 and verbose)
+			cout << count << " ways" << endl;
+
+		double timeNow = (double)clock() / CLOCKS_PER_SEC;
+		if (timeNow - lastUpdateTime > 30.0)
 		{
-			size_t numCols = rows.columns();
-			for(size_t i = 0; i < numCols; i++)
-			{
-				cout << i << "\t" << rows.column_name(i) << "\t" << (unsigned int)rows.column_type((pqxx::tuple::size_type)i) << endl;
-			}
+			if(verbose)
+				cout << (count - lastUpdateCount)/30.0 << " ways/sec" << endl;
+			lastUpdateCount = count;
+			lastUpdateTime = timeNow;
 		}
 
-		MetaDataCols metaDataCols;
-
-		int idCol = rows.column_number("id");
-		metaDataCols.changesetCol = rows.column_number("changeset");
-		metaDataCols.usernameCol = rows.column_number("username");
-		metaDataCols.uidCol = rows.column_number("uid");
-		int visibleCol = rows.column_number("visible");
-		metaDataCols.timestampCol = rows.column_number("timestamp");
-		metaDataCols.versionCol = rows.column_number("version");
-		int currentCol = rows.column_number("current");
-		int tagsCol = rows.column_number("tags");
-		int membersCol = rows.column_number("members");
-
-		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-			bool visible = c[visibleCol].as<bool>();
-			bool current = c[currentCol].as<bool>();
-			assert(visible && current);
-
-			int64_t objId = c[idCol].as<int64_t>();
-
-			DecodeMetadata(c, metaDataCols, metaData);
-			
-			DecodeTags(c, tagsCol, tagHandler);
-
-			DecodeWayMembers(c, membersCol, wayMemHandler);
-
-			count ++;
-			if(count % 1000000 == 0 and verbose)
-				cout << count << " ways" << endl;
-
-			double timeNow = (double)clock() / CLOCKS_PER_SEC;
-			if (timeNow - lastUpdateTime > 30.0)
-			{
-				if(verbose)
-					cout << (count - lastUpdateCount)/30.0 << " ways/sec" << endl;
-				lastUpdateCount = count;
-				lastUpdateTime = timeNow;
-			}
-
-			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
-		}
-
+		enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
 	}
+	return count;
 }
 
 void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc)
@@ -600,7 +590,9 @@ void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix,
 
 		pqxx::icursorstream cursor( work, sql, "wayscontainingnodes", 1000 );	
 
-		WayResultsToEncoder(cursor, enc);
+		int records = 1;
+		while (records>0)
+			records = WayResultsToEncoder(cursor, enc);
 	}
 }
 
@@ -682,7 +674,9 @@ void GetLiveWaysById(pqxx::work &work, const string &tablePrefix,
 	pqxx::icursorstream cursor( work, sql, "waycursor", 1000 );	
 
 	set<int64_t> empty;
-	WayResultsToEncoder(cursor, enc);
+	int records = 1;
+	while(records > 0)
+		records = WayResultsToEncoder(cursor, enc);
 }
 
 void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
@@ -749,7 +743,9 @@ void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, st
 
 	pqxx::icursorstream cursor( work, sql.str(), "waycursor", 1000 );	
 
-	WayResultsToEncoder(cursor, enc);
+	int count = 1;
+	while (count > 0)
+		count = WayResultsToEncoder(cursor, enc);
 }
 
 void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
