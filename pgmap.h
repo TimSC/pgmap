@@ -41,11 +41,11 @@ private:
 
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn);
+		const string &tableActivePrefixIn,
+		shared_ptr<pqxx::connection> &db);
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
-	void SetDbConn(shared_ptr<pqxx::connection> db);
 	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();
 	void Reset();

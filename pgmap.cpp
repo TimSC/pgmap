@@ -29,12 +29,11 @@ PgMapError::~PgMapError()
 // **********************************************
 
 PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn)
+		const string &tableActivePrefixIn,
+		shared_ptr<pqxx::connection> &db)
 {
 	mapQueryActive = false;
-	mapQueryEnc = NULL;
-	dbconn = NULL;
-	mapQueryWork = NULL;
+	dbconn = db;
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
@@ -48,11 +47,6 @@ PgMapQuery::~PgMapQuery()
 PgMapQuery& PgMapQuery::operator=(const PgMapQuery&)
 {
 	return *this;
-}
-
-void PgMapQuery::SetDbConn(shared_ptr<pqxx::connection> db)
-{
-	dbconn = db;
 }
 
 int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc)
@@ -283,8 +277,7 @@ void PgMap::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
 
 shared_ptr<class PgMapQuery> PgMap::GetQueryMgr()
 {
-	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix));
-	out->SetDbConn(this->dbconn);
+	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn));
 	return out;
 }
 

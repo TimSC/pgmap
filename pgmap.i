@@ -182,7 +182,8 @@ class PgMapQuery
 {
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn);
+		const string &tableActivePrefixIn,
+		shared_ptr<pqxx::connection> &db);
 	virtual ~PgMapQuery();
 
 	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
