@@ -72,7 +72,7 @@ int PgMapQuery::Start(const vector<double> &bbox, IDataStreamHandler &enc)
 	assert(this->retainNodeIds == NULL);
 	this->mapQueryEnc = &enc;
 	this->retainNodeIds = new class DataStreamRetainIds(enc);
-	this->retainWayIds = new class DataStreamRetainIds(enc);
+	this->retainWayIds = new class DataStreamRetainIds(this->nullEncoder);
 	this->retainWayMemIds = new class DataStreamRetainMemIds(*this->retainWayIds);
 
 	//Lock database for reading (this must always be done in a set order)

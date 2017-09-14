@@ -37,6 +37,7 @@ private:
 	class DataStreamRetainMemIds *retainWayMemIds;
 	std::shared_ptr<pqxx::icursorstream> cursor;
 	std::set<int64_t>::const_iterator setIterator;
+	IDataStreamHandler nullEncoder;
 
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
