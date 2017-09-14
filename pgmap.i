@@ -155,7 +155,7 @@ public:
 class OsmXmlDecodeString
 {
 public:
-	class IDataStreamHandler *output;
+	std::shared_ptr<class IDataStreamHandler> output;
 	std::string errString;
 	bool parseCompletedOk;
 
