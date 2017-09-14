@@ -5,6 +5,7 @@
 %include "std_vector.i"
 %include "std_map.i"
 %include "std_set.i"
+%include "std_shared_ptr.i"
 using std::string;
 
 %{
@@ -42,6 +43,8 @@ public:
 	MetaData& operator=(const MetaData &arg);
 };
 
+%shared_ptr(IDataStreamHandler)
+
 class IDataStreamHandler
 {
 public:
@@ -60,12 +63,16 @@ public:
 		const std::vector<std::string> &refRoles) {};
 };
 
+%shared_ptr(PyO5mEncode)
+
 class PyO5mEncode : public IDataStreamHandler
 {
 public:
 	PyO5mEncode(PyObject* obj);
 	virtual ~PyO5mEncode();
 };
+
+%shared_ptr(PyOsmXmlEncode)
 
 class PyOsmXmlEncode : public IDataStreamHandler
 {
@@ -127,6 +134,8 @@ namespace std {
 	%template(vectorosmrelation) vector<class OsmRelation>;
 };
 
+%shared_ptr(OsmData)
+
 class OsmData : public IDataStreamHandler
 {
 public:
@@ -174,7 +183,7 @@ public:
 		const string &tableActivePrefixIn);
 	virtual ~PgMapQuery();
 
-	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);
+	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();
 	void Reset();
 };
@@ -190,9 +199,9 @@ public:
 
 	bool Ready();
 
-	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
+	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
 
-	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
+	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out);
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWayIds,

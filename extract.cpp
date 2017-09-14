@@ -14,12 +14,12 @@ int main(int argc, char **argv)
 	outfi.open("extract.o5m.gz", std::ios::out);
 	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
 
-	O5mEncode enc(*gzipEnc);
+	shared_ptr<IDataStreamHandler> enc (new O5mEncode(*gzipEnc));
 #else
 	outfi.open("extract.osm.gz", std::ios::out);
 	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
 
-	OsmXmlEncode enc(*gzipEnc);
+	shared_ptr<IDataStreamHandler> enc(new OsmXmlEncode(*gzipEnc));
 #endif
 
 	string configContent;

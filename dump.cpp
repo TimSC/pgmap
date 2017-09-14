@@ -11,7 +11,7 @@ int main(int argc, char **argv)
 	outfi.open("dump.o5m.gz", std::ios::out);
 	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
 
-	O5mEncode enc(*gzipEnc);
+	shared_ptr<IDataStreamHandler> enc(new O5mEncode(*gzipEnc));
 
 	string configContent;
 	cout << "Reading settings from config.cfg" << endl;

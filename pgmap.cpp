@@ -32,12 +32,9 @@ PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn,
 		const string &tableActivePrefixIn)
 {
 	mapQueryActive = false;
-	retainNodeIds = NULL;
 	mapQueryEnc = NULL;
 	dbconn = NULL;
 	mapQueryWork = NULL;
-	retainWayIds = NULL;
-	retainWayMemIds = NULL;
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
@@ -53,27 +50,26 @@ PgMapQuery& PgMapQuery::operator=(const PgMapQuery&)
 	return *this;
 }
 
-void PgMapQuery::SetDbConn(pqxx::connection &db)
+void PgMapQuery::SetDbConn(shared_ptr<pqxx::connection> db)
 {
-	dbconn = &db;
+	dbconn = db;
 }
 
-int PgMapQuery::Start(const vector<double> &bbox, IDataStreamHandler &enc)
+int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(mapQueryActive)
 		throw runtime_error("Query already active");
-	if(dbconn == NULL)
+	if(dbconn.get() == NULL)
 		throw runtime_error("DB pointer not set for PgMapQuery");
 	mapQueryActive = true;
 	this->mapQueryPhase = 0;
 	this->mapQueryBbox = bbox;
-	this->mapQueryWork = new pqxx::work(*dbconn);
+	this->mapQueryWork.reset(new pqxx::work(*dbconn));
 
-	assert(this->retainNodeIds == NULL);
-	this->mapQueryEnc = &enc;
-	this->retainNodeIds = new class DataStreamRetainIds(enc);
-	this->retainWayIds = new class DataStreamRetainIds(this->nullEncoder);
-	this->retainWayMemIds = new class DataStreamRetainMemIds(*this->retainWayIds);
+	this->mapQueryEnc = enc;
+	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
+	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
+	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
 
 	//Lock database for reading (this must always be done in a set order)
 	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
@@ -224,36 +220,21 @@ void PgMapQuery::Reset()
 {
 	this->mapQueryPhase = 0;
 	this->mapQueryActive = false;
-	this->mapQueryEnc = NULL;
+	this->mapQueryEnc.reset();
 	this->mapQueryBbox.clear();
-	if(this->retainNodeIds != NULL)
-	{
-		delete this->retainNodeIds;
-		this->retainNodeIds = NULL;
-	}
-	if(this->mapQueryWork != NULL)
-	{
-		delete this->mapQueryWork;
-		this->mapQueryWork = NULL;
-	}
-	if(this->retainWayIds != NULL)
-	{
-		delete this->retainWayIds;
-		this->retainWayIds = NULL;
-	}
-	if(this->retainWayMemIds != NULL)
-	{
-		delete this->retainWayMemIds;
-		this->retainWayMemIds = NULL;
-	}
+	this->retainNodeIds.reset();
+	this->mapQueryWork.reset();
+	this->retainWayIds.reset();
+	this->retainWayMemIds.reset();
 }
 
 // **********************************************
 
 PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableActivePrefixIn) : dbconn(connection),
+	const string &tableActivePrefixIn):
 	pgMapQuery(tableStaticPrefixIn, tableActivePrefixIn)
 {
+	dbconn.reset(new pqxx::connection(connection));
 	connectionString = connection;
 	this->tableStaticPrefix = tableStaticPrefixIn;
 	this->tableActivePrefix = tableActivePrefixIn;
@@ -263,20 +244,21 @@ PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn,
 
 PgMap::~PgMap()
 {
-	dbconn.disconnect();
+	dbconn->disconnect();
+	dbconn.reset();
 }
 
 bool PgMap::Ready()
 {
-	return dbconn.is_open();
+	return dbconn->is_open();
 }
 
-void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
+void PgMap::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
 {
-	enc.StoreIsDiff(false);
+	enc->StoreIsDiff(false);
 
 	//Lock database for reading (this must always be done in a set order)
-	pqxx::work work(dbconn);
+	pqxx::work work(*dbconn);
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
@@ -285,26 +267,26 @@ void PgMap::Dump(bool onlyLiveData, IDataStreamHandler &enc)
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
 
-	DumpNodes(work, this->tableStaticPrefix, onlyLiveData, enc);
+	DumpNodes(work, this->tableStaticPrefix, onlyLiveData, *enc.get());
 
-	enc.Reset();
+	enc->Reset();
 
-	DumpWays(work, this->tableStaticPrefix, onlyLiveData, enc);
+	DumpWays(work, this->tableStaticPrefix, onlyLiveData, *enc.get());
 
-	enc.Reset();
+	enc->Reset();
 		
-	DumpRelations(work, this->tableStaticPrefix, onlyLiveData, enc);
+	DumpRelations(work, this->tableStaticPrefix, onlyLiveData, *enc.get());
 
 	//Release locks
 	work.commit();
 
-	enc.Finish();
+	enc->Finish();
 
 }
 
-void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out)
+void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out)
 {
-	pqxx::work work(dbconn);
+	pqxx::work work(*dbconn);
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "ways IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableStaticPrefix+ "relations IN ACCESS SHARE MODE;");
@@ -318,18 +300,18 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
 			GetLiveNodesById(work, this->tableStaticPrefix, objectIds, 
-				it, 1000, out);
+				it, 1000, *out.get());
 	}
 	else if(type == "way")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
 			GetLiveWaysById(work, this->tableStaticPrefix, objectIds, 
-				it, 1000, out);
+				it, 1000, *out.get());
 	}
 	else if(type == "relation")
 		GetLiveRelationsById(work, this->tableStaticPrefix, 
-			objectIds, out);
+			objectIds, *out.get());
 	else
 		throw invalid_argument("Known object type");
 
@@ -344,14 +326,14 @@ bool PgMap::StoreObjects(class OsmData &data,
 	class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	pqxx::work work(dbconn);
+	pqxx::work work(*dbconn);
 
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nodes IN ACCESS EXCLUSIVE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS EXCLUSIVE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS EXCLUSIVE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "nextids IN ACCESS EXCLUSIVE MODE;");
 
-	bool ok = ::StoreObjects(dbconn, work, this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
+	bool ok = ::StoreObjects(*dbconn, work, this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	if(ok)

@@ -25,16 +25,16 @@ class PgMapQuery
 private:
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
-	pqxx::connection *dbconn; //Borrowed reference
+	shared_ptr<pqxx::connection> dbconn;
 	bool mapQueryActive;
 	int mapQueryPhase;
-	class DataStreamRetainIds *retainNodeIds;
-	IDataStreamHandler *mapQueryEnc; //Borrowed reference
+	std::shared_ptr<class DataStreamRetainIds> retainNodeIds;
+	std::shared_ptr<IDataStreamHandler> mapQueryEnc;
 	vector<double> mapQueryBbox;
-	pqxx::work *mapQueryWork;
+	std::shared_ptr<pqxx::work> mapQueryWork;
 	set<int64_t> extraNodes;
-	class DataStreamRetainIds *retainWayIds;
-	class DataStreamRetainMemIds *retainWayMemIds;
+	std::shared_ptr<class DataStreamRetainIds> retainWayIds;
+	std::shared_ptr<class DataStreamRetainMemIds> retainWayMemIds;
 	std::shared_ptr<pqxx::icursorstream> cursor;
 	std::set<int64_t>::const_iterator setIterator;
 	IDataStreamHandler nullEncoder;
@@ -45,8 +45,8 @@ public:
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
-	void SetDbConn(pqxx::connection &db);
-	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);
+	void SetDbConn(shared_ptr<pqxx::connection> db);
+	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();
 	void Reset();
 };
@@ -54,7 +54,7 @@ public:
 class PgMap
 {
 private:
-	pqxx::connection dbconn;
+	shared_ptr<pqxx::connection> dbconn;
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
 	std::string connectionString;
@@ -65,12 +65,14 @@ public:
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn);
 	virtual ~PgMap();
+	PgMap& operator=(const PgMap&) {return *this;};
 
 	bool Ready();
 
-	void Dump(bool onlyLiveData, IDataStreamHandler &enc);
+	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
 
-	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, class IDataStreamHandler &out);
+	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
+		std::shared_ptr<IDataStreamHandler> &out);
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,
