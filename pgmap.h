@@ -42,6 +42,7 @@ public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn);
 	virtual ~PgMapQuery();
+	PgMapQuery& operator=(const PgMapQuery&);
 
 	void SetDbConn(pqxx::connection &db);
 	int Start(const std::vector<double> &bbox, IDataStreamHandler &enc);

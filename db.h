@@ -64,10 +64,10 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
-shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	unsigned int maxNodes);
-int LiveNodesInBboxContinue(shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc);
+int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc);
 
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);

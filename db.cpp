@@ -551,7 +551,7 @@ bool UpdateNextObjectIds(pqxx::work &work,
 
 // ************* Basic API methods ***************
 
-shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	unsigned int maxNodes)
 {
@@ -567,10 +567,10 @@ shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const str
 		sql << " LIMIT " << maxNodes;
 	sql <<";";
 
-	return shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( work, sql.str(), "nodesinbbox", 1000 ));
+	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( work, sql.str(), "nodesinbbox", 1000 ));
 }
 
-int LiveNodesInBboxContinue(shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc)
+int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc)
 {
 	pqxx::icursorstream *c = cursor.get();
 	return NodeResultsToEncoder(*c, enc);

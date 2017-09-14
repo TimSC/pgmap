@@ -48,6 +48,11 @@ PgMapQuery::~PgMapQuery()
 	this->Reset();
 }
 
+PgMapQuery& PgMapQuery::operator=(const PgMapQuery&)
+{
+	return *this;
+}
+
 void PgMapQuery::SetDbConn(pqxx::connection &db)
 {
 	dbconn = &db;
@@ -120,6 +125,7 @@ int PgMapQuery::Continue()
 		if(ret < 0)
 			return -1; 
 
+		cursor.reset();
 		cout << "Found " << retainNodeIds->nodeIds.size() << " nodes in bbox" << endl;
 
 		this->mapQueryPhase ++;
