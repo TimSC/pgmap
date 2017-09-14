@@ -64,10 +64,11 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
-void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
+shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
-	unsigned int maxNodes,
-	IDataStreamHandler &enc);
+	unsigned int maxNodes);
+int LiveNodesInBboxContinue(shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc);
+
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
 void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
@@ -75,9 +76,13 @@ void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix,
 	IDataStreamHandler &enc);
 
 void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc);
+	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, IDataStreamHandler &enc);
+
 void GetLiveWaysById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &wayIds, IDataStreamHandler &enc);
+	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, IDataStreamHandler &enc);
+
 void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &relationIds, IDataStreamHandler &enc);
 

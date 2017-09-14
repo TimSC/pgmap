@@ -35,6 +35,8 @@ private:
 	set<int64_t> extraNodes;
 	class DataStreamRetainIds *retainWayIds;
 	class DataStreamRetainMemIds *retainWayMemIds;
+	std::shared_ptr<pqxx::icursorstream> cursor;
+	std::set<int64_t>::const_iterator setIterator;
 
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 

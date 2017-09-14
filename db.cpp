@@ -199,7 +199,7 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 	}
 }
 
-void NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
+int NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -208,64 +208,54 @@ void NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 	uint64_t lastUpdateCount = 0;
 	bool verbose = false;
 
-	for ( size_t batch = 0; true; batch ++ )
-	{
-		pqxx::result rows;
-		cursor.get(rows);
-		if ( rows.empty() ) break; // nothing left to read
-		if(batch == 0 and verbose)
+	pqxx::result rows;
+	cursor.get(rows);
+	if ( rows.empty() ) return 0; // nothing left to read
+
+	MetaDataCols metaDataCols;
+
+	int idCol = rows.column_number("id");
+	metaDataCols.changesetCol = rows.column_number("changeset");
+	metaDataCols.usernameCol = rows.column_number("username");
+	metaDataCols.uidCol = rows.column_number("uid");
+	int visibleCol = rows.column_number("visible");
+	metaDataCols.timestampCol = rows.column_number("timestamp");
+	metaDataCols.versionCol = rows.column_number("version");
+	int currentCol = rows.column_number("current");
+	int tagsCol = rows.column_number("tags");
+	int latCol = rows.column_number("lat");
+	int lonCol = rows.column_number("lon");
+
+	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+		bool visible = c[visibleCol].as<bool>();
+		bool current = c[currentCol].as<bool>();
+		assert(visible && current);
+
+		int64_t objId = c[idCol].as<int64_t>();
+		double lat = atof(c[latCol].c_str());
+		double lon = atof(c[lonCol].c_str());
+
+		DecodeMetadata(c, metaDataCols, metaData);
+		
+		DecodeTags(c, tagsCol, tagHandler);
+
+		count ++;
+		if(count % 1000000 == 0 and verbose)
+			cout << count << " nodes" << endl;
+
+		double timeNow = (double)clock() / CLOCKS_PER_SEC;
+		if (timeNow - lastUpdateTime > 30.0)
 		{
-			size_t numCols = rows.columns();
-			for(size_t i = 0; i < numCols; i++)
-			{
-				cout << i << "\t" << rows.column_name(i) << "\t" << (unsigned int)rows.column_type((pqxx::tuple::size_type)i) << endl;
-			}
+			if(verbose)
+				cout << (count - lastUpdateCount)/30.0 << " nodes/sec" << endl;
+			lastUpdateCount = count;
+			lastUpdateTime = timeNow;
 		}
 
-		MetaDataCols metaDataCols;
-
-		int idCol = rows.column_number("id");
-		metaDataCols.changesetCol = rows.column_number("changeset");
-		metaDataCols.usernameCol = rows.column_number("username");
-		metaDataCols.uidCol = rows.column_number("uid");
-		int visibleCol = rows.column_number("visible");
-		metaDataCols.timestampCol = rows.column_number("timestamp");
-		metaDataCols.versionCol = rows.column_number("version");
-		int currentCol = rows.column_number("current");
-		int tagsCol = rows.column_number("tags");
-		int latCol = rows.column_number("lat");
-		int lonCol = rows.column_number("lon");
-
-		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-			bool visible = c[visibleCol].as<bool>();
-			bool current = c[currentCol].as<bool>();
-			assert(visible && current);
-
-			int64_t objId = c[idCol].as<int64_t>();
-			double lat = atof(c[latCol].c_str());
-			double lon = atof(c[lonCol].c_str());
-
-			DecodeMetadata(c, metaDataCols, metaData);
-			
-			DecodeTags(c, tagsCol, tagHandler);
-
-			count ++;
-			if(count % 1000000 == 0 and verbose)
-				cout << count << " nodes" << endl;
-
-			double timeNow = (double)clock() / CLOCKS_PER_SEC;
-			if (timeNow - lastUpdateTime > 30.0)
-			{
-				if(verbose)
-					cout << (count - lastUpdateCount)/30.0 << " nodes/sec" << endl;
-				lastUpdateCount = count;
-				lastUpdateTime = timeNow;
-			}
-
-			enc.StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
-		}
+		enc.StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
 	}
+	return count;
 }
 
 void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
@@ -561,10 +551,9 @@ bool UpdateNextObjectIds(pqxx::work &work,
 
 // ************* Basic API methods ***************
 
-void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix, 
+shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
-	unsigned int maxNodes,
-	IDataStreamHandler &enc)
+	unsigned int maxNodes)
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
@@ -578,9 +567,13 @@ void GetLiveNodesInBbox(pqxx::work &work, const string &tablePrefix,
 		sql << " LIMIT " << maxNodes;
 	sql <<";";
 
-	pqxx::icursorstream cursor( work, sql.str(), "nodesinbbox", 1000 );	
+	return shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( work, sql.str(), "nodesinbbox", 1000 ));
+}
 
-	NodeResultsToEncoder(cursor, enc);
+int LiveNodesInBboxContinue(shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc)
+{
+	pqxx::icursorstream *c = cursor.get();
+	return NodeResultsToEncoder(*c, enc);
 }
 
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
@@ -612,31 +605,29 @@ void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix,
 }
 
 void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
+	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, IDataStreamHandler &enc)
 {
 	string nodeTable = tablePrefix + "livenodes";
-	int step = 1000;
 
-	auto it=nodeIds.begin();
-	while(it != nodeIds.end())
+	stringstream sqlFrags;
+	int count = 0;
+	for(; it != nodeIds.end() && count < step; it++)
 	{
-		stringstream sqlFrags;
-		int count = 0;
-		for(; it != nodeIds.end() && count < step; it++)
-		{
-			if(count >= 1)
-				sqlFrags << " OR ";
-			sqlFrags << "id = " << *it;
-			count ++;
-		}
-
-		string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ nodeTable
-			+ " WHERE ("+sqlFrags.str()+");";
-
-		pqxx::icursorstream cursor( work, sql, "nodecursor", 1000 );	
-
-		NodeResultsToEncoder(cursor, enc);
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << "id = " << *it;
+		count ++;
 	}
+
+	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ nodeTable
+		+ " WHERE ("+sqlFrags.str()+");";
+
+	pqxx::icursorstream cursor( work, sql, "nodecursor", 1000 );	
+
+	count = 1;
+	while(count > 0)
+		count = NodeResultsToEncoder(cursor, enc);
 }
 
 void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
@@ -670,32 +661,28 @@ void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix,
 }
 
 void GetLiveWaysById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &wayIds, IDataStreamHandler &enc)
+	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, IDataStreamHandler &enc)
 {
 	string wayTable = tablePrefix + "liveways";
-	int step = 1000;
 
-	auto it=wayIds.begin();
-	while(it != wayIds.end())
+	stringstream sqlFrags;
+	int count = 0;
+	for(; it != wayIds.end() && count < step; it++)
 	{
-		stringstream sqlFrags;
-		int count = 0;
-		for(; it != wayIds.end() && count < step; it++)
-		{
-			if(count >= 1)
-				sqlFrags << " OR ";
-			sqlFrags << "id = " << *it;
-			count ++;
-		}
-
-		string sql = "SELECT * FROM "+ wayTable
-			+ " WHERE ("+sqlFrags.str()+");";
-
-		pqxx::icursorstream cursor( work, sql, "waycursor", 1000 );	
-
-		set<int64_t> empty;
-		WayResultsToEncoder(cursor, enc);
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << "id = " << *it;
+		count ++;
 	}
+
+	string sql = "SELECT * FROM "+ wayTable
+		+ " WHERE ("+sqlFrags.str()+");";
+
+	pqxx::icursorstream cursor( work, sql, "waycursor", 1000 );	
+
+	set<int64_t> empty;
+	WayResultsToEncoder(cursor, enc);
 }
 
 void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
@@ -748,7 +735,9 @@ void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, I
 
 	pqxx::icursorstream cursor( work, sql.str(), "nodecursor", 1000 );	
 
-	NodeResultsToEncoder(cursor, enc);
+	int count = 1;
+	while(count > 0)
+		NodeResultsToEncoder(cursor, enc);
 }
 
 void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
