@@ -109,7 +109,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 2)
 	{
-		int ret = LiveNodesInBboxContinue(cursor, *retainNodeIds);
+		int ret = LiveNodesInBboxContinue(cursor, retainNodeIds);
 		if(ret > 0)
 			return 0;
 		if(ret < 0)
@@ -126,7 +126,7 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
-		GetLiveWaysThatContainNodes(*this->mapQueryWork, this->tableStaticPrefix, retainNodeIds->nodeIds, *retainWayMemIds);
+		GetLiveWaysThatContainNodes(*this->mapQueryWork, this->tableStaticPrefix, retainNodeIds->nodeIds, retainWayMemIds);
 		cout << "Ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
@@ -148,7 +148,7 @@ int PgMapQuery::Continue()
 		if(this->setIterator != this->extraNodes.end())
 		{
 			GetLiveNodesById(*this->mapQueryWork, this->tableStaticPrefix, this->extraNodes, 
-				this->setIterator, 1000, *this->mapQueryEnc);
+				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
 
@@ -172,7 +172,7 @@ int PgMapQuery::Continue()
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
 			GetLiveWaysById(*this->mapQueryWork, this->tableStaticPrefix, 
-				this->retainWayIds->wayIds, this->setIterator, 1000, *this->mapQueryEnc);
+				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
 
@@ -186,17 +186,17 @@ int PgMapQuery::Continue()
 		//Get relations that reference any of the above nodes
 		this->mapQueryEnc->Reset();
 		set<int64_t> empty;
-		DataStreamRetainIds retainRelationIds(*this->mapQueryEnc);
+		shared_ptr<DataStreamRetainIds> retainRelationIds(new class DataStreamRetainIds(*this->mapQueryEnc));
 		GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
 			'n', retainNodeIds->nodeIds, empty, retainRelationIds);
 		GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
-			'n', this->extraNodes, retainRelationIds.relationIds, retainRelationIds);
+			'n', this->extraNodes, retainRelationIds->relationIds, retainRelationIds);
 		this->extraNodes.clear();
 
 		//Get relations that reference any of the above ways
 		GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
-			'w', this->retainWayIds->wayIds, retainRelationIds.relationIds, retainRelationIds);
-		cout << "found " << retainRelationIds.relationIds.size() << " relations" << endl;
+			'w', this->retainWayIds->wayIds, retainRelationIds->relationIds, retainRelationIds);
+		cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
 
 		//Release database lock by finishing the transaction
 		this->mapQueryWork->commit();
@@ -258,15 +258,15 @@ void PgMap::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "ways IN ACCESS SHARE MODE;");
 	work.exec("LOCK TABLE "+this->tableActivePrefix+ "relations IN ACCESS SHARE MODE;");
 
-	DumpNodes(work, this->tableStaticPrefix, onlyLiveData, *enc.get());
+	DumpNodes(work, this->tableStaticPrefix, onlyLiveData, enc);
 
 	enc->Reset();
 
-	DumpWays(work, this->tableStaticPrefix, onlyLiveData, *enc.get());
+	DumpWays(work, this->tableStaticPrefix, onlyLiveData, enc);
 
 	enc->Reset();
 		
-	DumpRelations(work, this->tableStaticPrefix, onlyLiveData, *enc.get());
+	DumpRelations(work, this->tableStaticPrefix, onlyLiveData, enc);
 
 	//Release locks
 	work.commit();
@@ -297,18 +297,23 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
 			GetLiveNodesById(work, this->tableStaticPrefix, objectIds, 
-				it, 1000, *out.get());
+				it, 1000, out);
 	}
 	else if(type == "way")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
 			GetLiveWaysById(work, this->tableStaticPrefix, objectIds, 
-				it, 1000, *out.get());
+				it, 1000, out);
 	}
 	else if(type == "relation")
-		GetLiveRelationsById(work, this->tableStaticPrefix, 
-			objectIds, *out.get());
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveRelationsById(work, this->tableStaticPrefix, 
+				objectIds, 
+				it, 1000, out);
+	}
 	else
 		throw invalid_argument("Known object type");
 

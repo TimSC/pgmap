@@ -199,7 +199,7 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 	}
 }
 
-int NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
+int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -253,12 +253,12 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 			lastUpdateTime = timeNow;
 		}
 
-		enc.StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
+		enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
 	}
 	return count;
 }
 
-void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
+void WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -322,13 +322,13 @@ void WayResultsToEncoder(pqxx::icursorstream &cursor, IDataStreamHandler &enc)
 				lastUpdateTime = timeNow;
 			}
 
-			enc.StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
+			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
 		}
 
 	}
 }
 
-void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, IDataStreamHandler &enc)
+void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -398,7 +398,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 				lastUpdateTime = timeNow;
 			}
 
-			enc.StoreRelation(objId, metaData, tagHandler.tagMap, 
+			enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
 				relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
 		}
 	}
@@ -570,14 +570,14 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work &work, cons
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( work, sql.str(), "nodesinbbox", 1000 ));
 }
 
-int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, IDataStreamHandler &enc)
+int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::shared_ptr<IDataStreamHandler> enc)
 {
 	pqxx::icursorstream *c = cursor.get();
 	return NodeResultsToEncoder(*c, enc);
 }
 
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, IDataStreamHandler &enc)
+	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = tablePrefix + "liveways";
 	string wayMemTable = tablePrefix + "way_mems";
@@ -606,7 +606,7 @@ void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix,
 
 void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
-	size_t step, IDataStreamHandler &enc)
+	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string nodeTable = tablePrefix + "livenodes";
 
@@ -632,7 +632,7 @@ void GetLiveNodesById(pqxx::work &work, const string &tablePrefix,
 
 void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
 	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
-	IDataStreamHandler &enc)
+	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string relTable = tablePrefix + "liverelations";
 	string relMemTable = tablePrefix + "relation_mems_" + qtype;
@@ -662,7 +662,7 @@ void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix,
 
 void GetLiveWaysById(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
-	size_t step, IDataStreamHandler &enc)
+	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = tablePrefix + "liveways";
 
@@ -686,37 +686,33 @@ void GetLiveWaysById(pqxx::work &work, const string &tablePrefix,
 }
 
 void GetLiveRelationsById(pqxx::work &work, const string &tablePrefix, 
-	const std::set<int64_t> &relationIds, IDataStreamHandler &enc)
+	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string relationTable = tablePrefix + "liverelations";
-	int step = 1000;
 
-	auto it=relationIds.begin();
-	while(it != relationIds.end())
+	stringstream sqlFrags;
+	int count = 0;
+	for(; it != relationIds.end() && count < step; it++)
 	{
-		stringstream sqlFrags;
-		int count = 0;
-		for(; it != relationIds.end() && count < step; it++)
-		{
-			if(count >= 1)
-				sqlFrags << " OR ";
-			sqlFrags << "id = " << *it;
-			count ++;
-		}
-
-		string sql = "SELECT * FROM "+ relationTable
-			+ " WHERE ("+sqlFrags.str()+");";
-
-		pqxx::icursorstream cursor( work, sql, "relationcursor", 1000 );	
-
-		set<int64_t> empty;
-		RelationResultsToEncoder(cursor, empty, enc);
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << "id = " << *it;
+		count ++;
 	}
+
+	string sql = "SELECT * FROM "+ relationTable
+		+ " WHERE ("+sqlFrags.str()+");";
+
+	pqxx::icursorstream cursor( work, sql, "relationcursor", 1000 );	
+
+	set<int64_t> empty;
+	RelationResultsToEncoder(cursor, empty, enc);
 }
 
 // ************* Dump specific code *************
 
-void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
+void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
 {
 	cout << "Dump nodes" << endl;
 	stringstream sql;
@@ -737,10 +733,10 @@ void DumpNodes(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, I
 
 	int count = 1;
 	while(count > 0)
-		NodeResultsToEncoder(cursor, enc);
+		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
+void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
 {
 	cout << "Dump ways" << endl;
 	stringstream sql;
@@ -756,7 +752,7 @@ void DumpWays(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, ID
 	WayResultsToEncoder(cursor, enc);
 }
 
-void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, IDataStreamHandler &enc)
+void DumpRelations(pqxx::work &work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
 {
 	cout << "Dump relations" << endl;
 	stringstream sql;
