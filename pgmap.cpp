@@ -231,15 +231,12 @@ void PgMapQuery::Reset()
 // **********************************************
 
 PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableActivePrefixIn):
-	pgMapQuery(tableStaticPrefixIn, tableActivePrefixIn)
+	const string &tableActivePrefixIn)
 {
 	dbconn.reset(new pqxx::connection(connection));
 	connectionString = connection;
 	this->tableStaticPrefix = tableStaticPrefixIn;
 	this->tableActivePrefix = tableActivePrefixIn;
-	
-	this->pgMapQuery.SetDbConn(this->dbconn);
 }
 
 PgMap::~PgMap()
@@ -282,6 +279,13 @@ void PgMap::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
 
 	enc->Finish();
 
+}
+
+shared_ptr<class PgMapQuery> PgMap::GetQueryMgr()
+{
+	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix));
+	out->SetDbConn(this->dbconn);
+	return out;
 }
 
 void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out)

@@ -58,10 +58,11 @@ int main(int argc, char **argv)
 
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
 
-	int ret = pgMap.pgMapQuery.Start(bbox, enc);
+	std::shared_ptr<class PgMapQuery> mapQuery = pgMap.GetQueryMgr();
+	int ret = mapQuery->Start(bbox, enc);
 	while(ret == 0)
 	{
-		ret = pgMap.pgMapQuery.Continue();
+		ret = mapQuery->Continue();
 	}
 
 	delete gzipEnc;

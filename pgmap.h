@@ -60,8 +60,6 @@ private:
 	std::string connectionString;
 
 public:
-	class PgMapQuery pgMapQuery;
-
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn);
 	virtual ~PgMap();
@@ -70,6 +68,8 @@ public:
 	bool Ready();
 
 	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
+
+	std::shared_ptr<class PgMapQuery> GetQueryMgr();
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> &out);
