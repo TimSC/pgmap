@@ -71,8 +71,11 @@ int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::sh
 
 void GetLiveWaysThatContainNodes(pqxx::work &work, const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc);
+
 void GetLiveRelationsForObjects(pqxx::work &work, const string &tablePrefix, 
-	char qtype, const set<int64_t> &qids, const set<int64_t> &skipIds, 
+	char qtype, const set<int64_t> &qids, 
+	set<int64_t>::const_iterator &it, size_t step,
+	const set<int64_t> &skipIds, 
 	std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveNodesById(pqxx::work &work, const string &tablePrefix, 

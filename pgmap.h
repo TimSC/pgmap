@@ -35,6 +35,7 @@ private:
 	set<int64_t> extraNodes;
 	std::shared_ptr<class DataStreamRetainIds> retainWayIds;
 	std::shared_ptr<class DataStreamRetainMemIds> retainWayMemIds;
+	std::shared_ptr<class DataStreamRetainIds> retainRelationIds;
 	std::shared_ptr<pqxx::icursorstream> cursor;
 	std::set<int64_t>::const_iterator setIterator;
 	IDataStreamHandler nullEncoder;

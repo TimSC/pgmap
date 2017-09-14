@@ -64,6 +64,7 @@ int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHan
 	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
 	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
 	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
+	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
 
 	//Lock database for reading (this must always be done in a set order)
 	this->mapQueryWork->exec("LOCK TABLE "+this->tableStaticPrefix+ "nodes IN ACCESS SHARE MODE;");
@@ -185,17 +186,67 @@ int PgMapQuery::Continue()
 
 		//Get relations that reference any of the above nodes
 		this->mapQueryEnc->Reset();
-		set<int64_t> empty;
-		shared_ptr<DataStreamRetainIds> retainRelationIds(new class DataStreamRetainIds(*this->mapQueryEnc));
-		GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
-			'n', retainNodeIds->nodeIds, empty, retainRelationIds);
-		GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
-			'n', this->extraNodes, retainRelationIds->relationIds, retainRelationIds);
+		this->setIterator = this->retainNodeIds->nodeIds.begin();
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 8)
+	{
+		if(this->setIterator != retainNodeIds->nodeIds.end())
+		{
+			set<int64_t> empty;
+			GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
+				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
+			return 0;
+		}
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 9)
+	{
+		this->setIterator = this->extraNodes.begin();
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 10)
+	{
+		if(this->setIterator != this->extraNodes.end())
+		{
+			GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
+				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+			return 0;
+		}
+
 		this->extraNodes.clear();
 
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 11)
+	{
 		//Get relations that reference any of the above ways
-		GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
-			'w', this->retainWayIds->wayIds, retainRelationIds->relationIds, retainRelationIds);
+		this->setIterator = this->retainWayIds->wayIds.begin();
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 12)
+	{
+		if(this->setIterator != this->retainWayIds->wayIds.end())
+		{
+			GetLiveRelationsForObjects(*this->mapQueryWork, this->tableStaticPrefix, 
+				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
+				retainRelationIds->relationIds, retainRelationIds);
+			return 0;
+		}
 		cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
 
 		//Release database lock by finishing the transaction
@@ -220,6 +271,7 @@ void PgMapQuery::Reset()
 	this->mapQueryWork.reset();
 	this->retainWayIds.reset();
 	this->retainWayMemIds.reset();
+	this->retainRelationIds.reset();
 }
 
 // **********************************************
