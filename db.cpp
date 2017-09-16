@@ -385,7 +385,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 // *********** Convert to database SQL *************
 
 bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
-	const std::vector<class OsmNode> &nodes, 
+	const std::vector<const class OsmObject *> &objPtrs, 
 	std::map<int64_t, int64_t> &createdNodeIds,
 	map<string, int64_t> &nextIdMap,
 	std::string &errStr)
@@ -395,11 +395,12 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 	auto it = nextIdMap.find("node");
 	int64_t &nextNodeId = it->second;
 
-	for(size_t i=0; i<nodes.size(); i++)
+	for(size_t i=0; i<objPtrs.size(); i++)
 	{
-		const class OsmNode &node = nodes[i];
-		int64_t objId = node.objId;
-		int64_t version = node.metaData.version;
+		const class OsmObject *osmObject = objPtrs[i];
+		const class OsmNode *node = dynamic_cast<const class OsmNode *>(osmObject);
+		int64_t objId = osmObject->objId;
+		int64_t version = osmObject->metaData.version;
 
 		//Get existing node object (if any)
 		string checkExistingSql = "SELECT id, changeset, username, uid, timestamp, version, tags, geom, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ tablePrefix
@@ -426,12 +427,12 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 		if(foundExisting)
 		{
 			const pqxx::result::tuple row = r[0];
-			currentVersion = row[5].as<int64_t>();
+			currentVersion = row["version"].as<int64_t>();
 			cout << "version " << currentVersion << endl;
 		}
 
 		//Check if we need to delete object from live table
-		if(foundExisting && version >= currentVersion && !node.metaData.visible)
+		if(foundExisting && version >= currentVersion && !osmObject->metaData.visible)
 		{
 			string deletedLiveSql = "DELETE FROM "+ tablePrefix
 				+ "livenodes WHERE (id=$1);";
@@ -480,7 +481,7 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 			}
 		}
 
-		if(node.metaData.visible && (!foundExisting || version >= currentVersion))
+		if(osmObject->metaData.visible && (!foundExisting || version >= currentVersion))
 		{
 			if(!foundExisting)
 			{
@@ -488,11 +489,11 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 				stringstream ss;
 				ss << "INSERT INTO "<< tablePrefix <<"livenodes (id, changeset, username, uid, timestamp, version, tags, geom) VALUES ";
 				string tagsJson;
-				EncodeTags(node.tags, tagsJson);
+				EncodeTags(osmObject->tags, tagsJson);
 
 				if(objId < 0)
 				{
-					if(node.metaData.version != 1)
+					if(osmObject->metaData.version != 1)
 					{
 						errStr = "Cannot assign a new node to any version but 1.";
 						return false;
@@ -500,22 +501,22 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 
 					//Assign a new ID
 					objId = nextNodeId;
-					createdNodeIds[node.objId] = nextNodeId;
+					createdNodeIds[osmObject->objId] = nextNodeId;
 					nextNodeId ++;
 				}
 
 				ss << "($1,$2,$3,$4,$5,$6,$7,ST_GeometryFromText($8, 4326));";
-				cout << ss.str() << "," << objId << "," << node.metaData.version << endl;
+				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
 				stringstream wkt;
 				wkt.precision(9);
-				wkt << "POINT(" << node.lon <<" "<< node.lat << ")";
+				wkt << "POINT(" << node->lon <<" "<< node->lat << ")";
 
 				try
 				{
 					c.prepare(tablePrefix+"insertnode", ss.str());
-					work->prepared(tablePrefix+"insertnode")(objId)(node.metaData.changeset)(node.metaData.username)\
-						(node.metaData.uid)(node.metaData.timestamp)(node.metaData.version)(tagsJson)(wkt.str()).exec();
+					work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -541,7 +542,7 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 				stringstream ss;
 				ss << "UPDATE "<< tablePrefix <<"livenodes SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6, geom=ST_GeometryFromText($7, 4326) WHERE id = $8;";
 				string tagsJson;
-				EncodeTags(node.tags, tagsJson);
+				EncodeTags(osmObject->tags, tagsJson);
 
 				if(objId < 0)
 				{
@@ -549,17 +550,17 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 					return false;
 				}
 
-				cout << ss.str() << "," << objId << "," << node.metaData.version << endl;
+				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
 				stringstream wkt;
 				wkt.precision(9);
-				wkt << "POINT(" << node.lon <<" "<< node.lat << ")";
+				wkt << "POINT(" << node->lon <<" "<< node->lat << ")";
 
 				try
 				{
 					c.prepare(tablePrefix+"updatenode", ss.str());
-					work->prepared(tablePrefix+"updatenode")(node.metaData.changeset)(node.metaData.username)\
-						(node.metaData.uid)(node.metaData.timestamp)(node.metaData.version)(tagsJson)(wkt.str())(objId).exec();
+					work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
+						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str())(objId).exec();
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -579,11 +580,11 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 			stringstream ss;
 			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current, geom) VALUES ";
 			string tagsJson;
-			EncodeTags(node.tags, tagsJson);
+			EncodeTags(osmObject->tags, tagsJson);
 
 			if(objId < 0)
 			{
-				if(node.metaData.version != 1)
+				if(osmObject->metaData.version != 1)
 				{
 					errStr = "Cannot assign a new node to any version but 1.";
 					return false;
@@ -591,22 +592,22 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 
 				//Assign a new ID
 				objId = nextNodeId;
-				createdNodeIds[node.objId] = nextNodeId;
+				createdNodeIds[osmObject->objId] = nextNodeId;
 				nextNodeId ++;
 			}
 
 			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_GeometryFromText($10, 4326));";
-			cout << ss.str() << "," << objId << "," << node.metaData.version << endl;
+			cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
 			stringstream wkt;
 			wkt.precision(9);
-			wkt << "POINT(" << node.lon <<" "<< node.lat << ")";
+			wkt << "POINT(" << node->lon <<" "<< node->lat << ")";
 
 			try
 			{
 				c.prepare(tablePrefix+"insertoldnode", ss.str());
-				work->prepared(tablePrefix+"insertoldnode")(objId)(node.metaData.changeset)(node.metaData.username)\
-					(node.metaData.uid)(node.metaData.timestamp)(node.metaData.version)(tagsJson)(node.metaData.visible)(false)(wkt.str()).exec();
+				work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+					(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(osmObject->metaData.visible)(false)(wkt.str()).exec();
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -994,7 +995,10 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 		return false;
 	nextIdMap = nextIdMapOriginal;
 
-	ok = NodesToDatabase(c, work, tablePrefix, osmData.nodes, createdNodeIds, nextIdMap, errStr);
+	std::vector<const class OsmObject *> objPtrs;
+	for(size_t i=0; i<osmData.nodes.size(); i++)
+		objPtrs.push_back(&osmData.nodes[0]);
+	ok = NodesToDatabase(c, work, tablePrefix, objPtrs, createdNodeIds, nextIdMap, errStr);
 	if(!ok)
 		return false;
 	WaysToDatabase(c, work, tablePrefix, osmData.ways, createdWayIds);
