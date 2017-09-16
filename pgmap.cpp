@@ -107,7 +107,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 1)
 	{
 		//Get nodes in bbox (static db)
-		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableStaticPrefix, this->mapQueryBbox, 0);
+		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix, 0);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -132,7 +132,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 3)
 	{
 		//Get nodes in bbox (active db)
-		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableActivePrefix, this->mapQueryBbox, 0);
+		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableActivePrefix, this->mapQueryBbox, "", 0);
 
 		this->mapQueryPhase ++;
 		return 0;

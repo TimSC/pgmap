@@ -527,6 +527,13 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 					errStr = e.what();
 					return false;
 				}
+
+				stringstream ssi;
+				ssi << "INSERT INTO "<< tablePrefix <<"nodeids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+
+				c.prepare(tablePrefix+"insertnodeids", ssi.str());
+				work->prepared(tablePrefix+"insertnodeids")(objId).exec();
+
 			}
 			else
 			{
@@ -611,6 +618,12 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 				errStr = e.what();
 				return false;
 			}
+
+			stringstream ssi;
+			ssi << "INSERT INTO "<< tablePrefix <<"nodeids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+
+			c.prepare(tablePrefix+"insertnodeids", ssi.str());
+			work->prepared(tablePrefix+"insertnodeids")(objId).exec();
 
 		}
 	}
@@ -718,16 +731,29 @@ bool UpdateNextObjectIds(pqxx::work *work,
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
+	const string &excludeTablePrefix, 
 	unsigned int maxNodes)
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
+	string liveNodeTable = tablePrefix + "livenodes";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "nodeids";
 
 	stringstream sql;
-	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << tablePrefix;
-	sql << "livenodes WHERE geom && ST_MakeEnvelope(";
+	sql.precision(9);
+	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
+	if(excludeTable.size() > 0)
+		sql << ", "<<excludeTable<<".id";
+	sql << " FROM ";
+	sql << liveNodeTable;
+	if(excludeTable.size() > 0)
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
+	sql << " WHERE "<<liveNodeTable<<".geom && ST_MakeEnvelope(";
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
+	if(excludeTable.size() > 0)
+		sql << " AND "<<excludeTable<<".id IS NULL";
 	if(maxNodes > 0)
 		sql << " LIMIT " << maxNodes;
 	sql <<";";
