@@ -398,42 +398,220 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 	for(size_t i=0; i<nodes.size(); i++)
 	{
 		const class OsmNode &node = nodes[i];
+		int64_t objId = node.objId;
+		int64_t version = node.metaData.version;
 
-		if(node.metaData.visible)
+		//Get existing node object (if any)
+		string checkExistingSql = "SELECT id, changeset, username, uid, timestamp, version, tags, geom, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ tablePrefix
+			+ "livenodes WHERE (id=$1);";
+		pqxx::result r;
+		try
 		{
+			c.prepare(tablePrefix+"checknodeexists", checkExistingSql);
+			r = work->prepared(tablePrefix+"checknodeexists")(objId).exec();
+		}
+		catch (const pqxx::sql_error &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+		catch (const std::exception &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+
+		bool foundExisting = r.size() > 0;
+		int64_t currentVersion = -1;
+		if(foundExisting)
+		{
+			const pqxx::result::tuple row = r[0];
+			currentVersion = row[5].as<int64_t>();
+			cout << "version " << currentVersion << endl;
+		}
+
+		//Check if we need to delete object from live table
+		if(foundExisting && version >= currentVersion && !node.metaData.visible)
+		{
+			string checkExistingSql = "DELETE FROM "+ tablePrefix
+				+ "livenodes WHERE (id=$1);";
+			try
+			{
+				c.prepare(tablePrefix+"deletelivenode", checkExistingSql);
+				work->prepared(tablePrefix+"deletelivenode")(objId).exec();
+			}
+			catch (const pqxx::sql_error &e)
+			{
+				errStr = e.what();
+				return false;
+			}
+			catch (const std::exception &e)
+			{
+				errStr = e.what();
+				return false;
+			}
+		}
+
+		//Check if we need to copy row to history table
+		if(foundExisting && version > currentVersion)
+		{
+			const pqxx::result::tuple row = r[0];
+
+			//Insert into live table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"livenodes (id, changeset, username, uid, timestamp, version, tags, geom) VALUES ";
-			//char *visibleStr = node.metaData.visible ? trueStr : falseStr;
+			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current, geom) VALUES ";
+			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);";
+
+			try
+			{
+				c.prepare(tablePrefix+"copyoldnode", ss.str());
+				work->prepared(tablePrefix+"copyoldnode")(row["id"].as<int64_t>())(row[1].as<int64_t>())(row[2].as<string>())\
+					(row[3].as<int64_t>())(row[4].as<int64_t>())(row[5].as<int64_t>())(row[6].as<string>())(true)(false)(row[7].as<string>()).exec();
+			}
+			catch (const pqxx::sql_error &e)
+			{
+				errStr = e.what();
+				return false;
+			}
+			catch (const std::exception &e)
+			{
+				errStr = e.what();
+				return false;
+			}
+		}
+
+		if(node.metaData.visible && (!foundExisting || version >= currentVersion))
+		{
+			if(!foundExisting)
+			{
+				//Insert into live table
+				stringstream ss;
+				ss << "INSERT INTO "<< tablePrefix <<"livenodes (id, changeset, username, uid, timestamp, version, tags, geom) VALUES ";
+				string tagsJson;
+				EncodeTags(node.tags, tagsJson);
+
+				if(objId < 0)
+				{
+					if(node.metaData.version != 1)
+					{
+						errStr = "Cannot assign a new node to any version but 1.";
+						return false;
+					}
+
+					//Assign a new ID
+					objId = nextNodeId;
+					createdNodeIds[node.objId] = nextNodeId;
+					nextNodeId ++;
+				}
+
+				ss << "($1,$2,$3,$4,$5,$6,$7,ST_GeometryFromText($8, 4326));";
+				cout << ss.str() << "," << objId << "," << node.metaData.version << endl;
+
+				stringstream wkt;
+				wkt.precision(9);
+				wkt << "POINT(" << node.lon <<" "<< node.lat << ")";
+
+				try
+				{
+					c.prepare(tablePrefix+"insertnode", ss.str());
+					work->prepared(tablePrefix+"insertnode")(objId)(node.metaData.changeset)(node.metaData.username)\
+						(node.metaData.uid)(node.metaData.timestamp)(node.metaData.version)(tagsJson)(wkt.str()).exec();
+				}
+				catch (const pqxx::sql_error &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+				catch (const std::exception &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+			}
+			else
+			{
+				//Update row in place
+				stringstream ss;
+				ss << "UPDATE "<< tablePrefix <<"livenodes SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6, geom=ST_GeometryFromText($7, 4326) WHERE id = $8;";
+				string tagsJson;
+				EncodeTags(node.tags, tagsJson);
+
+				if(objId < 0)
+				{
+					errStr = "We should never have to assign an ID and SQL update the live table.";
+					return false;
+				}
+
+				cout << ss.str() << "," << objId << "," << node.metaData.version << endl;
+
+				stringstream wkt;
+				wkt.precision(9);
+				wkt << "POINT(" << node.lon <<" "<< node.lat << ")";
+
+				try
+				{
+					c.prepare(tablePrefix+"updatenode", ss.str());
+					work->prepared(tablePrefix+"updatenode")(node.metaData.changeset)(node.metaData.username)\
+						(node.metaData.uid)(node.metaData.timestamp)(node.metaData.version)(tagsJson)(wkt.str())(objId).exec();
+				}
+				catch (const pqxx::sql_error &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+				catch (const std::exception &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+			}
+		}
+		else
+		{
+			//Insert into history table
+			stringstream ss;
+			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current, geom) VALUES ";
 			string tagsJson;
 			EncodeTags(node.tags, tagsJson);
-			int64_t objId = node.objId;
+
 			if(objId < 0)
 			{
+				if(node.metaData.version != 1)
+				{
+					errStr = "Cannot assign a new node to any version but 1.";
+					return false;
+				}
+
+				//Assign a new ID
 				objId = nextNodeId;
 				createdNodeIds[node.objId] = nextNodeId;
 				nextNodeId ++;
 			}
 
-			ss << "("<<objId<<"," << node.metaData.changeset <<",$1,"<<node.metaData.uid <<","
-				<< node.metaData.timestamp << "," << node.metaData.version 
-				<< ",$2,ST_GeometryFromText('POINT("<< node.lon <<" "<< node.lat <<")', 4326));";
-			cout << ss.str() << endl;
-			c.prepare("insertnode", ss.str());
+			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_GeometryFromText($10, 4326));";
+			cout << ss.str() << "," << objId << "," << node.metaData.version << endl;
+
+			stringstream wkt;
+			wkt.precision(9);
+			wkt << "POINT(" << node.lon <<" "<< node.lat << ")";
 
 			try
 			{
-				work->prepared("insertnode")(node.metaData.username)(tagsJson).exec();
+				c.prepare(tablePrefix+"insertoldnode", ss.str());
+				work->prepared(tablePrefix+"insertoldnode")(objId)(node.metaData.changeset)(node.metaData.username)\
+					(node.metaData.uid)(node.metaData.timestamp)(node.metaData.version)(tagsJson)(node.metaData.visible)(false)(wkt.str()).exec();
 			}
 			catch (const pqxx::sql_error &e)
 			{
-				errStr = errStr;
+				errStr = e.what();
 				return false;
 			}
 			catch (const std::exception &e)
 			{
-				errStr = errStr;
+				errStr = e.what();
 				return false;
 			}
+
 		}
 	}
 	return true;
