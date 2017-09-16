@@ -79,6 +79,7 @@ public:
 		std::map<int64_t, int64_t> &createdWaysIds,
 		std::map<int64_t, int64_t> &createdRelationsIds,
 		class PgMapError &errStr);
+	bool ResetActiveTables(class PgMapError &errStr);
 };
 
 #endif //_PGMAP_H

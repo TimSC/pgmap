@@ -103,5 +103,10 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 	std::map<int64_t, int64_t> &createdRelationsIds,
 	std::string &errStr);
 
+bool ResetActiveTables(pqxx::connection &c, pqxx::work *work, 
+	const string &tableActivePrefix, 
+	const string &tableStaticPrefix,
+	std::string &errStr);
+
 #endif //_COMMON_H
 

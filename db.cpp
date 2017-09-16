@@ -433,11 +433,11 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 		//Check if we need to delete object from live table
 		if(foundExisting && version >= currentVersion && !node.metaData.visible)
 		{
-			string checkExistingSql = "DELETE FROM "+ tablePrefix
+			string deletedLiveSql = "DELETE FROM "+ tablePrefix
 				+ "livenodes WHERE (id=$1);";
 			try
 			{
-				c.prepare(tablePrefix+"deletelivenode", checkExistingSql);
+				c.prepare(tablePrefix+"deletelivenode", deletedLiveSql);
 				work->prepared(tablePrefix+"deletelivenode")(objId).exec();
 			}
 			catch (const pqxx::sql_error &e)
@@ -663,12 +663,12 @@ bool GetNextObjectIds(pqxx::work *work,
 	}
 	catch (const pqxx::sql_error &e)
 	{
-		errStr = errStr;
+		errStr = e.what();
 		return false;
 	}
 	catch (const std::exception &e)
 	{
-		errStr = errStr;
+		errStr = e.what();
 		return false;
 	}
 
@@ -702,11 +702,35 @@ bool UpdateNextObjectIds(pqxx::work *work,
 	for(auto it=nextIdMap.begin(); it != nextIdMap.end(); it++)
 	{
 		auto it2 = nextIdMapOriginal.find(it->first);
-		assert(it2 != nextIdMapOriginal.end());
-		if(it->second != it2->second)
+		if(it2 != nextIdMapOriginal.end())
 		{
+			//Only bother updating if value has changed
+			if(it->second != it2->second)
+			{
+				stringstream ss;
+				ss << "UPDATE "<< tablePrefix <<"nextids SET maxid = "<< it->second <<" WHERE id='node';"; 
+
+				try
+				{
+					work->exec(ss.str());
+				}
+				catch (const pqxx::sql_error &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+				catch (const std::exception &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+			}
+		}
+		else
+		{
+			//Insert into table
 			stringstream ss;
-			ss << "UPDATE "<< tablePrefix <<"nextids SET maxid = "<< it->second <<" WHERE id='node';"; 
+			ss << "INSERT INTO "<< tablePrefix <<"nextids (id, maxid) VALUES ('"<<it->first<<"',"<<it->second<<");";
 
 			try
 			{
@@ -714,12 +738,12 @@ bool UpdateNextObjectIds(pqxx::work *work,
 			}
 			catch (const pqxx::sql_error &e)
 			{
-				errStr = errStr;
+				errStr = e.what();
 				return false;
 			}
 			catch (const std::exception &e)
 			{
-				errStr = errStr;
+				errStr = e.what();
 				return false;
 			}
 		}
@@ -980,5 +1004,58 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 	if(!ok)
 		return false;
 	return true;
+}
+
+bool ClearTable(pqxx::work *work, const string &tableName, std::string &errStr)
+{
+	try
+	{
+		string deleteSql = "DELETE FROM "+ tableName + ";";
+		work->exec(deleteSql);
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
+bool ResetActiveTables(pqxx::connection &c, pqxx::work *work, 
+	const string &tableActivePrefix, 
+	const string &tableStaticPrefix,
+	std::string &errStr)
+{
+	bool ok = ClearTable(work, tableActivePrefix + "livenodes", errStr);      if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "liveways", errStr);            if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "liverelations", errStr);       if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "oldnodes", errStr);            if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "oldways", errStr);             if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "oldrelations", errStr);        if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "nodeids", errStr);             if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "wayids", errStr);              if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "relationids", errStr);         if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "way_mems", errStr);            if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "relation_mems_n", errStr);     if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "relation_mems_w", errStr);     if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "relation_mems_r", errStr);     if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "nextids", errStr);             if(!ok) return false;
+
+	map<string, int64_t> nextIdMap;
+	ok = GetNextObjectIds(work, 
+		tableStaticPrefix,
+		nextIdMap,
+		errStr);
+	if(!ok) return false;
+
+	map<string, int64_t> emptyIdMap;
+	ok = UpdateNextObjectIds(work, tableActivePrefix, nextIdMap, emptyIdMap, errStr);
+
+	return ok;	
 }
 

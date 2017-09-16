@@ -412,3 +412,18 @@ bool PgMap::StoreObjects(class OsmData &data,
 	return ok;
 }
 
+bool PgMap::ResetActiveTables(class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	LockMap(work, this->tableStaticPrefix, "EXCLUSIVE MODE");
+	LockMap(work, this->tableActivePrefix, "EXCLUSIVE MODE");
+
+	bool ok = ::ResetActiveTables(*dbconn, work.get(), this->tableActivePrefix, this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	if(ok)
+		work->commit();
+	return ok;
+}
+

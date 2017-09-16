@@ -210,5 +210,6 @@ public:
 		std::map<int64_t, int64_t> &createdWayIds,
 		std::map<int64_t, int64_t> &createdRelationIds,
 		class PgMapError &errStr);
+	bool ResetActiveTables(class PgMapError &errStr);
 };
 
