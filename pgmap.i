@@ -83,41 +83,42 @@ public:
 	void SetOutput(PyObject* obj);
 };
 
-class OsmNode
+class OsmObject
 {
 public:
 	int64_t objId;
 	class MetaData metaData;
 	TagMap tags; 
+
+	OsmObject();
+	virtual ~OsmObject();
+	OsmObject( const OsmObject &obj);
+};
+
+class OsmNode : public OsmObject
+{
+public:
 	double lat;
 	double lon;
 
 	OsmNode();
 	virtual ~OsmNode();
 	OsmNode( const OsmNode &obj);
-	OsmNode& operator=(const OsmNode &arg);
 };
 
-class OsmWay
+class OsmWay : public OsmObject
 {
 public:
-	int64_t objId;
-	class MetaData metaData;
-	TagMap tags; 
 	std::vector<int64_t> refs;
 
 	OsmWay();
 	virtual ~OsmWay();
 	OsmWay( const OsmWay &obj);
-	OsmWay& operator=(const OsmWay &arg);
 };
 
-class OsmRelation
+class OsmRelation : public OsmObject
 {
 public:
-	int64_t objId;
-	class MetaData metaData;
-	TagMap tags; 
 	std::vector<std::string> refTypeStrs;
 	std::vector<int64_t> refIds;
 	std::vector<std::string> refRoles;
@@ -125,7 +126,6 @@ public:
 	OsmRelation();
 	virtual ~OsmRelation();
 	OsmRelation( const OsmRelation &obj);
-	OsmRelation& operator=(const OsmRelation &arg);
 };
 
 namespace std {
