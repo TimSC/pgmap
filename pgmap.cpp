@@ -107,7 +107,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 1)
 	{
 		//Get nodes in bbox (static db)
-		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix, 0);
+		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -132,7 +132,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 3)
 	{
 		//Get nodes in bbox (active db)
-		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableActivePrefix, this->mapQueryBbox, "", 0);
+		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableActivePrefix, this->mapQueryBbox, "");
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -157,7 +157,7 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
-		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableStaticPrefix, retainNodeIds->nodeIds, retainWayMemIds);
+		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
 		cout << "Ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways

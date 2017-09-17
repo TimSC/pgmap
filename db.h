@@ -66,11 +66,11 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
-	const string &excludeTablePrefix, 
-	unsigned int maxNodes);
+	const string &excludeTablePrefix);
 int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix, 

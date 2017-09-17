@@ -235,16 +235,11 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 		DecodeMetadata(c, metaDataCols, metaData);
 		
 		DecodeTags(c, tagsCol, tagHandler);
-
 		count ++;
-		if(count % 1000000 == 0 and verbose)
-			cout << count << " nodes" << endl;
 
 		double timeNow = (double)clock() / CLOCKS_PER_SEC;
 		if (timeNow - lastUpdateTime > 30.0)
 		{
-			if(verbose)
-				cout << (count - lastUpdateCount)/30.0 << " nodes/sec" << endl;
 			lastUpdateCount = count;
 			lastUpdateTime = timeNow;
 		}
@@ -291,16 +286,11 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 		DecodeTags(c, tagsCol, tagHandler);
 
 		DecodeWayMembers(c, membersCol, wayMemHandler);
-
 		count ++;
-		if(count % 1000000 == 0 and verbose)
-			cout << count << " ways" << endl;
 
 		double timeNow = (double)clock() / CLOCKS_PER_SEC;
 		if (timeNow - lastUpdateTime > 30.0)
 		{
-			if(verbose)
-				cout << (count - lastUpdateCount)/30.0 << " ways/sec" << endl;
 			lastUpdateCount = count;
 			lastUpdateTime = timeNow;
 		}
@@ -327,14 +317,6 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 		pqxx::result rows;
 		cursor.get(rows);
 		if ( rows.empty() ) break; // nothing left to read
-		if(batch == 0 and verbose)
-		{
-			size_t numCols = rows.columns();
-			for(size_t i = 0; i < numCols; i++)
-			{
-				cout << i << "\t" << rows.column_name(i) << "\t" << (unsigned int)rows.column_type((pqxx::tuple::size_type)i) << endl;
-			}
-		}
 
 		MetaDataCols metaDataCols;
 
@@ -362,16 +344,11 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 
 			DecodeRelMembers(c, membersCol, membersRolesCol, 
 				relMemHandler, relMemRolesHandler);
-
 			count ++;
-			if(count % 1000000 == 0 and verbose)
-				cout << count << " relations" << endl;
 
 			double timeNow = (double)clock() / CLOCKS_PER_SEC;
 			if (timeNow - lastUpdateTime > 30.0)
 			{
-				if(verbose)
-					cout << (count - lastUpdateCount)/30.0 << " relations/sec" << endl;
 				lastUpdateCount = count;
 				lastUpdateTime = timeNow;
 			}
@@ -433,8 +410,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 		//Get existing object object (if any)
 		string checkExistingSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
-		cout << tablePrefix << endl;
-		cout << checkExistingSql << endl;
 		pqxx::result r;
 		try
 		{
@@ -458,7 +433,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		{
 			const pqxx::result::tuple row = r[0];
 			currentVersion = row["version"].as<int64_t>();
-			cout << "version " << currentVersion << endl;
 		}
 
 		//Check if we need to delete object from live table
@@ -575,7 +549,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				else if (relationObject != nullptr)
 					ss << ",$8,$9";
 				ss << ");";
-				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
 				try
 				{
@@ -630,8 +603,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					errStr = "We should never have to assign an ID and SQL update the live table.";
 					return false;
 				}
-
-				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
 				try
 				{
@@ -692,8 +663,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
 			if(nodeObject != nullptr)
 				ss << ",ST_GeometryFromText($10, 4326)";
+			else if(wayObject != nullptr)
+				ss << ",$10";
+			else if(relationObject != nullptr)
+				ss << ",$10,$11";
 			ss << ");";
-			cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
 			try
 			{	
@@ -843,8 +817,7 @@ bool UpdateNextObjectIds(pqxx::work *work,
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
-	const string &excludeTablePrefix, 
-	unsigned int maxNodes)
+	const string &excludeTablePrefix)
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
@@ -866,8 +839,6 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, cons
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
-	if(maxNodes > 0)
-		sql << " LIMIT " << maxNodes;
 	sql <<";";
 
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
@@ -880,11 +851,15 @@ int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::sh
 }
 
 void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = tablePrefix + "liveways";
 	string wayMemTable = tablePrefix + "way_mems";
-	int step = 1000;	
+	int step = 1000;
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "wayids";
 
 	auto it=nodeIds.begin();
 	while(it != nodeIds.end())
@@ -899,7 +874,19 @@ void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix,
 			count ++;
 		}
 
-		string sql = "SELECT "+wayTable+".* FROM "+wayMemTable+" INNER JOIN "+wayTable+" ON "+wayMemTable+".id = "+wayTable+".id AND "+wayMemTable+".version = "+wayTable+".version WHERE ("+sqlFrags.str()+");";
+		string sql = "SELECT "+wayTable+".*";
+		if(excludeTable.size() > 0)
+			sql += ", "+excludeTable+".id";
+
+		sql += " FROM "+wayMemTable+" INNER JOIN "+wayTable+" ON "\
+			+wayMemTable+".id = "+wayTable+".id AND "+wayMemTable+".version = "+wayTable+".version";
+		if(excludeTable.size() > 0)
+			sql += " LEFT JOIN "+excludeTable+" ON "+wayTable+".id = "+excludeTable+".id";
+
+		sql += " WHERE ("+sqlFrags.str()+")";
+		if(excludeTable.size() > 0)
+			sql += " AND "+excludeTable+".id IS NULL";
+		sql += ";";
 
 		pqxx::icursorstream cursor( *work, sql, "wayscontainingnodes", 1000 );	
 
