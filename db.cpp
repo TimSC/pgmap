@@ -418,15 +418,28 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			wkt << "POINT(" << nodeObject->lon <<" "<< nodeObject->lat << ")";
 		}
 
-		//Get existing node object (if any)
+		stringstream refsJson;
+		if(wayObject != nullptr)
+		{
+			refsJson << "[";
+			for(size_t j=0;j < wayObject->refs.size(); j++)
+			{
+				if(j != 0)
+					refsJson << ", ";
+				refsJson << wayObject->refs[i];
+			}
+			refsJson << "]";
+		}	
+
+		//Get existing object object (if any)
 		string checkExistingSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
 		cout << tablePrefix << endl;
 		cout << checkExistingSql << endl;
 		pqxx::result r;
 		try
 		{
-			c.prepare(tablePrefix+"checkobjexists", checkExistingSql);
-			r = work->prepared(tablePrefix+"checkobjexists")(objId).exec();
+			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingSql);
+			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
 		}
 		catch (const pqxx::sql_error &e)
 		{
@@ -477,13 +490,19 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 			//Insert into live table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current";
+			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags, visible, current";
 			if(nodeObject != nullptr)
 				ss << ", geom";
+			else if(wayObject != nullptr)
+				ss << ", members";
+			else if(relationObject != nullptr)
+				ss << ", members, memberroles";
 			ss << ") VALUES ";
 			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
-			if(nodeObject != nullptr)
+			if(nodeObject != nullptr || wayObject != nullptr)
 				ss << ",$10";
+			else if (relationObject != nullptr)
+				ss << ",$10,$11";
 			ss << ");";
 
 			try
@@ -495,12 +514,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
 						(row["tags"].as<string>())(true)(false)(row["geom"].as<string>()).exec();
 				}
-				else
+				else if(wayObject != nullptr)
 				{
 					c.prepare(tablePrefix+"copyoldway", ss.str());
 					work->prepared(tablePrefix+"copyoldway")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
 						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
-						(row["tags"].as<string>())(true)(false).exec();
+						(row["tags"].as<string>())(true)(false)(row["members"].as<string>()).exec();
 				}
 			}
 			catch (const pqxx::sql_error &e)
@@ -521,7 +540,16 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			{
 				//Insert into live table
 				stringstream ss;
-				ss << "INSERT INTO "<< tablePrefix <<"livenodes (id, changeset, username, uid, timestamp, version, tags, geom) VALUES ";
+				ss << "INSERT INTO "<< tablePrefix <<"live"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags";
+				if(nodeObject != nullptr)
+					ss << ", geom";
+				else if(wayObject != nullptr)
+					ss << ", members";
+				else if(relationObject != nullptr)
+					ss << ", members, memberroles";
+
+				ss << ") VALUES ";
+
 				string tagsJson;
 				EncodeTags(osmObject->tags, tagsJson);
 
@@ -542,6 +570,10 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				ss << "($1,$2,$3,$4,$5,$6,$7";
 				if(nodeObject != nullptr)
 					ss << ",ST_GeometryFromText($8, 4326)";
+				else if(wayObject != nullptr)
+					ss << ",$8";
+				else if (relationObject != nullptr)
+					ss << ",$8,$9";
 				ss << ");";
 				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
@@ -553,11 +585,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
 					}
-					else
+					else if(wayObject != nullptr)
 					{
 						c.prepare(tablePrefix+"insertway", ss.str());
-						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson).exec();
+						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson.str()).exec();
 					}
 				}
 				catch (const pqxx::sql_error &e)
@@ -582,9 +614,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			{
 				//Update row in place
 				stringstream ss;
-				ss << "UPDATE "<< tablePrefix <<"livenodes SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6";
+				ss << "UPDATE "<< tablePrefix <<"live"<<typeStr<<"s SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6";
 				if(nodeObject != nullptr)
 					ss << ", geom=ST_GeometryFromText($8, 4326)";
+				else if(wayObject != nullptr)
+					ss << ", members=$8";
+				else if(relationObject != nullptr)
+					ss << ", members=$8, memberroles=$9";
 				ss << " WHERE id = $7;";
 				string tagsJson;
 				EncodeTags(osmObject->tags, tagsJson);
@@ -601,15 +637,15 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				{
 					if(nodeObject != nullptr)
 					{
-						c.prepare(tablePrefix+"update"+typeStr, ss.str());
-						work->prepared(tablePrefix+"update"+typeStr)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+						c.prepare(tablePrefix+"updatenode", ss.str());
+						work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
 					}
-					else
+					else if(wayObject != nullptr)
 					{
-						c.prepare(tablePrefix+"update"+typeStr, ss.str());
-						work->prepared(tablePrefix+"update"+typeStr)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId).exec();
+						c.prepare(tablePrefix+"updateway", ss.str());
+						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson.str()).exec();
 					}
 				}
 				catch (const pqxx::sql_error &e)
@@ -628,9 +664,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		{
 			//Insert into history table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current";
+			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags, visible, current";
 			if(nodeObject != nullptr)
 				ss << ", geom";
+			else if(wayObject != nullptr)
+				ss << ", members";
+			else if(relationObject != nullptr)
+				ss << ", members, memberroles";
 			ss << ") VALUES ";
 			string tagsJson;
 			EncodeTags(osmObject->tags, tagsJson);
@@ -659,17 +699,17 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			{	
 				if(nodeObject != nullptr)
 				{
-					c.prepare(tablePrefix+"insertold"+typeStr, ss.str());
-					work->prepared(tablePrefix+"insertold"+typeStr)(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+					c.prepare(tablePrefix+"insertoldnode", ss.str());
+					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(false)(wkt.str()).exec();
 				}
-				else
+				else if(wayObject != nullptr)
 				{
-					c.prepare(tablePrefix+"insertold"+typeStr, ss.str());
-					work->prepared(tablePrefix+"insertold"+typeStr)(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+					c.prepare(tablePrefix+"insertoldway", ss.str());
+					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(false).exec();
+						(tagsJson)(osmObject->metaData.visible)(false)(refsJson.str()).exec();
 				}
 			}
 			catch (const pqxx::sql_error &e)
@@ -684,7 +724,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			}
 
 			stringstream ssi;
-			ssi << "INSERT INTO "<< tablePrefix <<"nodeids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+			ssi << "INSERT INTO "<< tablePrefix << typeStr << "ids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
 			c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
 			work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
@@ -1044,12 +1084,22 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 
 	std::vector<const class OsmObject *> objPtrs;
 	for(size_t i=0; i<osmData.nodes.size(); i++)
-		objPtrs.push_back(&osmData.nodes[0]);
+		objPtrs.push_back(&osmData.nodes[i]);
 	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr);
 	if(!ok)
 		return false;
-	//ObjectsToDatabase(c, work, tablePrefix, "way", osmData.ways, createdWayIds);
-	//ObjectsToDatabase(c, work, tablePrefix, "relation", osmData.relations, createdRelationIds);
+	objPtrs.clear();
+	for(size_t i=0; i<osmData.ways.size(); i++)
+		objPtrs.push_back(&osmData.ways[i]);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "way", objPtrs, createdWayIds, nextIdMap, errStr);
+	if(!ok)
+		return false;
+	objPtrs.clear();
+	for(size_t i=0; i<osmData.relations.size(); i++)
+		objPtrs.push_back(&osmData.relations[i]);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr);
+	if(!ok)
+		return false;
 
 	ok = UpdateNextObjectIds(work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
 	if(!ok)
