@@ -384,7 +384,8 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 
 // *********** Convert to database SQL *************
 
-bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+	const std::string &typeStr,
 	const std::vector<const class OsmObject *> &objPtrs, 
 	std::map<int64_t, int64_t> &createdNodeIds,
 	map<string, int64_t> &nextIdMap,
@@ -392,24 +393,40 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 {
 	char trueStr[] = "true";
 	char falseStr[] = "true";
-	auto it = nextIdMap.find("node");
-	int64_t &nextNodeId = it->second;
+	auto it = nextIdMap.find(typeStr);
+	int64_t &nextObjId = it->second;
 
 	for(size_t i=0; i<objPtrs.size(); i++)
 	{
 		const class OsmObject *osmObject = objPtrs[i];
-		const class OsmNode *node = dynamic_cast<const class OsmNode *>(osmObject);
+		const class OsmNode *nodeObject = dynamic_cast<const class OsmNode *>(osmObject);
+		const class OsmWay *wayObject = dynamic_cast<const class OsmWay *>(osmObject);
+		const class OsmRelation *relationObject = dynamic_cast<const class OsmRelation *>(osmObject);
+		if(typeStr == "node" && nodeObject == nullptr)
+			throw invalid_argument("Object type not node as expected");
+		else if(typeStr == "way" && wayObject == nullptr)
+			throw invalid_argument("Object type not way as expected");
+		else if(typeStr == "relation" && relationObject == nullptr)
+			throw invalid_argument("Object type not relation as expected");
 		int64_t objId = osmObject->objId;
 		int64_t version = osmObject->metaData.version;
 
+		stringstream wkt;
+		if(nodeObject != nullptr)
+		{
+			wkt.precision(9);
+			wkt << "POINT(" << nodeObject->lon <<" "<< nodeObject->lat << ")";
+		}
+
 		//Get existing node object (if any)
-		string checkExistingSql = "SELECT id, changeset, username, uid, timestamp, version, tags, geom, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ tablePrefix
-			+ "livenodes WHERE (id=$1);";
+		string checkExistingSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
+		cout << tablePrefix << endl;
+		cout << checkExistingSql << endl;
 		pqxx::result r;
 		try
 		{
-			c.prepare(tablePrefix+"checknodeexists", checkExistingSql);
-			r = work->prepared(tablePrefix+"checknodeexists")(objId).exec();
+			c.prepare(tablePrefix+"checkobjexists", checkExistingSql);
+			r = work->prepared(tablePrefix+"checkobjexists")(objId).exec();
 		}
 		catch (const pqxx::sql_error &e)
 		{
@@ -435,11 +452,11 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 		if(foundExisting && version >= currentVersion && !osmObject->metaData.visible)
 		{
 			string deletedLiveSql = "DELETE FROM "+ tablePrefix
-				+ "livenodes WHERE (id=$1);";
+				+ "live"+ typeStr +"s WHERE (id=$1);";
 			try
 			{
-				c.prepare(tablePrefix+"deletelivenode", deletedLiveSql);
-				work->prepared(tablePrefix+"deletelivenode")(objId).exec();
+				c.prepare(tablePrefix+"deletelive"+typeStr, deletedLiveSql);
+				work->prepared(tablePrefix+"deletelive"+typeStr)(objId).exec();
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -460,14 +477,31 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 
 			//Insert into live table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current, geom) VALUES ";
-			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);";
+			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current";
+			if(nodeObject != nullptr)
+				ss << ", geom";
+			ss << ") VALUES ";
+			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
+			if(nodeObject != nullptr)
+				ss << ",$10";
+			ss << ");";
 
 			try
 			{
-				c.prepare(tablePrefix+"copyoldnode", ss.str());
-				work->prepared(tablePrefix+"copyoldnode")(row["id"].as<int64_t>())(row[1].as<int64_t>())(row[2].as<string>())\
-					(row[3].as<int64_t>())(row[4].as<int64_t>())(row[5].as<int64_t>())(row[6].as<string>())(true)(false)(row[7].as<string>()).exec();
+				if(nodeObject != nullptr)
+				{
+					c.prepare(tablePrefix+"copyoldnode", ss.str());
+					work->prepared(tablePrefix+"copyoldnode")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
+						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
+						(row["tags"].as<string>())(true)(false)(row["geom"].as<string>()).exec();
+				}
+				else
+				{
+					c.prepare(tablePrefix+"copyoldway", ss.str());
+					work->prepared(tablePrefix+"copyoldway")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
+						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
+						(row["tags"].as<string>())(true)(false).exec();
+				}
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -500,23 +534,31 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 					}
 
 					//Assign a new ID
-					objId = nextNodeId;
-					createdNodeIds[osmObject->objId] = nextNodeId;
-					nextNodeId ++;
+					objId = nextObjId;
+					createdNodeIds[osmObject->objId] = nextObjId;
+					nextObjId ++;
 				}
 
-				ss << "($1,$2,$3,$4,$5,$6,$7,ST_GeometryFromText($8, 4326));";
+				ss << "($1,$2,$3,$4,$5,$6,$7";
+				if(nodeObject != nullptr)
+					ss << ",ST_GeometryFromText($8, 4326)";
+				ss << ");";
 				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
-
-				stringstream wkt;
-				wkt.precision(9);
-				wkt << "POINT(" << node->lon <<" "<< node->lat << ")";
 
 				try
 				{
-					c.prepare(tablePrefix+"insertnode", ss.str());
-					work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
+					if(nodeObject != nullptr)
+					{
+						c.prepare(tablePrefix+"insertnode", ss.str());
+						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
+					}
+					else
+					{
+						c.prepare(tablePrefix+"insertway", ss.str());
+						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson).exec();
+					}
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -530,17 +572,20 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 				}
 
 				stringstream ssi;
-				ssi << "INSERT INTO "<< tablePrefix <<"nodeids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+				ssi << "INSERT INTO "<< tablePrefix << typeStr << "ids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
-				c.prepare(tablePrefix+"insertnodeids", ssi.str());
-				work->prepared(tablePrefix+"insertnodeids")(objId).exec();
+				c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
+				work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
 
 			}
 			else
 			{
 				//Update row in place
 				stringstream ss;
-				ss << "UPDATE "<< tablePrefix <<"livenodes SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6, geom=ST_GeometryFromText($7, 4326) WHERE id = $8;";
+				ss << "UPDATE "<< tablePrefix <<"livenodes SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6";
+				if(nodeObject != nullptr)
+					ss << ", geom=ST_GeometryFromText($8, 4326)";
+				ss << " WHERE id = $7;";
 				string tagsJson;
 				EncodeTags(osmObject->tags, tagsJson);
 
@@ -552,15 +597,20 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 
 				cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
-				stringstream wkt;
-				wkt.precision(9);
-				wkt << "POINT(" << node->lon <<" "<< node->lat << ")";
-
 				try
 				{
-					c.prepare(tablePrefix+"updatenode", ss.str());
-					work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str())(objId).exec();
+					if(nodeObject != nullptr)
+					{
+						c.prepare(tablePrefix+"update"+typeStr, ss.str());
+						work->prepared(tablePrefix+"update"+typeStr)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
+					}
+					else
+					{
+						c.prepare(tablePrefix+"update"+typeStr, ss.str());
+						work->prepared(tablePrefix+"update"+typeStr)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId).exec();
+					}
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -578,7 +628,10 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 		{
 			//Insert into history table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current, geom) VALUES ";
+			ss << "INSERT INTO "<< tablePrefix <<"oldnodes (id, changeset, username, uid, timestamp, version, tags, visible, current";
+			if(nodeObject != nullptr)
+				ss << ", geom";
+			ss << ") VALUES ";
 			string tagsJson;
 			EncodeTags(osmObject->tags, tagsJson);
 
@@ -591,23 +644,33 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 				}
 
 				//Assign a new ID
-				objId = nextNodeId;
-				createdNodeIds[osmObject->objId] = nextNodeId;
-				nextNodeId ++;
+				objId = nextObjId;
+				createdNodeIds[osmObject->objId] = nextObjId;
+				nextObjId ++;
 			}
 
-			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_GeometryFromText($10, 4326));";
+			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
+			if(nodeObject != nullptr)
+				ss << ",ST_GeometryFromText($10, 4326)";
+			ss << ");";
 			cout << ss.str() << "," << objId << "," << osmObject->metaData.version << endl;
 
-			stringstream wkt;
-			wkt.precision(9);
-			wkt << "POINT(" << node->lon <<" "<< node->lat << ")";
-
 			try
-			{
-				c.prepare(tablePrefix+"insertoldnode", ss.str());
-				work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-					(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(osmObject->metaData.visible)(false)(wkt.str()).exec();
+			{	
+				if(nodeObject != nullptr)
+				{
+					c.prepare(tablePrefix+"insertold"+typeStr, ss.str());
+					work->prepared(tablePrefix+"insertold"+typeStr)(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
+						(tagsJson)(osmObject->metaData.visible)(false)(wkt.str()).exec();
+				}
+				else
+				{
+					c.prepare(tablePrefix+"insertold"+typeStr, ss.str());
+					work->prepared(tablePrefix+"insertold"+typeStr)(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
+						(tagsJson)(osmObject->metaData.visible)(false).exec();
+				}
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -623,28 +686,12 @@ bool NodesToDatabase(pqxx::connection &c, pqxx::work *work, const string &tableP
 			stringstream ssi;
 			ssi << "INSERT INTO "<< tablePrefix <<"nodeids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
-			c.prepare(tablePrefix+"insertnodeids", ssi.str());
-			work->prepared(tablePrefix+"insertnodeids")(objId).exec();
+			c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
+			work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
 
 		}
 	}
 	return true;
-}
-
-void WaysToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, const std::vector<class OsmWay> &ways, std::map<int64_t, int64_t> &createdWayIds)
-{
-	for(size_t i=0; i<ways.size(); i++)
-	{
-		const class OsmWay &way = ways[i];
-	}
-}
-
-void RelationsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, const std::vector<class OsmRelation> &relations, std::map<int64_t, int64_t> &createdRelationIds)
-{
-	for(size_t i=0; i<relations.size(); i++)
-	{
-		const class OsmRelation &relation = relations[i];
-	}
 }
 
 // ************* Next ID functions **************
@@ -998,11 +1045,11 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 	std::vector<const class OsmObject *> objPtrs;
 	for(size_t i=0; i<osmData.nodes.size(); i++)
 		objPtrs.push_back(&osmData.nodes[0]);
-	ok = NodesToDatabase(c, work, tablePrefix, objPtrs, createdNodeIds, nextIdMap, errStr);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr);
 	if(!ok)
 		return false;
-	WaysToDatabase(c, work, tablePrefix, osmData.ways, createdWayIds);
-	RelationsToDatabase(c, work, tablePrefix, osmData.relations, createdRelationIds);
+	//ObjectsToDatabase(c, work, tablePrefix, "way", osmData.ways, createdWayIds);
+	//ObjectsToDatabase(c, work, tablePrefix, "relation", osmData.relations, createdRelationIds);
 
 	ok = UpdateNextObjectIds(work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
 	if(!ok)
