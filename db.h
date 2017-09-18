@@ -74,6 +74,7 @@ void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix,
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	char qtype, const set<int64_t> &qids, 
 	set<int64_t>::const_iterator &it, size_t step,
 	const set<int64_t> &skipIds, 
@@ -90,6 +91,7 @@ void GetLiveWaysById(pqxx::work *work, const string &tablePrefix,
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 

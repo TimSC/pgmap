@@ -55,6 +55,8 @@ void DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &met
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
+	if(refTypeStrs.size() != refIds.size() || refTypeStrs.size() != refRoles.size())
+		throw std::invalid_argument("Length of ref vectors must be equal");
 	out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
 	this->relationIds.insert(objId);
 }
@@ -106,6 +108,8 @@ void DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
+	if(refTypeStrs.size() != refIds.size() || refTypeStrs.size() != refRoles.size())
+		throw std::invalid_argument("Length of ref vectors must be equal");
 	out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
 	for(size_t i=0; i < refTypeStrs.size(); i++)
 	{
@@ -344,6 +348,12 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 
 			DecodeRelMembers(c, membersCol, membersRolesCol, 
 				relMemHandler, relMemRolesHandler);
+			if(relMemHandler.refTypeStrs.size() != relMemHandler.refIds.size() ||
+				relMemHandler.refTypeStrs.size() != relMemRolesHandler.refRoles.size())
+			{
+				throw runtime_error("Decoded relation has inconsistent member data");
+			}
+
 			count ++;
 
 			double timeNow = (double)clock() / CLOCKS_PER_SEC;
@@ -388,15 +398,16 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		int64_t objId = osmObject->objId;
 		int64_t version = osmObject->metaData.version;
 
+		//Convert spatial and member data to appropriate formats
 		stringstream wkt;
+		stringstream refsJson;
+		stringstream rolesJson;
 		if(nodeObject != nullptr)
 		{
 			wkt.precision(9);
 			wkt << "POINT(" << nodeObject->lon <<" "<< nodeObject->lat << ")";
 		}
-
-		stringstream refsJson;
-		if(wayObject != nullptr)
+		else if(wayObject != nullptr)
 		{
 			refsJson << "[";
 			for(size_t j=0;j < wayObject->refs.size(); j++)
@@ -406,6 +417,29 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				refsJson << wayObject->refs[j];
 			}
 			refsJson << "]";
+		}
+		else if(relationObject != nullptr)
+		{
+			if(relationObject->refTypeStrs.size() != relationObject->refIds.size() || relationObject->refTypeStrs.size() != relationObject->refRoles.size())
+				throw std::invalid_argument("Length of ref vectors must be equal");
+
+			refsJson << "[";
+			for(size_t j=0;j < relationObject->refIds.size(); j++)
+			{
+				if(j != 0)
+					refsJson << ", ";
+				refsJson << "[\"" << relationObject->refTypeStrs[j] << "\"," << relationObject->refIds[j] << "]";
+			}
+			refsJson << "]";
+
+			rolesJson << "[";
+			for(size_t j=0;j < relationObject->refRoles.size(); j++)
+			{
+				if(j != 0)
+					rolesJson << ", ";
+				rolesJson << "\"" << relationObject->refRoles[j] << "\"";
+			}
+			rolesJson << "]";
 		}
 
 		//Get existing object object (if any)
@@ -495,6 +529,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
 						(row["tags"].as<string>())(true)(false)(row["members"].as<string>()).exec();
 				}
+				else if(relationObject != nullptr)
+				{
+					c.prepare(tablePrefix+"copyoldrelation", ss.str());
+					work->prepared(tablePrefix+"copyoldrelation")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
+						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
+						(row["tags"].as<string>())(true)(false)(row["members"].as<string>())(row["memberroles"].as<string>()).exec();
+				}
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -564,6 +605,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson.str()).exec();
 					}
+					else if(relationObject != nullptr)
+					{
+						c.prepare(tablePrefix+"insertrelation", ss.str());
+						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
+							(tagsJson)(refsJson.str())(rolesJson.str()).exec();
+					}
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -618,6 +666,14 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson.str()).exec();
 					}
+					else if(relationObject != nullptr)
+					{
+						c.prepare(tablePrefix+"updaterelation", ss.str());
+						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
+							(tagsJson)(objId)(refsJson.str())(rolesJson.str()).exec();
+					}
+
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -685,6 +741,14 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(false)(refsJson.str()).exec();
 				}
+				else if(relationObject != nullptr)
+				{
+					c.prepare(tablePrefix+"insertoldrelation", ss.str());
+					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
+						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
+						(tagsJson)(osmObject->metaData.visible)(false)(refsJson.str())(rolesJson.str()).exec();
+				}
+
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -705,12 +769,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 		}
 
-		if(wayObject != nullptr && wayObject->refs.size()>0)
+		if(wayObject != nullptr)
 		{
+			//Update way member table
 			size_t j=0;
 			while(j < wayObject->refs.size())
 			{
-				//Update way member table
 				stringstream sswm;
 				size_t insertSize = 0;
 				sswm << "INSERT INTO "<< tablePrefix << "way_mems (id, version, index, member) VALUES ";
@@ -727,6 +791,31 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				try
 				{
 					work->exec(sswm.str());
+				}
+				catch (const pqxx::sql_error &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+				catch (const std::exception &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+			}
+		}
+		else if(relationObject != nullptr)
+		{
+			//Update relation member tables
+			for(size_t j=0;j < relationObject->refIds.size(); j++)
+			{
+				stringstream ssrm;
+				ssrm << "INSERT INTO "<< tablePrefix << "relation_mems_"<< relationObject->refTypeStrs[j][0] << " (id, version, index, member) VALUES ";
+				ssrm << "("<<objId<<","<<relationObject->metaData.version<<","<<j<<","<<relationObject->refIds[j]<<");";
+
+				try
+				{
+					work->exec(ssrm.str());
 				}
 				catch (const pqxx::sql_error &e)
 				{
@@ -973,6 +1062,7 @@ void GetLiveNodesById(pqxx::work *work, const string &tablePrefix,
 }
 
 void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	char qtype, const set<int64_t> &qids, 
 	set<int64_t>::const_iterator &it, size_t step,
 	const set<int64_t> &skipIds, 
@@ -980,6 +1070,9 @@ void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix,
 {
 	string relTable = tablePrefix + "liverelations";
 	string relMemTable = tablePrefix + "relation_mems_" + qtype;
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "relationids";
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -991,7 +1084,18 @@ void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix,
 		count ++;
 	}
 
-	string sql = "SELECT "+relTable+".* FROM "+relMemTable+" INNER JOIN "+relTable+" ON "+relMemTable+".id = "+relTable+".id AND "+relMemTable+".version = "+relTable+".version WHERE ("+sqlFrags.str()+");";
+	string sql = "SELECT "+relTable+".*";
+	if(excludeTable.size() > 0)
+		sql += ", "+excludeTable+".id";
+
+	sql += " FROM "+relMemTable+" INNER JOIN "+relTable+" ON "+relMemTable+".id = "+relTable+".id AND "+relMemTable+".version = "+relTable+".version";
+	if(excludeTable.size() > 0)
+		sql += " LEFT JOIN "+excludeTable+" ON "+relTable+".id = "+excludeTable+".id";
+
+	sql += " WHERE ("+sqlFrags.str()+")";
+	if(excludeTable.size() > 0)
+		sql += " AND "+excludeTable+".id IS NULL";
+	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "relationscontainingobjects", 1000 );	
 
@@ -1040,10 +1144,14 @@ void GetLiveWaysById(pqxx::work *work, const string &tablePrefix,
 }
 
 void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string relationTable = tablePrefix + "liverelations";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "relationids";
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -1055,8 +1163,18 @@ void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix,
 		count ++;
 	}
 
-	string sql = "SELECT * FROM "+ relationTable
-		+ " WHERE ("+sqlFrags.str()+");";
+	string sql = "SELECT *";
+	if(excludeTable.size() > 0)
+		sql += ", "+excludeTable+".id";
+
+	sql += " FROM "+ relationTable;
+	if(excludeTable.size() > 0)
+		sql += " LEFT JOIN "+excludeTable+" ON "+relationTable+".id = "+excludeTable+".id";
+
+	sql += " WHERE ("+sqlFrags.str()+")";
+	if(excludeTable.size() > 0)
+		sql += " AND "+excludeTable+".id IS NULL";
+	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "relationcursor", 1000 );	
 

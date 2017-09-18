@@ -247,9 +247,11 @@ int PgMapQuery::Continue()
 		{
 			set<int64_t> empty;
 			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
+				this->tableActivePrefix, 
 				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
 			return 0;
 		}
+		this->setIterator = this->retainNodeIds->nodeIds.begin();
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -257,6 +259,15 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 11)
 	{
+		if(this->setIterator != retainNodeIds->nodeIds.end())
+		{
+			set<int64_t> empty;
+			GetLiveRelationsForObjects(this->mapQueryWork.get(),
+				this->tableActivePrefix, "",
+				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
+			return 0;
+		}
+
 		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
@@ -268,11 +279,12 @@ int PgMapQuery::Continue()
 		if(this->setIterator != this->extraNodes.end())
 		{
 			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
+				this->tableActivePrefix, 
 				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
 		}
 
-		this->extraNodes.clear();
+		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -280,6 +292,16 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 13)
 	{
+		if(this->setIterator != this->extraNodes.end())
+		{
+			GetLiveRelationsForObjects(this->mapQueryWork.get(),
+				this->tableActivePrefix, "",
+				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+			return 0;
+		}
+
+		this->extraNodes.clear();
+
 		//Get relations that reference any of the above ways
 		this->setIterator = this->retainWayIds->wayIds.begin();
 
@@ -292,12 +314,37 @@ int PgMapQuery::Continue()
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
 			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
+				this->tableActivePrefix, 
 				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
 				retainRelationIds->relationIds, retainRelationIds);
 			return 0;
 		}
+
+		this->setIterator = this->retainWayIds->wayIds.begin();
+
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 15)
+	{
+		if(this->setIterator != this->retainWayIds->wayIds.end())
+		{
+			GetLiveRelationsForObjects(this->mapQueryWork.get(),
+				this->tableActivePrefix, "",
+				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
+				retainRelationIds->relationIds, retainRelationIds);
+			return 0;
+		}
+
 		cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
 
+		this->mapQueryPhase ++;
+		return 0;
+	}
+
+	if(this->mapQueryPhase == 16)
+	{
 		//Release database lock by finishing the transaction
 		this->mapQueryWork->commit();
 
@@ -409,7 +456,12 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveRelationsById(work.get(), this->tableStaticPrefix, 
+			GetLiveRelationsById(work.get(), this->tableStaticPrefix, this->tableActivePrefix,
+				objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveRelationsById(work.get(), this->tableActivePrefix, "",
 				objectIds, 
 				it, 1000, out);
 	}
