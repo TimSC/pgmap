@@ -80,10 +80,12 @@ void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix,
 	std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveNodesById(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
 void GetLiveWaysById(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 

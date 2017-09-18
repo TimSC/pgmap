@@ -403,10 +403,10 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			{
 				if(j != 0)
 					refsJson << ", ";
-				refsJson << wayObject->refs[i];
+				refsJson << wayObject->refs[j];
 			}
 			refsJson << "]";
-		}	
+		}
 
 		//Get existing object object (if any)
 		string checkExistingSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
@@ -704,6 +704,42 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
 
 		}
+
+		if(wayObject != nullptr && wayObject->refs.size()>0)
+		{
+			size_t j=0;
+			while(j < wayObject->refs.size())
+			{
+				//Update way member table
+				stringstream sswm;
+				size_t insertSize = 0;
+				sswm << "INSERT INTO "<< tablePrefix << "way_mems (id, version, index, member) VALUES ";
+
+				for(; j<wayObject->refs.size() && insertSize < 1000; j++)
+				{
+					if(j!=0)
+						sswm << ",";
+					sswm << "("<<objId<<","<<wayObject->metaData.version<<","<<j<<","<<wayObject->refs[j]<<")";
+					insertSize ++;
+				}
+				sswm << ";";
+
+				try
+				{
+					work->exec(sswm.str());
+				}
+				catch (const pqxx::sql_error &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+				catch (const std::exception &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+			}
+		}
 	}
 	return true;
 }
@@ -897,10 +933,14 @@ void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix,
 }
 
 void GetLiveNodesById(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string nodeTable = tablePrefix + "livenodes";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "nodeids";
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -908,12 +948,22 @@ void GetLiveNodesById(pqxx::work *work, const string &tablePrefix,
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << "id = " << *it;
+		sqlFrags << nodeTable << ".id = " << *it;
 		count ++;
 	}
 
-	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM "+ nodeTable
-		+ " WHERE ("+sqlFrags.str()+");";
+	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat";
+	if(excludeTable.size() > 0)
+		sql += ", "+excludeTable+".id";
+
+	sql += " FROM "+ nodeTable;
+	if(excludeTable.size() > 0)
+		sql += " LEFT JOIN "+excludeTable+" ON "+nodeTable+".id = "+excludeTable+".id";
+
+	sql += " WHERE ("+sqlFrags.str()+")";
+	if(excludeTable.size() > 0)
+		sql += " AND "+excludeTable+".id IS NULL";
+	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );	
 
@@ -949,10 +999,14 @@ void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix,
 }
 
 void GetLiveWaysById(pqxx::work *work, const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = tablePrefix + "liveways";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "wayids";
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -960,12 +1014,22 @@ void GetLiveWaysById(pqxx::work *work, const string &tablePrefix,
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << "id = " << *it;
+		sqlFrags << wayTable << ".id = " << *it;
 		count ++;
 	}
 
-	string sql = "SELECT * FROM "+ wayTable
-		+ " WHERE ("+sqlFrags.str()+");";
+	string sql = "SELECT *";
+	if(excludeTable.size() > 0)
+		sql += ", "+excludeTable+".id";
+
+	sql += " FROM "+ wayTable;
+	if(excludeTable.size() > 0)
+		sql += " LEFT JOIN "+excludeTable+" ON "+wayTable+".id = "+excludeTable+".id";
+
+	sql += " WHERE ("+sqlFrags.str()+")";
+	if(excludeTable.size() > 0)
+		sql += " AND "+excludeTable+".id IS NULL";
+	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "waycursor", 1000 );	
 

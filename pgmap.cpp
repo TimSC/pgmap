@@ -147,7 +147,7 @@ int PgMapQuery::Continue()
 			return -1; 
 
 		cursor.reset();
-		cout << "Found " << retainNodeIds->nodeIds.size() << " active nodes in bbox" << endl;
+		cout << "Found " << retainNodeIds->nodeIds.size() << " static+active nodes in bbox" << endl;
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -158,7 +158,9 @@ int PgMapQuery::Continue()
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
 		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
-		cout << "Ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
+
+		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
+		cout << "Found " << this->retainWayIds->wayIds.size() << " ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
 		this->extraNodes.clear();
@@ -178,10 +180,12 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(this->mapQueryWork.get(), this->tableStaticPrefix, this->extraNodes, 
+			GetLiveNodesById(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
+
+		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -189,6 +193,13 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 7)
 	{
+		if(this->setIterator != this->extraNodes.end())
+		{
+			GetLiveNodesById(this->mapQueryWork.get(), this->tableActivePrefix, "", this->extraNodes, 
+				this->setIterator, 1000, this->mapQueryEnc);
+			return 0;
+		}
+
 		this->setIterator = this->retainWayIds->wayIds.begin();
 
 		//Write ways to output
@@ -202,17 +213,25 @@ int PgMapQuery::Continue()
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(this->mapQueryWork.get(), this->tableStaticPrefix, 
+			GetLiveWaysById(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, 
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
+
+		this->setIterator = this->retainWayIds->wayIds.begin();
 
 		this->mapQueryPhase ++;
 		return 0;
 	}
 
 	if(this->mapQueryPhase == 9)
-	{
+	{		
+		if(this->setIterator != this->retainWayIds->wayIds.end())
+		{
+			GetLiveWaysById(this->mapQueryWork.get(), this->tableActivePrefix, "",
+				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
+			return 0;
+		}
 
 		//Get relations that reference any of the above nodes
 		this->mapQueryEnc->Reset();
@@ -368,14 +387,22 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveNodesById(work.get(), this->tableStaticPrefix, objectIds, 
+			GetLiveNodesById(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveNodesById(work.get(), this->tableActivePrefix, "", objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "way")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveWaysById(work.get(), this->tableStaticPrefix, objectIds, 
+			GetLiveWaysById(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveWaysById(work.get(), this->tableActivePrefix, "", objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "relation")
