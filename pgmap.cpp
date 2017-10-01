@@ -31,27 +31,29 @@ PgMapError::~PgMapError()
 void LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const std::string &accessMode)
 {
 	//It is important resources are locked in a consistent order to avoid deadlock
-	work->exec("LOCK TABLE "+prefix+ "oldnodes IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "oldways IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "oldrelations IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "livenodes IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "liveways IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "liverelations IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "way_mems IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "relation_mems_n IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN ACCESS "+accessMode+";");
-	work->exec("LOCK TABLE "+prefix+ "nextids IN ACCESS "+accessMode+";");
+	work->exec("LOCK TABLE "+prefix+ "oldnodes IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "oldways IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "oldrelations IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "livenodes IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "liveways IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "liverelations IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "way_mems IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "relation_mems_n IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN "+accessMode+" MODE;");
+	work->exec("LOCK TABLE "+prefix+ "nextids IN "+accessMode+" MODE;");
 }
 
 // **********************************************
 
 PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		shared_ptr<pqxx::connection> &db)
+		shared_ptr<pqxx::connection> &db,
+		std::shared_ptr<pqxx::work> mapQueryWork)
 {
 	mapQueryActive = false;
 	dbconn = db;
+	this->mapQueryWork = mapQueryWork;
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
@@ -76,17 +78,12 @@ int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHan
 	mapQueryActive = true;
 	this->mapQueryPhase = 0;
 	this->mapQueryBbox = bbox;
-	this->mapQueryWork.reset(new pqxx::work(*dbconn));
 
 	this->mapQueryEnc = enc;
 	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
 	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
 	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
 	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
-
-	//Lock database for reading (this must always be done in a set order)
-	LockMap(this->mapQueryWork, this->tableStaticPrefix, "SHARE MODE");
-	LockMap(this->mapQueryWork, this->tableActivePrefix, "SHARE MODE");
 
 	return 0;
 }
@@ -345,9 +342,6 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 16)
 	{
-		//Release database lock by finishing the transaction
-		this->mapQueryWork->commit();
-
 		this->mapQueryEnc->Finish();
 
 		this->Reset();
@@ -364,7 +358,6 @@ void PgMapQuery::Reset()
 	this->mapQueryEnc.reset();
 	this->mapQueryBbox.clear();
 	this->retainNodeIds.reset();
-	this->mapQueryWork.reset();
 	this->retainWayIds.reset();
 	this->retainWayMemIds.reset();
 	this->retainRelationIds.reset();
@@ -372,63 +365,38 @@ void PgMapQuery::Reset()
 
 // **********************************************
 
-PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableActivePrefixIn)
+PgTransaction::PgTransaction(const string &tableStaticPrefixIn, 
+	const string &tableActivePrefixIn,
+	shared_ptr<pqxx::connection> &db,
+	const std::string &shareMode):
+	work(new pqxx::work(*db))
 {
-	dbconn.reset(new pqxx::connection(connection));
-	connectionString = connection;
-	this->tableStaticPrefix = tableStaticPrefixIn;
-	this->tableActivePrefix = tableActivePrefixIn;
+	dbconn = db;
+	tableStaticPrefix = tableStaticPrefixIn;
+	tableActivePrefix = tableActivePrefixIn;
+	this->shareMode = shareMode;
+	LockMap(work, this->tableStaticPrefix, this->shareMode);
+	LockMap(work, this->tableActivePrefix, this->shareMode);
 }
 
-PgMap::~PgMap()
+PgTransaction::~PgTransaction()
 {
-	dbconn->disconnect();
-	dbconn.reset();
-}
-
-bool PgMap::Ready()
-{
-	return dbconn->is_open();
-}
-
-void PgMap::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
-{
-	enc->StoreIsDiff(false);
-
-	//Lock database for reading (this must always be done in a set order)
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
-	LockMap(work, this->tableStaticPrefix, "SHARED MODE");
-	LockMap(work, this->tableActivePrefix, "SHARED MODE");
-
-	DumpNodes(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
-
-	enc->Reset();
-
-	DumpWays(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
-
-	enc->Reset();
-		
-	DumpRelations(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
-
-	//Release locks
-	work->commit();
-
-	enc->Finish();
 
 }
 
-shared_ptr<class PgMapQuery> PgMap::GetQueryMgr()
+shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
 {
-	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn));
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn, this->work));
 	return out;
 }
 
-void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out)
+void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out)
 {
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
-	LockMap(work, this->tableStaticPrefix, "SHARED MODE");
-	LockMap(work, this->tableActivePrefix, "SHARED MODE");
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	if(type == "node")
 	{
@@ -468,41 +436,92 @@ void PgMap::GetObjectsById(const std::string &type, const std::set<int64_t> &obj
 	else
 		throw invalid_argument("Known object type");
 
-	//Release locks
-	work->commit();
 }
 
-bool PgMap::StoreObjects(class OsmData &data, 
+bool PgTransaction::StoreObjects(class OsmData &data, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,
 	class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
-	LockMap(work, this->tableStaticPrefix, "EXCLUSIVE MODE");
-	LockMap(work, this->tableActivePrefix, "EXCLUSIVE MODE");
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 
 	bool ok = ::StoreObjects(*dbconn, work.get(), this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
-	if(ok)
-		work->commit();
 	return ok;
 }
 
-bool PgMap::ResetActiveTables(class PgMapError &errStr)
+bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
-	LockMap(work, this->tableStaticPrefix, "EXCLUSIVE MODE");
-	LockMap(work, this->tableActivePrefix, "EXCLUSIVE MODE");
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 
 	bool ok = ::ResetActiveTables(*dbconn, work.get(), this->tableActivePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
-	if(ok)
-		work->commit();
 	return ok;
+}
+
+void PgTransaction::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	enc->StoreIsDiff(false);
+
+	DumpNodes(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
+
+	enc->Reset();
+
+	DumpWays(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
+
+	enc->Reset();
+		
+	DumpRelations(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
+
+	enc->Finish();
+}
+
+void PgTransaction::Commit()
+{
+	//Release locks
+	work->commit();
+}
+
+void PgTransaction::Abort()
+{
+	work->abort();
+}
+
+// **********************************************
+
+PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
+	const string &tableActivePrefixIn)
+{
+	dbconn.reset(new pqxx::connection(connection));
+	connectionString = connection;
+	this->tableStaticPrefix = tableStaticPrefixIn;
+	this->tableActivePrefix = tableActivePrefixIn;
+}
+
+PgMap::~PgMap()
+{
+	dbconn->disconnect();
+	dbconn.reset();
+}
+
+bool PgMap::Ready()
+{
+	return dbconn->is_open();
+}
+
+std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &shareMode)
+{
+	shared_ptr<class PgTransaction> out(new class PgTransaction(tableStaticPrefix, tableActivePrefix, this->dbconn, shareMode));
+	return out;
 }
 

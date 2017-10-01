@@ -48,7 +48,8 @@ int main(int argc, char **argv)
 	}
 	bool onlyLiveData = false;	
 
-	pgMap.Dump(onlyLiveData, enc);
+	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
+	transaction->Dump(onlyLiveData, enc);
 
 	delete gzipEnc;
 	outfi.close();

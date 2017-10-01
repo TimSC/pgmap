@@ -43,13 +43,47 @@ private:
 public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		shared_ptr<pqxx::connection> &db);
+		shared_ptr<pqxx::connection> &db,
+		std::shared_ptr<pqxx::work> mapQueryWork);
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
 	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();
 	void Reset();
+};
+
+class PgTransaction
+{
+private:
+	shared_ptr<pqxx::connection> dbconn;
+	std::string tableStaticPrefix;
+	std::string tableActivePrefix;
+	std::string connectionString;
+	std::string shareMode;
+	std::shared_ptr<pqxx::work> work;
+
+public:
+	PgTransaction(const string &tableStaticPrefixIn, 
+		const string &tableActivePrefixIn,
+		shared_ptr<pqxx::connection> &db,
+		const std::string &shareMode);
+	virtual ~PgTransaction();
+
+	std::shared_ptr<class PgMapQuery> GetQueryMgr();
+
+	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
+		std::shared_ptr<IDataStreamHandler> &out);
+	bool StoreObjects(class OsmData &data, 
+		std::map<int64_t, int64_t> &createdNodeIds, 
+		std::map<int64_t, int64_t> &createdWaysIds,
+		std::map<int64_t, int64_t> &createdRelationsIds,
+		class PgMapError &errStr);
+	bool ResetActiveTables(class PgMapError &errStr);
+
+	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
+	void Commit();
+	void Abort();
 };
 
 class PgMap
@@ -68,18 +102,7 @@ public:
 
 	bool Ready();
 
-	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
-
-	std::shared_ptr<class PgMapQuery> GetQueryMgr();
-
-	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
-		std::shared_ptr<IDataStreamHandler> &out);
-	bool StoreObjects(class OsmData &data, 
-		std::map<int64_t, int64_t> &createdNodeIds, 
-		std::map<int64_t, int64_t> &createdWaysIds,
-		std::map<int64_t, int64_t> &createdRelationsIds,
-		class PgMapError &errStr);
-	bool ResetActiveTables(class PgMapError &errStr);
+	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
 };
 
 #endif //_PGMAP_H
