@@ -164,6 +164,10 @@ public:
 	void Clear();
 };
 
+namespace std {
+	%template(vectorosmdata) vector<class OsmData>;
+};
+
 %shared_ptr(OsmChange)
 
 class OsmChange : public IOsmChangeBlock
