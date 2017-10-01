@@ -62,6 +62,17 @@ public:
 	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles) {};
+
+};
+
+%shared_ptr(IOsmChangeBlock)
+
+class IOsmChangeBlock
+{
+public:
+	virtual ~IOsmChangeBlock() {};
+
+	virtual void StoreOsmData(const std::string &action, const class OsmData &osmData) {};
 };
 
 %shared_ptr(PyO5mEncode)
@@ -153,6 +164,22 @@ public:
 	void Clear();
 };
 
+%shared_ptr(OsmChange)
+
+class OsmChange : public IOsmChangeBlock
+{
+public:
+	std::vector<class OsmData> blocks;
+	std::vector<std::string> actions; 
+
+	OsmChange();
+	OsmChange( const OsmChange &obj);
+	OsmChange& operator=(const OsmChange &arg);
+	virtual ~OsmChange();
+
+	virtual void StoreOsmData(const std::string &action, const class OsmData &osmData);
+};
+
 class OsmXmlDecodeString
 {
 public:
@@ -162,6 +189,19 @@ public:
 
 	OsmXmlDecodeString();
 	virtual ~OsmXmlDecodeString();
+
+	bool DecodeSubString(const char *xml, size_t len, bool done);
+};
+
+class OsmChangeXmlDecodeString
+{
+public:
+	std::string errString;
+	bool parseCompletedOk;
+	std::shared_ptr<class IOsmChangeBlock> output;
+
+	OsmChangeXmlDecodeString();
+	virtual ~OsmChangeXmlDecodeString();
 
 	bool DecodeSubString(const char *xml, size_t len, bool done);
 };
@@ -213,4 +253,10 @@ public:
 		class PgMapError &errStr);
 	bool ResetActiveTables(class PgMapError &errStr);
 };
+
+void LoadFromO5m(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);
+void LoadFromOsmXml(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);
+void LoadFromOsmChangeXml(std::streambuf &fi, std::shared_ptr<class IOsmChangeBlock> output);
+void SaveToO5m(const class OsmData &osmData, std::streambuf &fi);
+void SaveToOsmXml(const class OsmData &osmData, std::streambuf &fi);
 
