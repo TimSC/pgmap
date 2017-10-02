@@ -830,6 +830,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			}
 		}
 	}
+
 	return true;
 }
 
@@ -895,7 +896,7 @@ bool UpdateNextObjectIds(pqxx::work *work,
 			if(it->second != it2->second)
 			{
 				stringstream ss;
-				ss << "UPDATE "<< tablePrefix <<"nextids SET maxid = "<< it->second <<" WHERE id='node';"; 
+				ss << "UPDATE "<< tablePrefix <<"nextids SET maxid = "<< it->second <<" WHERE id='"<<it->first<<"';"; 
 
 				try
 				{
