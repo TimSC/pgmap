@@ -1279,6 +1279,24 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 		}
 	}
 
+	for(size_t i=0; i<osmData.relations.size(); i++)
+	{
+		class OsmRelation &rel = osmData.relations[i];
+		for(size_t j=0; j<rel.refIds.size(); j++)
+		{
+			if(rel.refTypeStrs[j] != "node" or rel.refIds[j] > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdNodeIds.find(rel.refIds[j]);
+			if(it == createdNodeIds.end())
+			{
+				stringstream ss;
+				ss << "Relation "<< rel.objId << " depends on undefined node " << rel.refIds[j];
+				errStr = ss.str();
+				return false;
+			}
+			rel.refIds[j] = it->second;
+		}
+	}
+
 	//Store ways
 	objPtrs.clear();
 	for(size_t i=0; i<osmData.ways.size(); i++)
@@ -1287,16 +1305,52 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 	if(!ok)
 		return false;
 
-	//Update numbering for created nodes used in ways and relations
-	//TODO
-
-	//Store relations
-	objPtrs.clear();
+	//Update numbering for created ways used in relations
 	for(size_t i=0; i<osmData.relations.size(); i++)
+	{
+		class OsmRelation &rel = osmData.relations[i];
+		for(size_t j=0; j<rel.refIds.size(); j++)
+		{
+			if(rel.refTypeStrs[j] != "way" or rel.refIds[j] > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdWayIds.find(rel.refIds[j]);
+			if(it == createdNodeIds.end())
+			{
+				stringstream ss;
+				ss << "Relation "<< rel.objId << " depends on undefined way " << rel.refIds[j];
+				errStr = ss.str();
+				return false;
+			}
+			rel.refIds[j] = it->second;
+		}
+	}
+
+	//Store relations one by one (since one relation can depend on another)		
+	for(size_t i=0; i<osmData.relations.size(); i++)
+	{
+		//Check refs for the relation we are about to add
+		class OsmRelation &rel = osmData.relations[i];
+		for(size_t j=0; j<rel.refIds.size(); j++)
+		{
+			if(rel.refTypeStrs[j] != "relation" or rel.refIds[j] > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdWayIds.find(rel.refIds[j]);
+			if(it == createdNodeIds.end())
+			{
+				stringstream ss;
+				ss << "Relation "<< rel.objId << " depends on undefined way " << rel.refIds[j];
+				errStr = ss.str();
+				return false;
+			}
+			rel.refIds[j] = it->second;
+		}
+
+		//Add to database
+		objPtrs.clear();
 		objPtrs.push_back(&osmData.relations[i]);
-	ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr);
-	if(!ok)
-		return false;
+
+		ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr);
+		if(!ok)
+			return false;
+	}
 
 	ok = UpdateNextObjectIds(work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
 	if(!ok)
