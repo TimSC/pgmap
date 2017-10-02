@@ -101,7 +101,7 @@ void DumpRelations(pqxx::work *work, const string &tablePrefix, bool onlyLiveDat
 
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
 	const string &tablePrefix, 
-	const class OsmData &osmData, 
+	class OsmData osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWaysIds,
 	std::map<int64_t, int64_t> &createdRelationsIds,

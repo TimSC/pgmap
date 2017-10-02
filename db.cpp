@@ -1240,7 +1240,7 @@ void DumpRelations(pqxx::work *work, const string &tablePrefix, bool onlyLiveDat
 
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
 	const string &tablePrefix, 
-	const class OsmData &osmData, 
+	class OsmData osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,
@@ -1252,18 +1252,45 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 		return false;
 	nextIdMap = nextIdMapOriginal;
 
+	//Store nodes
 	std::vector<const class OsmObject *> objPtrs;
 	for(size_t i=0; i<osmData.nodes.size(); i++)
 		objPtrs.push_back(&osmData.nodes[i]);
 	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr);
 	if(!ok)
 		return false;
+
+	//Update numbering for created nodes used in ways and relations
+	for(size_t i=0; i<osmData.ways.size(); i++)
+	{
+		class OsmWay &way = osmData.ways[i];
+		for(size_t j=0; j<way.refs.size(); j++)
+		{
+			if(way.refs[j] > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdNodeIds.find(way.refs[j]);
+			if(it == createdNodeIds.end())
+			{
+				stringstream ss;
+				ss << "Way "<< way.objId << " depends on undefined node " << way.refs[j];
+				errStr = ss.str();
+				return false;
+			}
+			way.refs[j] = it->second;
+		}
+	}
+
+	//Store ways
 	objPtrs.clear();
 	for(size_t i=0; i<osmData.ways.size(); i++)
 		objPtrs.push_back(&osmData.ways[i]);
 	ok = ObjectsToDatabase(c, work, tablePrefix, "way", objPtrs, createdWayIds, nextIdMap, errStr);
 	if(!ok)
 		return false;
+
+	//Update numbering for created nodes used in ways and relations
+	//TODO
+
+	//Store relations
 	objPtrs.clear();
 	for(size_t i=0; i<osmData.relations.size(); i++)
 		objPtrs.push_back(&osmData.relations[i]);
