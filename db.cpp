@@ -1160,7 +1160,7 @@ void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix,
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << "id = " << *it;
+		sqlFrags << relationTable << ".id = " << *it;
 		count ++;
 	}
 
