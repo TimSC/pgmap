@@ -56,7 +56,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARED");
+	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
 
 	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
 

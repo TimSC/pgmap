@@ -47,7 +47,9 @@ bool LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const 
 	}
 	catch (const pqxx::sql_error &e)
 	{
-		errStr = e.what();
+		stringstream ss;
+		ss << e.what() << " (" << e.query() << ")";
+		errStr = ss.str();
 		return false;
 	}
 	catch (const std::exception &e)
