@@ -568,11 +568,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				string tagsJson;
 				EncodeTags(osmObject->tags, tagsJson);
 
-				if(objId < 0)
+				if(objId <= 0)
 				{
-					if(osmObject->metaData.version != 1)
+					if(osmObject->metaData.version != 0)
 					{
-						errStr = "Cannot assign a new node to any version but 1.";
+						errStr = "Cannot assign a new node to any version but zero/blank.";
 						return false;
 					}
 
