@@ -570,9 +570,9 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 				if(objId <= 0)
 				{
-					if(osmObject->metaData.version != 0)
+					if(osmObject->metaData.version != 1)
 					{
-						errStr = "Cannot assign a new node to any version but zero/blank.";
+						errStr = "Cannot assign a new node to any version but one.";
 						return false;
 					}
 
@@ -702,7 +702,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			string tagsJson;
 			EncodeTags(osmObject->tags, tagsJson);
 
-			if(objId < 0)
+			if(objId <= 0)
 			{
 				if(osmObject->metaData.version != 1)
 				{
