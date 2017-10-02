@@ -1368,7 +1368,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 		for(size_t j=0; j<rel.refIds.size(); j++)
 		{
 			if(rel.refTypeStrs[j] != "relation" or rel.refIds[j] > 0) continue;
-			std::map<int64_t, int64_t>::iterator it = createdWayIds.find(rel.refIds[j]);
+			std::map<int64_t, int64_t>::iterator it = createdRelationIds.find(rel.refIds[j]);
 			if(it == createdNodeIds.end())
 			{
 				stringstream ss;
