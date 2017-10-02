@@ -376,7 +376,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 	const std::vector<const class OsmObject *> &objPtrs, 
 	std::map<int64_t, int64_t> &createdNodeIds,
 	map<string, int64_t> &nextIdMap,
-	std::string &errStr)
+	std::string &errStr,
+	int verbose)
 {
 	char trueStr[] = "true";
 	char falseStr[] = "true";
@@ -447,6 +448,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		pqxx::result r;
 		try
 		{
+			if(verbose >= 1)
+				cout << checkExistingSql << " " << objId << endl;
 			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingSql);
 			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
 		}
@@ -476,6 +479,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				+ "live"+ typeStr +"s WHERE (id=$1);";
 			try
 			{
+				if(verbose >= 1)
+					cout << deletedLiveSql << " " << objId << endl;
 				c.prepare(tablePrefix+"deletelive"+typeStr, deletedLiveSql);
 				work->prepared(tablePrefix+"deletelive"+typeStr)(objId).exec();
 			}
@@ -517,6 +522,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			{
 				if(nodeObject != nullptr)
 				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldnode", ss.str());
 					work->prepared(tablePrefix+"copyoldnode")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
 						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
@@ -524,6 +531,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				}
 				else if(wayObject != nullptr)
 				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldway", ss.str());
 					work->prepared(tablePrefix+"copyoldway")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
 						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
@@ -531,6 +540,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				}
 				else if(relationObject != nullptr)
 				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldrelation", ss.str());
 					work->prepared(tablePrefix+"copyoldrelation")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
 						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
@@ -595,18 +606,24 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				{
 					if(nodeObject != nullptr)
 					{
+						if(verbose >= 1)
+							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertnode", ss.str());
 						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
 					}
 					else if(wayObject != nullptr)
 					{
+						if(verbose >= 1)
+							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertway", ss.str());
 						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson.str()).exec();
 					}
 					else if(relationObject != nullptr)
 					{
+						if(verbose >= 1)
+							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertrelation", ss.str());
 						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
@@ -627,6 +644,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				stringstream ssi;
 				ssi << "INSERT INTO "<< tablePrefix << typeStr << "ids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
+				if(verbose >= 1)
+					cout << ssi.str() << endl;
 				c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
 				work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
 
@@ -656,18 +675,24 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				{
 					if(nodeObject != nullptr)
 					{
+						if(verbose >= 1)
+							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updatenode", ss.str());
 						work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
 					}
 					else if(wayObject != nullptr)
 					{
+						if(verbose >= 1)
+							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updateway", ss.str());
 						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson.str()).exec();
 					}
 					else if(relationObject != nullptr)
 					{
+						if(verbose >= 1)
+							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updaterelation", ss.str());
 						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
@@ -729,6 +754,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			{	
 				if(nodeObject != nullptr)
 				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"insertoldnode", ss.str());
 					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
@@ -736,6 +763,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				}
 				else if(wayObject != nullptr)
 				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"insertoldway", ss.str());
 					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
@@ -743,6 +772,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				}
 				else if(relationObject != nullptr)
 				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"insertoldrelation", ss.str());
 					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
@@ -764,9 +795,10 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			stringstream ssi;
 			ssi << "INSERT INTO "<< tablePrefix << typeStr << "ids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
+			if(verbose >= 1)
+				cout << ssi.str() << endl;
 			c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
 			work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
-
 		}
 
 		if(wayObject != nullptr)
@@ -790,6 +822,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 				try
 				{
+					if(verbose >= 1)
+						cout << sswm.str() << endl;
 					work->exec(sswm.str());
 				}
 				catch (const pqxx::sql_error &e)
@@ -815,6 +849,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 				try
 				{
+					if(verbose >= 1)
+						cout << ssrm.str() << endl;
 					work->exec(ssrm.str());
 				}
 				catch (const pqxx::sql_error &e)
@@ -1256,7 +1292,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 	std::vector<const class OsmObject *> objPtrs;
 	for(size_t i=0; i<osmData.nodes.size(); i++)
 		objPtrs.push_back(&osmData.nodes[i]);
-	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr, 0);
 	if(!ok)
 		return false;
 
@@ -1301,7 +1337,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 	objPtrs.clear();
 	for(size_t i=0; i<osmData.ways.size(); i++)
 		objPtrs.push_back(&osmData.ways[i]);
-	ok = ObjectsToDatabase(c, work, tablePrefix, "way", objPtrs, createdWayIds, nextIdMap, errStr);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "way", objPtrs, createdWayIds, nextIdMap, errStr, 0);
 	if(!ok)
 		return false;
 
@@ -1347,7 +1383,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::work *work,
 		objPtrs.clear();
 		objPtrs.push_back(&osmData.relations[i]);
 
-		ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr);
+		ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr, 0);
 		if(!ok)
 			return false;
 	}
