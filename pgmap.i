@@ -6,7 +6,7 @@
 %include "std_map.i"
 %include "std_set.i"
 %include "std_shared_ptr.i"
-%include "exception.i"
+%include exception.i
 using std::string;
 
 %{
@@ -14,6 +14,22 @@ using std::string;
 #include "pgmap.h"
 #include "cppo5m/OsmData.h"
 %}
+
+%exception {
+	try {
+		$action
+    } catch(const std::runtime_error& e) {
+		std::stringstream ss;
+		ss << "Standard runtime exception: " << e.what();
+        SWIG_exception(SWIG_RuntimeError, ss.str().c_str());
+	} catch(const std::exception& e) {
+		std::stringstream ss;
+		ss << "Standard exception: " << e.what();
+		SWIG_exception(SWIG_UnknownError, ss.str().c_str());
+	} catch(...) {
+		SWIG_exception(SWIG_UnknownError, "Unknown exception");
+	}
+}
 
 namespace std {
 	%template(vectori) vector<int>;

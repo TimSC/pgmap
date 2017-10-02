@@ -28,20 +28,34 @@ PgMapError::~PgMapError()
 
 // **********************************************
 
-void LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const std::string &accessMode)
+bool LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const std::string &accessMode, std::string &errStr)
 {
-	//It is important resources are locked in a consistent order to avoid deadlock
-	work->exec("LOCK TABLE "+prefix+ "oldnodes IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "oldways IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "oldrelations IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "livenodes IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "liveways IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "liverelations IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "way_mems IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "relation_mems_n IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN "+accessMode+" MODE;");
-	work->exec("LOCK TABLE "+prefix+ "nextids IN "+accessMode+" MODE;");
+	try
+	{
+		//It is important resources are locked in a consistent order to avoid deadlock
+		work->exec("LOCK TABLE "+prefix+ "oldnodes IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "oldways IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "oldrelations IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "livenodes IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "liveways IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "liverelations IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "way_mems IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "relation_mems_n IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "nextids IN "+accessMode+" MODE;");
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
 }
 
 // **********************************************
@@ -375,8 +389,13 @@ PgTransaction::PgTransaction(const string &tableStaticPrefixIn,
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
 	this->shareMode = shareMode;
-	LockMap(work, this->tableStaticPrefix, this->shareMode);
-	LockMap(work, this->tableActivePrefix, this->shareMode);
+	string errStr;
+	bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
+	ok = LockMap(work, this->tableActivePrefix, this->shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
 }
 
 PgTransaction::~PgTransaction()
