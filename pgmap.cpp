@@ -381,13 +381,14 @@ void PgMapQuery::Reset()
 
 // **********************************************
 
-PgTransaction::PgTransaction(const string &tableStaticPrefixIn, 
+PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
+	const string &tableStaticPrefixIn, 
 	const string &tableActivePrefixIn,
-	shared_ptr<pqxx::connection> &db,
+	std::shared_ptr<pqxx::work> workIn,
 	const std::string &shareMode):
-	work(new pqxx::work(*db))
+	work(workIn)
 {
-	dbconn = db;
+	dbconn = dbconnIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
 	this->shareMode = shareMode;
@@ -402,7 +403,7 @@ PgTransaction::PgTransaction(const string &tableStaticPrefixIn,
 
 PgTransaction::~PgTransaction()
 {
-
+	work.reset();
 }
 
 shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
@@ -542,7 +543,9 @@ bool PgMap::Ready()
 
 std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &shareMode)
 {
-	shared_ptr<class PgTransaction> out(new class PgTransaction(tableStaticPrefix, tableActivePrefix, this->dbconn, shareMode));
+	dbconn->cancel_query();
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	shared_ptr<class PgTransaction> out(new class PgTransaction(dbconn, tableStaticPrefix, tableActivePrefix, work, shareMode));
 	return out;
 }
 

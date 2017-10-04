@@ -258,9 +258,10 @@ public:
 class PgTransaction
 {
 public:
-	PgTransaction(const string &tableStaticPrefixIn, 
+	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
+		const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		shared_ptr<pqxx::connection> &db,
+		std::shared_ptr<pqxx::work> workIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
 

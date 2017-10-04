@@ -64,9 +64,10 @@ private:
 	std::shared_ptr<pqxx::work> work;
 
 public:
-	PgTransaction(const string &tableStaticPrefixIn, 
+	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
+		const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		shared_ptr<pqxx::connection> &db,
+		std::shared_ptr<pqxx::work> workIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
 
@@ -102,6 +103,7 @@ public:
 
 	bool Ready();
 
+	//pqxx only supports one active transaction per connection
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
 };
 
