@@ -80,9 +80,14 @@ public:
 		std::map<int64_t, int64_t> &createdWaysIds,
 		std::map<int64_t, int64_t> &createdRelationsIds,
 		class PgMapError &errStr);
-	bool ResetActiveTables(class PgMapError &errStr);
+	void GetWaysForNodes(const std::set<int64_t> &objectIds, 
+		std::shared_ptr<IDataStreamHandler> &out);	
+	void GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
+		std::shared_ptr<IDataStreamHandler> &out);	
 
+	bool ResetActiveTables(class PgMapError &errStr);
 	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
+
 	void Commit();
 	void Abort();
 };

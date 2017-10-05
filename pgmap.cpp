@@ -476,6 +476,36 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	return ok;
 }
 
+void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> &out)
+{
+	GetLiveWaysThatContainNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
+
+	GetLiveWaysThatContainNodes(work.get(), this->tableActivePrefix, "", objectIds, out);
+}
+
+void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> &out)
+{
+	if(type.size() == 0)
+		throw invalid_argument("Type string cannot be zero length");
+
+	set<int64_t> empty;
+	std::set<int64_t>::const_iterator it = objectIds.begin();
+	while(it != objectIds.end())
+	{
+		GetLiveRelationsForObjects(work.get(), this->tableStaticPrefix, 
+			this->tableActivePrefix, 
+			type[0], objectIds, it, 1000, empty, out);
+	}
+	it = objectIds.begin();
+	while(it != objectIds.end())
+	{
+		GetLiveRelationsForObjects(work.get(), this->tableActivePrefix, "", 
+			type[0], objectIds, it, 1000, empty, out);
+	}
+}
+
 bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 {
 	std::string nativeErrStr;
