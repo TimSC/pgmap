@@ -516,7 +516,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				ss << ",$10";
 			else if (relationObject != nullptr)
 				ss << ",$10,$11";
-			ss << ");";
+			ss << ") ON CONFLICT DO NOTHING;";
 
 			try
 			{
@@ -550,12 +550,16 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			}
 			catch (const pqxx::sql_error &e)
 			{
-				errStr = e.what();
+				stringstream ss2;
+				ss2 << e.what() << ":" << e.query() << ":" << ss.str();
+				errStr = ss2.str();
 				return false;
 			}
 			catch (const std::exception &e)
 			{
-				errStr = e.what();
+				stringstream ss2;
+				ss2 << e.what() << ";" << ss.str() << endl;
+				errStr = ss2.str();
 				return false;
 			}
 		}
@@ -748,7 +752,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				ss << ",$10";
 			else if(relationObject != nullptr)
 				ss << ",$10,$11";
-			ss << ");";
+			ss << ") ON CONFLICT DO NOTHING;";
 
 			try
 			{	
@@ -783,12 +787,16 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			}
 			catch (const pqxx::sql_error &e)
 			{
-				errStr = e.what();
+				stringstream ss2;
+				ss2 << e.what() << ":" << e.query() << ":" << ss.str();
+				errStr = ss2.str();
 				return false;
 			}
 			catch (const std::exception &e)
 			{
-				errStr = e.what();
+				stringstream ss2;
+				ss2 << e.what() << ";" << ss.str() << endl;
+				errStr = ss2.str();
 				return false;
 			}
 
