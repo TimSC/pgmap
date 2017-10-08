@@ -819,9 +819,10 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				size_t insertSize = 0;
 				sswm << "INSERT INTO "<< tablePrefix << "way_mems (id, version, index, member) VALUES ";
 
+				size_t initialj = j;
 				for(; j<wayObject->refs.size() && insertSize < 1000; j++)
 				{
-					if(j!=0)
+					if(j!=initialj)
 						sswm << ",";
 					sswm << "("<<objId<<","<<wayObject->metaData.version<<","<<j<<","<<wayObject->refs[j]<<")";
 					insertSize ++;
