@@ -97,12 +97,15 @@ void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix,
 
 void DumpNodes(pqxx::work *work, const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
+	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 void DumpWays(pqxx::work *work, const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
+	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 void DumpRelations(pqxx::work *work, const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
+	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 

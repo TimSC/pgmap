@@ -86,7 +86,7 @@ public:
 		std::shared_ptr<IDataStreamHandler> &out);	
 
 	bool ResetActiveTables(class PgMapError &errStr);
-	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
+	void Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc);
 
 	void Commit();
 	void Abort();

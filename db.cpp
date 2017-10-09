@@ -1232,6 +1232,7 @@ void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix,
 
 void DumpNodes(pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
+	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string liveNodeTable = tablePrefix + "livenodes";
@@ -1246,7 +1247,9 @@ void DumpNodes(pqxx::work *work, const string &tablePrefix,
 	{
 		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
 		sql << " WHERE "<<excludeTable<<".id IS NULL";
-	}	
+	}
+	if(order)
+		sql << " ORDER BY " << liveNodeTable << ".id";
 	sql << ";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "nodecursor", 1000 );	
@@ -1258,6 +1261,7 @@ void DumpNodes(pqxx::work *work, const string &tablePrefix,
 
 void DumpWays(pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
+	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = tablePrefix + "liveways";
@@ -1272,7 +1276,9 @@ void DumpWays(pqxx::work *work, const string &tablePrefix,
 	{
 		sql << " LEFT JOIN "<<excludeTable<<" ON "<<wayTable<<".id = "<<excludeTable<<".id";
 		sql << " WHERE "<<excludeTable<<".id IS NULL";
-	}	
+	}
+	if(order)
+		sql << " ORDER BY " << wayTable << ".id";
 	sql << ";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", 1000 );	
@@ -1284,6 +1290,7 @@ void DumpWays(pqxx::work *work, const string &tablePrefix,
 
 void DumpRelations(pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix, 
+	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string relationTable = tablePrefix + "liverelations";
@@ -1298,7 +1305,9 @@ void DumpRelations(pqxx::work *work, const string &tablePrefix,
 	{
 		sql << " LEFT JOIN "<<excludeTable<<" ON "<<relationTable<<".id = "<<excludeTable<<".id";
 		sql << " WHERE "<<excludeTable<<".id IS NULL";
-	}	
+	}
+	if(order)
+		sql << " ORDER BY " << relationTable << ".id";
 	sql << ";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "relationcursor", 1000 );	

@@ -518,28 +518,28 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	return ok;
 }
 
-void PgTransaction::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc)
+void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	enc->StoreIsDiff(false);
 
-	DumpNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, enc);
+	DumpNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpNodes(work.get(), this->tableActivePrefix, "", enc);
+	DumpNodes(work.get(), this->tableActivePrefix, "", order, enc);
 
 	enc->Reset();
 
-	DumpWays(work.get(), this->tableStaticPrefix, this->tableActivePrefix, enc);
+	DumpWays(work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpWays(work.get(), this->tableActivePrefix, "", enc);
+	DumpWays(work.get(), this->tableActivePrefix, "", order, enc);
 
 	enc->Reset();
 		
-	DumpRelations(work.get(), this->tableStaticPrefix, this->tableActivePrefix, enc);
+	DumpRelations(work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpRelations(work.get(), this->tableActivePrefix, "", enc);
+	DumpRelations(work.get(), this->tableActivePrefix, "", order, enc);
 
 	enc->Finish();
 }
