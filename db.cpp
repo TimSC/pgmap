@@ -1230,16 +1230,24 @@ void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix,
 
 // ************* Dump specific code *************
 
-void DumpNodes(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
+void DumpNodes(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	std::shared_ptr<IDataStreamHandler> enc)
 {
-	if(!onlyLiveData)
-		throw runtime_error("Not implemented");
-	cout << "Dump nodes" << endl;
+	string liveNodeTable = tablePrefix + "livenodes";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "nodeids";
 
 	stringstream sql;
-	sql << "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << tablePrefix;
-	sql << "livenodes;";
+	sql << "SELECT "<< liveNodeTable << ".*, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+	sql << liveNodeTable;
+	if(excludeTable.size() > 0)
+	{
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
+		sql << " WHERE "<<excludeTable<<".id IS NULL";
+	}	
+	sql << ";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "nodecursor", 1000 );	
 
@@ -1248,15 +1256,23 @@ void DumpNodes(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, s
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void DumpWays(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
+void DumpWays(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	std::shared_ptr<IDataStreamHandler> enc)
 {
-	if(!onlyLiveData)
-		throw runtime_error("Not implemented");
-	cout << "Dump ways" << endl;
+	string wayTable = tablePrefix + "liveways";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "wayids";
+
 	stringstream sql;
-	sql << "SELECT * FROM ";
-	sql << tablePrefix;
-	sql << "liveways";
+	sql << "SELECT " << wayTable << ".* FROM ";
+	sql << wayTable;
+	if(excludeTable.size() > 0)
+	{
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<wayTable<<".id = "<<excludeTable<<".id";
+		sql << " WHERE "<<excludeTable<<".id IS NULL";
+	}	
 	sql << ";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", 1000 );	
@@ -1266,15 +1282,23 @@ void DumpWays(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, st
 		count = WayResultsToEncoder(cursor, enc);
 }
 
-void DumpRelations(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc)
+void DumpRelations(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix, 
+	std::shared_ptr<IDataStreamHandler> enc)
 {
-	if(!onlyLiveData)
-		throw runtime_error("Not implemented");
-	cout << "Dump relations" << endl;
+	string relationTable = tablePrefix + "liverelations";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "relationids";
+
 	stringstream sql;
-	sql << "SELECT * FROM ";
-	sql << tablePrefix;
-	sql << "liverelations";
+	sql << "SELECT " << relationTable << ".* FROM ";
+	sql << relationTable;
+	if(excludeTable.size() > 0)
+	{
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<relationTable<<".id = "<<excludeTable<<".id";
+		sql << " WHERE "<<excludeTable<<".id IS NULL";
+	}	
 	sql << ";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "relationcursor", 1000 );	

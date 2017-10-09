@@ -95,9 +95,15 @@ void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix,
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
-void DumpNodes(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc);
-void DumpWays(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc);
-void DumpRelations(pqxx::work *work, const string &tablePrefix, bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc);
+void DumpNodes(pqxx::work *work, const std::string &tablePrefix, 
+	const std::string &excludeTablePrefix,
+	std::shared_ptr<IDataStreamHandler> enc);
+void DumpWays(pqxx::work *work, const std::string &tablePrefix, 
+	const std::string &excludeTablePrefix,
+	std::shared_ptr<IDataStreamHandler> enc);
+void DumpRelations(pqxx::work *work, const std::string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
+	std::shared_ptr<IDataStreamHandler> enc);
 
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
 	const string &tablePrefix, 

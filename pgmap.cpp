@@ -525,15 +525,21 @@ void PgTransaction::Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> 
 
 	enc->StoreIsDiff(false);
 
-	DumpNodes(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
+	DumpNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, enc);
+
+	DumpNodes(work.get(), this->tableActivePrefix, "", enc);
 
 	enc->Reset();
 
-	DumpWays(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
+	DumpWays(work.get(), this->tableStaticPrefix, this->tableActivePrefix, enc);
+
+	DumpWays(work.get(), this->tableActivePrefix, "", enc);
 
 	enc->Reset();
 		
-	DumpRelations(work.get(), this->tableStaticPrefix, onlyLiveData, enc);
+	DumpRelations(work.get(), this->tableStaticPrefix, this->tableActivePrefix, enc);
+
+	DumpRelations(work.get(), this->tableActivePrefix, "", enc);
 
 	enc->Finish();
 }
