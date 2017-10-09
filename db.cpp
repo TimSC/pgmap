@@ -1240,6 +1240,19 @@ void DumpNodes(pqxx::work *work, const string &tablePrefix,
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = excludeTablePrefix + "nodeids";
 
+	//Discourage sequential scans of tables, since they is not necessary and we want to avoid doing a sort
+	work->exec("set enable_seqscan to off;");
+
+	/*
+		                                                    QUERY PLAN                                                        
+	--------------------------------------------------------------------------------------------------------------------------
+	 Merge Anti Join  (cost=1.01..50174008.28 rows=1365191502 width=8)
+	   Merge Cond: (planet_livenodes.id = planet_mod_nodeids.id)
+	   ->  Index Only Scan using planet_livenodes_pkey on planet_livenodes  (cost=0.58..35528317.86 rows=1368180352 width=8)
+	   ->  Index Only Scan using planet_mod_nodeids_pkey on planet_mod_nodeids  (cost=0.43..11707757.01 rows=2988850 width=8)
+	(4 rows)
+	*/
+
 	stringstream sql;
 	sql << "SELECT "<< liveNodeTable << ".*, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
 	sql << liveNodeTable;
@@ -1269,6 +1282,9 @@ void DumpWays(pqxx::work *work, const string &tablePrefix,
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = excludeTablePrefix + "wayids";
 
+	//Discourage sequential scans of tables, since they is not necessary and we want to avoid doing a sort
+	work->exec("set enable_seqscan to off;");
+
 	stringstream sql;
 	sql << "SELECT " << wayTable << ".* FROM ";
 	sql << wayTable;
@@ -1297,6 +1313,9 @@ void DumpRelations(pqxx::work *work, const string &tablePrefix,
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = excludeTablePrefix + "relationids";
+
+	//Discourage sequential scans of tables, since they is not necessary and we want to avoid doing a sort
+	work->exec("set enable_seqscan to off;");
 
 	stringstream sql;
 	sql << "SELECT " << relationTable << ".* FROM ";
