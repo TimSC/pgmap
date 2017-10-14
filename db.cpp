@@ -1540,3 +1540,41 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 	return ok;	
 }
 
+int64_t GetMaxLiveId(pqxx::work *work, 
+	const string &tablePrefix, 
+	const string &objType)
+{
+	stringstream ss;
+	ss << "SELECT MAX(id) FROM "<<tablePrefix<<"live" << objType << "s;";
+	pqxx::result r = work->exec(ss.str());
+	if(r.size()==0)
+		throw runtime_error("No rows returned");
+	const pqxx::result::tuple row = r[0];
+	const pqxx::result::field field = row[0];
+	if(field.is_null()) return -1;
+	return field.as<int64_t>();
+}
+
+bool ClearNextIdValues(pqxx::work *work, 
+	const string &tablePrefix)
+{
+	stringstream ss;
+	ss << "DELETE FROM "<< tablePrefix <<"nextids;";
+	work->exec(ss.str());
+	return true;
+}
+
+bool SetNextIdValue(pqxx::connection &c,
+	pqxx::work *work, 
+	const string &tablePrefix,
+	const string &objType,
+	int64_t value)
+{
+	stringstream ss;
+	ss << "INSERT INTO "<<tablePrefix<<"nextids(id, maxid) VALUES ($1, $2);";
+
+	c.prepare(tablePrefix+"setnextId", ss.str());
+	work->prepared(tablePrefix+"setnextId")(objType)(value).exec();
+	return true;
+}
+

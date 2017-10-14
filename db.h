@@ -121,5 +121,18 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 	const string &tableStaticPrefix,
 	std::string &errStr);
 
+int64_t GetMaxLiveId(pqxx::work *work, 
+	const string &tablePrefix, 
+	const string &objType);
+
+bool ClearNextIdValues(pqxx::work *work, 
+	const string &tablePrefix);
+
+bool SetNextIdValue(pqxx::connection &c,
+	pqxx::work *work, 
+	const string &tablePrefix,
+	const string &objType,
+	int64_t value);
+
 #endif //_COMMON_H
 

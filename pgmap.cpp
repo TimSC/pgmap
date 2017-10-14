@@ -518,6 +518,44 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	return ok;
 }
 
+bool PgTransaction::UpdateNextIds(class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+
+	ClearNextIdValues(work.get(), this->tableStaticPrefix);
+	ClearNextIdValues(work.get(), this->tableActivePrefix);
+
+	//Update next node IDs
+	int64_t maxStaticNode = GetMaxLiveId(work.get(), this->tableStaticPrefix, "node");
+	int64_t maxActiveNode = GetMaxLiveId(work.get(), this->tableActivePrefix, "node");
+	if(maxStaticNode < 1) maxStaticNode = 1;
+	if(maxActiveNode == -1) maxActiveNode = maxStaticNode;
+	
+	SetNextIdValue(*dbconn, work.get(), this->tableStaticPrefix, "node", maxStaticNode+1);
+	SetNextIdValue(*dbconn, work.get(), this->tableActivePrefix, "node", maxActiveNode+1);
+
+	//Update next way IDs
+	int64_t maxStaticWay = GetMaxLiveId(work.get(), this->tableStaticPrefix, "way");
+	int64_t maxActiveWay = GetMaxLiveId(work.get(), this->tableActivePrefix, "way");
+	if(maxStaticWay < 1) maxStaticWay = 1;
+	if(maxActiveWay == -1) maxActiveWay = maxStaticWay;
+	
+	SetNextIdValue(*dbconn, work.get(), this->tableStaticPrefix, "way", maxStaticWay+1);
+	SetNextIdValue(*dbconn, work.get(), this->tableActivePrefix, "way", maxActiveWay+1);
+
+	//Update next relation IDs
+	int64_t maxStaticRelation = GetMaxLiveId(work.get(), this->tableStaticPrefix, "relation");
+	int64_t maxActiveRelation = GetMaxLiveId(work.get(), this->tableActivePrefix, "relation");
+	if(maxStaticRelation < 1) maxStaticRelation = 1;
+	if(maxActiveRelation == -1) maxActiveRelation = maxStaticRelation;
+	
+	SetNextIdValue(*dbconn, work.get(), this->tableStaticPrefix, "relation", maxStaticRelation+1);
+	SetNextIdValue(*dbconn, work.get(), this->tableActivePrefix, "relation", maxActiveRelation+1);
+
+	return true;
+}
+
 void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
