@@ -553,8 +553,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 			try
 			{
+				assert(!row["username"].is_null());
+				assert(!row["tags"].is_null());
+
 				if(nodeObject != nullptr)
 				{
+					assert(!row["geom"].is_null());
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldnode", ss.str());
@@ -564,6 +568,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				}
 				else if(wayObject != nullptr)
 				{
+					assert(!row["members"].is_null());
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldway", ss.str());
@@ -573,6 +578,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				}
 				else if(relationObject != nullptr)
 				{
+					assert(!row["members"].is_null());
+					assert(!row["memberroles"].is_null());
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldrelation", ss.str());
