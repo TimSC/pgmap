@@ -233,6 +233,8 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
 
 		int64_t objId = c[idCol].as<int64_t>();
+		//if(objId == 314382649)
+		//	throw std::runtime_error("Not the dreaded 314382649");
 		double lat = atof(c[latCol].c_str());
 		double lon = atof(c[lonCol].c_str());
 
@@ -443,14 +445,14 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			rolesJson << "]";
 		}
 
-		//Get existing object object (if any)
-		string checkExistingSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
+		//Get existing object object in live table (if any)
+		string checkExistingLiveSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
 		pqxx::result r;
 		try
 		{
 			if(verbose >= 1)
-				cout << checkExistingSql << " " << objId << endl;
-			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingSql);
+				cout << checkExistingLiveSql << " " << objId << endl;
+			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
 			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
 		}
 		catch (const pqxx::sql_error &e)
@@ -470,6 +472,38 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		{
 			const pqxx::result::tuple row = r[0];
 			currentVersion = row["version"].as<int64_t>();
+		}
+
+		//Get existing object object in old table (if any)
+		string checkExistingOldSql = "SELECT * FROM "+ tablePrefix + "old"+typeStr+"s WHERE (id=$1);";
+		pqxx::result r2;
+		try
+		{
+			if(verbose >= 1)
+				cout << checkExistingOldSql << " " << objId << endl;
+			c.prepare(tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
+			r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
+		}
+		catch (const pqxx::sql_error &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+		catch (const std::exception &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+
+		bool foundOld = r.size() > 0;
+		int64_t oldVersion = -1;
+		for (pqxx::result::const_iterator row = r2.begin();
+			row != r2.end();
+			++row)
+		{
+			int64_t ver = row["version"].as<int64_t>();
+			if(ver > foundOld)
+				foundOld = ver;
 		}
 
 		//Check if we need to delete object from live table
@@ -496,7 +530,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			}
 		}
 
-		//Check if we need to copy row to history table
+		//Check if we need to copy row from live to history table
 		if(foundExisting && version > currentVersion)
 		{
 			const pqxx::result::tuple row = r[0];
@@ -564,7 +598,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			}
 		}
 
-		if(osmObject->metaData.visible && (!foundExisting || version >= currentVersion))
+		//Check if this is the latest version and visible
+		if(osmObject->metaData.visible && (!foundExisting || version >= currentVersion) && (!foundOld || version >= oldVersion))
 		{
 			if(!foundExisting)
 			{
@@ -1000,8 +1035,6 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, cons
 	stringstream sql;
 	sql.precision(9);
 	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
-	if(excludeTable.size() > 0)
-		sql << ", "<<excludeTable<<".id";
 	sql << " FROM ";
 	sql << liveNodeTable;
 	if(excludeTable.size() > 0)

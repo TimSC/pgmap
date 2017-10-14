@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 
 	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
 
-	vector<double> bbox = {-1.1473846,50.7360206,-0.9901428,50.8649113};
+	vector<double> bbox = {-1.0785318,50.788086,-1.0741129,50.790117};
 
 	std::shared_ptr<class PgMapQuery> mapQuery = transaction->GetQueryMgr();
 	int ret = mapQuery->Start(bbox, enc);
