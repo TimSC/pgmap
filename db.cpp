@@ -474,8 +474,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			currentVersion = row["version"].as<int64_t>();
 		}
 
-		//Get existing object object in old table (if any)
-		string checkExistingOldSql = "SELECT * FROM "+ tablePrefix + "old"+typeStr+"s WHERE (id=$1);";
+		//Get existing object version in old table (if any)
+		string checkExistingOldSql = "SELECT MAX(version) FROM "+ tablePrefix + "old"+typeStr+"s WHERE (id=$1);";
 		pqxx::result r2;
 		try
 		{
@@ -495,15 +495,14 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 			return false;
 		}
 
-		bool foundOld = r.size() > 0;
+		bool foundOld = false;
 		int64_t oldVersion = -1;
-		for (pqxx::result::const_iterator row = r2.begin();
-			row != r2.end();
-			++row)
+		const pqxx::result::tuple row = r2[0];
+		const pqxx::result::field field = row[0];
+		if(!field.is_null())
 		{
-			int64_t ver = row["version"].as<int64_t>();
-			if(ver > foundOld)
-				foundOld = ver;
+			oldVersion = field.as<int64_t>();
+			foundOld = true;
 		}
 
 		//Check if we need to delete object from live table
