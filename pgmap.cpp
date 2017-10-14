@@ -464,13 +464,18 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,
+	bool saveToStaticTables,
 	class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 
-	bool ok = ::StoreObjects(*dbconn, work.get(), this->tableActivePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
+	string tablePrefix = this->tableActivePrefix;
+	if(saveToStaticTables)
+		tablePrefix = this->tableStaticPrefix;
+
+	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;

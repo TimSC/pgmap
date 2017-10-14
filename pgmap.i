@@ -275,6 +275,7 @@ public:
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,
 		std::map<int64_t, int64_t> &createdRelationsIds,
+		bool saveToStaticTables,
 		class PgMapError &errStr);
 	void GetWaysForNodes(const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> &out);	
