@@ -8,6 +8,15 @@
 #include <time.h>
 using namespace std;
 
+///Tolerate NULL values when we copy row from live to old table
+template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxx::result::field &field)
+{
+	if(field.is_null())
+		invoc();
+	else
+		invoc(field.as<T>());
+}
+
 // *********** Filters and decorators *****************
 
 DataStreamRetainIds::DataStreamRetainIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
@@ -553,39 +562,66 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 			try
 			{
-				assert(!row["username"].is_null());
-				assert(!row["tags"].is_null());
-
 				if(nodeObject != nullptr)
 				{
-					assert(!row["geom"].is_null());
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldnode", ss.str());
-					work->prepared(tablePrefix+"copyoldnode")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
-						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
-						(row["tags"].as<string>())(true)(false)(row["geom"].as<string>()).exec();
+
+					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
+					BindVal<int64_t>(invoc, row["id"]);
+					BindVal<int64_t>(invoc, row["changeset"]);
+					BindVal<string>(invoc, row["username"]);
+					BindVal<int64_t>(invoc, row["uid"]);
+					BindVal<int64_t>(invoc, row["timestamp"]);
+					BindVal<int64_t>(invoc, row["version"]);
+					BindVal<string>(invoc, row["tags"]);
+					invoc(true);
+					invoc(false);
+					BindVal<string>(invoc, row["geom"]);
+
+					invoc.exec();
 				}
 				else if(wayObject != nullptr)
 				{
-					assert(!row["members"].is_null());
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldway", ss.str());
-					work->prepared(tablePrefix+"copyoldway")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
-						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
-						(row["tags"].as<string>())(true)(false)(row["members"].as<string>()).exec();
+
+					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
+					BindVal<int64_t>(invoc, row["id"]);
+					BindVal<int64_t>(invoc, row["changeset"]);
+					BindVal<string>(invoc, row["username"]);
+					BindVal<int64_t>(invoc, row["uid"]);
+					BindVal<int64_t>(invoc, row["timestamp"]);
+					BindVal<int64_t>(invoc, row["version"]);
+					BindVal<string>(invoc, row["tags"]);
+					invoc(true);
+					invoc(false);
+					BindVal<string>(invoc, row["members"]);
+
+					invoc.exec();
 				}
 				else if(relationObject != nullptr)
 				{
-					assert(!row["members"].is_null());
-					assert(!row["memberroles"].is_null());
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldrelation", ss.str());
-					work->prepared(tablePrefix+"copyoldrelation")(row["id"].as<int64_t>())(row["changeset"].as<int64_t>())(row["username"].as<string>())\
-						(row["uid"].as<int64_t>())(row["timestamp"].as<int64_t>())(row["version"].as<int64_t>())\
-						(row["tags"].as<string>())(true)(false)(row["members"].as<string>())(row["memberroles"].as<string>()).exec();
+	
+					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
+					BindVal<int64_t>(invoc, row["id"]);
+					BindVal<int64_t>(invoc, row["changeset"]);
+					BindVal<string>(invoc, row["username"]);
+					BindVal<int64_t>(invoc, row["uid"]);
+					BindVal<int64_t>(invoc, row["timestamp"]);
+					BindVal<int64_t>(invoc, row["version"]);
+					BindVal<string>(invoc, row["tags"]);
+					invoc(true);
+					invoc(false);
+					BindVal<string>(invoc, row["members"]);
+					BindVal<string>(invoc, row["memberroles"]);
+
+					invoc.exec();
 				}
 			}
 			catch (const pqxx::sql_error &e)
