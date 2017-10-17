@@ -234,7 +234,6 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	//int visibleCol = rows.column_number("visible");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
-	//int currentCol = rows.column_number("current");
 	int tagsCol = rows.column_number("tags");
 	int latCol = rows.column_number("lat");
 	int lonCol = rows.column_number("lon");
@@ -288,7 +287,6 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 	//int visibleCol = rows.column_number("visible");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
-	//int currentCol = rows.column_number("current");
 	int tagsCol = rows.column_number("tags");
 	int membersCol = rows.column_number("members");
 
@@ -342,7 +340,6 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 		//int visibleCol = rows.column_number("visible");
 		metaDataCols.timestampCol = rows.column_number("timestamp");
 		metaDataCols.versionCol = rows.column_number("version");
-		//int currentCol = rows.column_number("current");
 		int tagsCol = rows.column_number("tags");
 		int membersCol = rows.column_number("members");
 		int membersRolesCol = rows.column_number("memberroles");
@@ -545,7 +542,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 			//Insert into live table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags, visible, current";
+			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
 			if(nodeObject != nullptr)
 				ss << ", geom";
 			else if(wayObject != nullptr)
@@ -571,13 +568,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
 					BindVal<int64_t>(invoc, row["id"]);
 					BindVal<int64_t>(invoc, row["changeset"]);
+					BindVal<int64_t>(invoc, row["changeset_index"]);
 					BindVal<string>(invoc, row["username"]);
 					BindVal<int64_t>(invoc, row["uid"]);
 					BindVal<int64_t>(invoc, row["timestamp"]);
 					BindVal<int64_t>(invoc, row["version"]);
 					BindVal<string>(invoc, row["tags"]);
 					invoc(true);
-					invoc(false);
 					BindVal<string>(invoc, row["geom"]);
 
 					invoc.exec();
@@ -591,13 +588,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
 					BindVal<int64_t>(invoc, row["id"]);
 					BindVal<int64_t>(invoc, row["changeset"]);
+					BindVal<int64_t>(invoc, row["changeset_index"]);
 					BindVal<string>(invoc, row["username"]);
 					BindVal<int64_t>(invoc, row["uid"]);
 					BindVal<int64_t>(invoc, row["timestamp"]);
 					BindVal<int64_t>(invoc, row["version"]);
 					BindVal<string>(invoc, row["tags"]);
 					invoc(true);
-					invoc(false);
 					BindVal<string>(invoc, row["members"]);
 
 					invoc.exec();
@@ -611,13 +608,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
 					BindVal<int64_t>(invoc, row["id"]);
 					BindVal<int64_t>(invoc, row["changeset"]);
+					BindVal<int64_t>(invoc, row["changeset_index"]);
 					BindVal<string>(invoc, row["username"]);
 					BindVal<int64_t>(invoc, row["uid"]);
 					BindVal<int64_t>(invoc, row["timestamp"]);
 					BindVal<int64_t>(invoc, row["version"]);
 					BindVal<string>(invoc, row["tags"]);
 					invoc(true);
-					invoc(false);
 					BindVal<string>(invoc, row["members"]);
 					BindVal<string>(invoc, row["memberroles"]);
 
@@ -797,7 +794,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		{
 			//Insert into history table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags, visible, current";
+			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags, visible";
 			if(nodeObject != nullptr)
 				ss << ", geom";
 			else if(wayObject != nullptr)
@@ -822,13 +819,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 				nextObjId ++;
 			}
 
-			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
+			ss << "($1,$2,$3,$4,$5,$6,$7,$8";
 			if(nodeObject != nullptr)
-				ss << ",ST_GeometryFromText($10, 4326)";
+				ss << ",ST_GeometryFromText($9, 4326)";
 			else if(wayObject != nullptr)
-				ss << ",$10";
+				ss << ",$9";
 			else if(relationObject != nullptr)
-				ss << ",$10,$11";
+				ss << ",$9,$10";
 			ss << ") ON CONFLICT DO NOTHING;";
 
 			try
@@ -840,7 +837,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					c.prepare(tablePrefix+"insertoldnode", ss.str());
 					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(false)(wkt.str()).exec();
+						(tagsJson)(osmObject->metaData.visible)(wkt.str()).exec();
 				}
 				else if(wayObject != nullptr)
 				{
@@ -849,7 +846,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					c.prepare(tablePrefix+"insertoldway", ss.str());
 					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(false)(refsJson.str()).exec();
+						(tagsJson)(osmObject->metaData.visible)(refsJson.str()).exec();
 				}
 				else if(relationObject != nullptr)
 				{
@@ -858,7 +855,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					c.prepare(tablePrefix+"insertoldrelation", ss.str());
 					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(false)(refsJson.str())(rolesJson.str()).exec();
+						(tagsJson)(osmObject->metaData.visible)(refsJson.str())(rolesJson.str()).exec();
 				}
 
 			}

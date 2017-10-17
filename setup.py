@@ -8,9 +8,10 @@ from distutils.core import setup, Extension
 
 pgmap_module = Extension('_pgmap',
 				define_macros = [('PYTHON_AWARE', '1')],
-				sources=['pgmap_wrap.cxx', 'util.cpp', 'db.cpp', 'pgmap.cpp', 'cppo5m/o5m.cpp', 
+				sources=['pgmap.i', 'util.cpp', 'db.cpp', 'pgmap.cpp', 'cppo5m/o5m.cpp', 
 					'cppo5m/varint.cpp', 'cppo5m/OsmData.cpp', 'cppo5m/osmxml.cpp', 'cppo5m/cppiso8601/iso8601.cpp',
 					'cppGzip/EncodeGzip.cpp'],
+				swig_opts=['-c++', '-DPYTHON_AWARE', '-DSWIGWORDSIZE64'],
 				libraries = ['pqxx', 'expat', 'z'],
 				language = "c++",
 				extra_compile_args = ["-std=c++11"],
