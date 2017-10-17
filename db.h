@@ -108,6 +108,21 @@ void DumpRelations(pqxx::work *work, const std::string &tablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 
+void GetReplicateDiffNodes(pqxx::work *work, const string &tablePrefix, 
+	bool selectOld,
+	int64_t timestampStart, int64_t timestampEnd,
+	std::shared_ptr<IDataStreamHandler> enc);
+
+void GetReplicateDiffWays(pqxx::work *work, const string &tablePrefix, 
+	bool selectOld,
+	int64_t timestampStart, int64_t timestampEnd,
+	std::shared_ptr<IDataStreamHandler> enc);
+
+void GetReplicateDiffRelations(pqxx::work *work, const string &tablePrefix, 
+	bool selectOld,
+	int64_t timestampStart, int64_t timestampEnd,
+	std::shared_ptr<IDataStreamHandler> enc);
+
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
 	const string &tablePrefix, 
 	class OsmData osmData, 

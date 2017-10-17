@@ -561,6 +561,47 @@ bool PgTransaction::UpdateNextIds(class PgMapError &errStr)
 	return true;
 }
 
+void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd, std::shared_ptr<IDataStreamHandler> &enc)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+
+	std::shared_ptr<class OsmData> osmData(new class OsmData);
+
+	GetReplicateDiffNodes(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffNodes(work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffNodes(work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffNodes(work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffWays(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffWays(work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffWays(work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffWays(work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffRelations(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffRelations(work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffRelations(work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+
+	GetReplicateDiffRelations(work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+
+	enc->StoreIsDiff(false);
+
+	osmData->StreamTo(*enc.get());
+	
+	enc->Reset();
+
+	enc->Finish();
+}
+
 void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")

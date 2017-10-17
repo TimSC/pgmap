@@ -88,6 +88,8 @@ public:
 
 	bool ResetActiveTables(class PgMapError &errStr);
 	bool UpdateNextIds(class PgMapError &errStr);
+	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
+		std::shared_ptr<IDataStreamHandler> &enc);
 	void Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc);
 
 	void Commit();
