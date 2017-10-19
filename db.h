@@ -149,5 +149,11 @@ bool SetNextIdValue(pqxx::connection &c,
 	const string &objType,
 	int64_t value);
 
+int64_t GetAllocatedIdFromDb(pqxx::connection &c,
+	pqxx::work *work, 
+	const string &tablePrefix,
+	const string &objType,
+	string &errStr);
+
 #endif //_COMMON_H
 

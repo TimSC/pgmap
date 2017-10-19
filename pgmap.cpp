@@ -628,6 +628,17 @@ void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc)
 	enc->Finish();
 }
 
+int64_t PgTransaction::GetAllocatedId(const string &type)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+
+	string errStr;
+	return GetAllocatedIdFromDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		type, errStr);
+}
+
 void PgTransaction::Commit()
 {
 	//Release locks

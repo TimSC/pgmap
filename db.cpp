@@ -1696,3 +1696,43 @@ bool SetNextIdValue(pqxx::connection &c,
 	return true;
 }
 
+int64_t GetAllocatedIdFromDb(pqxx::connection &c,
+	pqxx::work *work, 
+	const string &tablePrefix,
+	const string &objType,
+	string &errStr)
+{
+	stringstream sstr;
+	sstr << "SELECT maxid FROM "<< tablePrefix <<"nextids WHERE id='"<<objType<<"';";
+
+	pqxx::result r;
+	try{
+		r = work->exec(sstr.str());
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+
+	int64_t out=-1;
+	if(r.size() == 0)
+		throw runtime_error("Cannot determine ID to allocate");
+	const pqxx::result::tuple row = r[0];
+	const pqxx::result::field field = row[0];
+	if(field.is_null())
+		throw runtime_error("Cannot determine ID to allocate");
+	out = row[0].as<int64_t>();
+
+	stringstream ss;
+	ss << "UPDATE "<< tablePrefix <<"nextids SET maxid="<< out+1 <<" WHERE id ='"<<objType<<"';";	
+	work->exec(ss.str());
+	
+	return out;
+}
+
