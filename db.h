@@ -64,6 +64,16 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
+bool ResetChangesetUidCounts(pqxx::work *work, 
+	const string &parentPrefix, const string &tablePrefix, 
+	string &errStr);
+
+bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::work *work, 
+	const string &objType,
+	const string &tableActivePrefix, 
+	const string &tableStaticPrefix,
+	std::string &errStr);
+
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	const string &excludeTablePrefix);
@@ -136,9 +146,11 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 	const string &tableStaticPrefix,
 	std::string &errStr);
 
-int64_t GetMaxLiveId(pqxx::work *work, 
-	const string &tablePrefix, 
-	const string &objType);
+bool GetMaxFieldInTable(pqxx::work *work, 
+	const string &tableName,
+	const string &field,
+	string &errStr,
+	int64_t &val);
 
 bool ClearNextIdValues(pqxx::work *work, 
 	const string &tablePrefix);
@@ -149,11 +161,18 @@ bool SetNextIdValue(pqxx::connection &c,
 	const string &objType,
 	int64_t value);
 
-int64_t GetAllocatedIdFromDb(pqxx::connection &c,
+bool GetNextId(pqxx::work *work, 
+	const std::string &tablePrefix,
+	const std::string &objType,
+	std::string &errStr,
+	int64_t &out);
+
+bool GetAllocatedIdFromDb(pqxx::connection &c,
 	pqxx::work *work, 
 	const string &tablePrefix,
 	const string &objType,
-	string &errStr);
+	string &errStr,
+	int64_t &val);
 
 #endif //_COMMON_H
 

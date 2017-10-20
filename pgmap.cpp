@@ -44,6 +44,8 @@ bool LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const 
 		work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN "+accessMode+" MODE;");
 		work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN "+accessMode+" MODE;");
 		work->exec("LOCK TABLE "+prefix+ "nextids IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "changesets IN "+accessMode+" MODE;");
+		work->exec("LOCK TABLE "+prefix+ "meta IN "+accessMode+" MODE;");
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -527,36 +529,39 @@ bool PgTransaction::UpdateNextIds(class PgMapError &errStr)
 {
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;
 
 	ClearNextIdValues(work.get(), this->tableStaticPrefix);
 	ClearNextIdValues(work.get(), this->tableActivePrefix);
 
 	//Update next node IDs
-	int64_t maxStaticNode = GetMaxLiveId(work.get(), this->tableStaticPrefix, "node");
-	int64_t maxActiveNode = GetMaxLiveId(work.get(), this->tableActivePrefix, "node");
-	if(maxStaticNode < 1) maxStaticNode = 1;
-	if(maxActiveNode == -1) maxActiveNode = maxStaticNode;
-	
-	SetNextIdValue(*dbconn, work.get(), this->tableStaticPrefix, "node", maxStaticNode+1);
-	SetNextIdValue(*dbconn, work.get(), this->tableActivePrefix, "node", maxActiveNode+1);
+	bool ok = UpdateNextIdsOfType(*dbconn, work.get(), 
+		"node", this->tableActivePrefix, this->tableStaticPrefix,
+		errStrNative);
+	errStr.errStr = errStrNative; if(!ok) return false;
 
 	//Update next way IDs
-	int64_t maxStaticWay = GetMaxLiveId(work.get(), this->tableStaticPrefix, "way");
-	int64_t maxActiveWay = GetMaxLiveId(work.get(), this->tableActivePrefix, "way");
-	if(maxStaticWay < 1) maxStaticWay = 1;
-	if(maxActiveWay == -1) maxActiveWay = maxStaticWay;
-	
-	SetNextIdValue(*dbconn, work.get(), this->tableStaticPrefix, "way", maxStaticWay+1);
-	SetNextIdValue(*dbconn, work.get(), this->tableActivePrefix, "way", maxActiveWay+1);
+	ok = UpdateNextIdsOfType(*dbconn, work.get(), 
+		"way", this->tableActivePrefix, this->tableStaticPrefix,
+		errStrNative);
+	errStr.errStr = errStrNative; if(!ok) return false;
 
 	//Update next relation IDs
-	int64_t maxStaticRelation = GetMaxLiveId(work.get(), this->tableStaticPrefix, "relation");
-	int64_t maxActiveRelation = GetMaxLiveId(work.get(), this->tableActivePrefix, "relation");
-	if(maxStaticRelation < 1) maxStaticRelation = 1;
-	if(maxActiveRelation == -1) maxActiveRelation = maxStaticRelation;
-	
-	SetNextIdValue(*dbconn, work.get(), this->tableStaticPrefix, "relation", maxStaticRelation+1);
-	SetNextIdValue(*dbconn, work.get(), this->tableActivePrefix, "relation", maxActiveRelation+1);
+	ok = UpdateNextIdsOfType(*dbconn, work.get(), 
+		"relation", this->tableActivePrefix, this->tableStaticPrefix,
+		errStrNative);
+	errStr.errStr = errStrNative; if(!ok) return false;
+
+	//Update next changeset and UIDs
+	ok = ResetChangesetUidCounts(work.get(), 
+		"", this->tableStaticPrefix,
+		errStrNative);
+	errStr.errStr = errStrNative; if(!ok) return false;
+
+	ok = ResetChangesetUidCounts(work.get(), 
+		this->tableStaticPrefix, this->tableActivePrefix, 
+		errStrNative);
+	errStr.errStr = errStrNative; if(!ok) return false;
 
 	return true;
 }
@@ -634,9 +639,13 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 
 	string errStr;
-	return GetAllocatedIdFromDb(*dbconn, work.get(),
+	int64_t val;
+	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
-		type, errStr);
+		type, errStr, val);
+	if(!ok)
+		throw runtime_error(errStr);
+	return val;
 }
 
 void PgTransaction::Commit()

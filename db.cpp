@@ -17,6 +17,25 @@ template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxx::res
 		invoc(field.as<T>());
 }
 
+bool DbExec(pqxx::work *work, const string& sql, string &errStr)
+{
+	try
+	{
+		work->exec(sql);
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
 // *********** Filters and decorators *****************
 
 DataStreamRetainIds::DataStreamRetainIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
@@ -1058,6 +1077,117 @@ bool UpdateNextObjectIds(pqxx::work *work,
 	return true;
 }
 
+bool GetMaxObjIdLiveOrOld(pqxx::work *work, const string &tablePrefix, 
+	const std::string &objType, 
+	const std::string &field,
+	std::string errStr,
+	int64_t &val)
+{
+	val = 0;
+	int64_t val1, val2;
+	stringstream ss;
+	ss << tablePrefix << "live" << objType << "s";
+	bool ok = GetMaxFieldInTable(work, ss.str(), field, errStr, val1);
+	if(!ok) return false;
+	stringstream ss2;
+	ss2 << tablePrefix << "old" << objType << "s";
+	ok = GetMaxFieldInTable(work, ss2.str(), field, errStr, val2);
+	if(val2 > val1)
+		val = val2;
+	else
+		val = val1;
+	return ok;
+}
+
+bool ResetChangesetUidCounts(pqxx::work *work, 
+	const string &parentPrefix, const string &tablePrefix, 
+	string &errStr)
+{
+	//Changeset
+	bool ok = true;
+	int64_t maxVal = 0;
+	int64_t val = 0;
+	stringstream st;
+	st << tablePrefix << "changesets";
+
+	if(parentPrefix.size()>0)
+	{
+		ok = GetNextId(work, parentPrefix, "changeset", errStr, val);
+		if(!ok) return false;
+		if(val > maxVal)
+			maxVal = val;
+	}
+	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "node", "changeset", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "way", "changeset", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "relation", "changeset", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+	ok = GetMaxFieldInTable(work, st.str(), "id", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+
+	stringstream ss;
+	ss << "DELETE FROM "<<tablePrefix<<"nextids WHERE id = 'changeset';";
+	ok = DbExec(work, ss.str(), errStr);
+	if(!ok) return false;
+	stringstream ss2;
+	ss2 << "INSERT INTO "<<tablePrefix<<"nextids (id, maxid) VALUES ('changeset', "<<(maxVal+1)<<");";
+	ok = DbExec(work, ss2.str(), errStr);
+	if(!ok) return false;
+
+	//UID
+	maxVal = 0;
+	if(parentPrefix.size()>0)
+	{
+		ok = GetNextId(work, parentPrefix, "uid", errStr, val);
+		if(!ok) return false;
+		if(val > maxVal)
+			maxVal = val;
+	}
+	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "node", "uid", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "way", "uid", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "relation", "uid", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+	ok = GetMaxFieldInTable(work, st.str(), "uid", errStr, val);
+	if(!ok) return false; if(val > maxVal) maxVal = val;
+
+	stringstream ss3;
+	ss3 << "DELETE FROM "<<tablePrefix<<"nextids WHERE id = 'uid';";
+	ok = DbExec(work, ss3.str(), errStr);
+	if(!ok) return false;
+	stringstream ss4;
+	ss4 << "INSERT INTO "<<tablePrefix<<"nextids (id, maxid) VALUES ('uid', "<<(maxVal+1)<<");";
+	ok = DbExec(work, ss4.str(), errStr);
+	if(!ok) return false;
+
+	return true;
+}
+
+bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::work *work, 
+	const string &objType,
+	const string &tableActivePrefix, 
+	const string &tableStaticPrefix,
+	std::string &errStr)
+{
+	stringstream ss;
+	ss << tableStaticPrefix << objType << "s";
+	int64_t maxStaticNode, maxActiveNode;
+	bool ok = GetMaxFieldInTable(work, ss.str(), "id", errStr, maxStaticNode);
+	if(!ok) return false;
+	stringstream ss2;
+	ss2 << tableActivePrefix << objType << "s";
+	ok = GetMaxFieldInTable(work, ss2.str(), "id", errStr, maxActiveNode);
+	if(!ok) return false;
+	if(maxStaticNode < 1) maxStaticNode = 1;
+	if(maxActiveNode == -1) maxActiveNode = maxStaticNode;
+	
+	SetNextIdValue(c, work, tableStaticPrefix, objType, maxStaticNode+1);
+	SetNextIdValue(c, work, tableActivePrefix, objType, maxActiveNode+1);
+	return true;
+}
+
 // ************* Basic API methods ***************
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
@@ -1654,23 +1784,38 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 
 	map<string, int64_t> emptyIdMap;
 	ok = UpdateNextObjectIds(work, tableActivePrefix, nextIdMap, emptyIdMap, errStr);
+	if(!ok) return false;
+
+	//Update next changeset and UIDs
+	ok = ResetChangesetUidCounts(work, 
+		tableStaticPrefix, tableActivePrefix, 
+		errStr);
+	if(!ok) return false;
 
 	return ok;	
 }
 
-int64_t GetMaxLiveId(pqxx::work *work, 
-	const string &tablePrefix, 
-	const string &objType)
+bool GetMaxFieldInTable(pqxx::work *work, 
+	const string &tableName,
+	const string &field,
+	string &errStr,
+	int64_t &val)
 {
+	val = 0;
 	stringstream ss;
-	ss << "SELECT MAX(id) FROM "<<tablePrefix<<"live" << objType << "s;";
+	ss << "SELECT MAX("<<field<<") FROM "<<tableName<<";";
 	pqxx::result r = work->exec(ss.str());
 	if(r.size()==0)
-		throw runtime_error("No rows returned");
+	{
+		errStr = "No rows returned";
+		return false;
+	}
 	const pqxx::result::tuple row = r[0];
-	const pqxx::result::field field = row[0];
-	if(field.is_null()) return -1;
-	return field.as<int64_t>();
+	const pqxx::result::field fieldObj = row[0];
+	if(fieldObj.is_null())
+		return true; //Return zero
+	val = fieldObj.as<int64_t>();
+	return true;
 }
 
 bool ClearNextIdValues(pqxx::work *work, 
@@ -1696,12 +1841,13 @@ bool SetNextIdValue(pqxx::connection &c,
 	return true;
 }
 
-int64_t GetAllocatedIdFromDb(pqxx::connection &c,
-	pqxx::work *work, 
+bool GetNextId(pqxx::work *work, 
 	const string &tablePrefix,
 	const string &objType,
-	string &errStr)
+	string &errStr,
+	int64_t &out)
 {
+	out = -1;
 	stringstream sstr;
 	sstr << "SELECT maxid FROM "<< tablePrefix <<"nextids WHERE id='"<<objType<<"';";
 
@@ -1720,7 +1866,6 @@ int64_t GetAllocatedIdFromDb(pqxx::connection &c,
 		return false;
 	}
 
-	int64_t out=-1;
 	if(r.size() == 0)
 		throw runtime_error("Cannot determine ID to allocate");
 	const pqxx::result::tuple row = r[0];
@@ -1728,11 +1873,27 @@ int64_t GetAllocatedIdFromDb(pqxx::connection &c,
 	if(field.is_null())
 		throw runtime_error("Cannot determine ID to allocate");
 	out = row[0].as<int64_t>();
+	return true;
+}
+
+bool GetAllocatedIdFromDb(pqxx::connection &c,
+	pqxx::work *work, 
+	const string &tablePrefix,
+	const string &objType,
+	string &errStr,
+	int64_t &val)
+{
+	bool ok = GetNextId(work, 
+		tablePrefix,
+		objType,
+		errStr,
+		val);
+	if(!ok) return false;
 
 	stringstream ss;
-	ss << "UPDATE "<< tablePrefix <<"nextids SET maxid="<< out+1 <<" WHERE id ='"<<objType<<"';";	
+	ss << "UPDATE "<< tablePrefix <<"nextids SET maxid="<< val+1 <<" WHERE id ='"<<objType<<"';";	
 	work->exec(ss.str());
 	
-	return out;
+	return true;
 }
 
