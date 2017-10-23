@@ -7,15 +7,6 @@
 #include "cppo5m/OsmData.h"
 #include <set>
 
-struct MetaDataCols
-{
-	int versionCol;
-	int timestampCol;
-	int changesetCol;
-	int uidCol;
-	int usernameCol;
-};
-
 class DataStreamRetainIds : public IDataStreamHandler
 {
 public:
@@ -57,12 +48,6 @@ public:
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles);
 };
-
-void DecodeMetadata(const pqxx::result::const_iterator &c, const MetaDataCols &metaDataCols, class MetaData &metaData);
-void DecodeTags(const pqxx::result::const_iterator &c, int tagsCol, JsonToStringMap &handler);
-void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, JsonToWayMembers &handler);
-void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
-	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
@@ -106,21 +91,6 @@ void DumpWays(pqxx::work *work, const std::string &tablePrefix,
 void DumpRelations(pqxx::work *work, const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	bool order,
-	std::shared_ptr<IDataStreamHandler> enc);
-
-void GetReplicateDiffNodes(pqxx::work *work, const string &tablePrefix, 
-	bool selectOld,
-	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc);
-
-void GetReplicateDiffWays(pqxx::work *work, const string &tablePrefix, 
-	bool selectOld,
-	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc);
-
-void GetReplicateDiffRelations(pqxx::work *work, const string &tablePrefix, 
-	bool selectOld,
-	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc);
 
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 

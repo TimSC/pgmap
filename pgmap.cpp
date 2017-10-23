@@ -3,6 +3,8 @@
 #include "db.h"
 #include "dbids.h"
 #include "dbadmin.h"
+#include "dbdecode.h"
+#include "dbreplicate.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
