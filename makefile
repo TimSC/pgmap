@@ -2,7 +2,7 @@
 
 all: dump extract swigpy2
 
-common = util.cpp db.cpp dbids.cpp dbadmin.cpp dbcommon.cpp dbreplicate.cpp dbdecode.cpp pgmap.cpp cppo5m/o5m.cpp cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/cppiso8601/iso8601.cpp cppGzip/EncodeGzip.cpp
+common = util.cpp dbquery.cpp dbids.cpp dbadmin.cpp dbcommon.cpp dbreplicate.cpp dbdecode.cpp dbstore.cpp dbdump.cpp dbfilters.cpp pgmap.cpp cppo5m/o5m.cpp cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/cppiso8601/iso8601.cpp cppGzip/EncodeGzip.cpp
 
 dump: dump.cpp $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@

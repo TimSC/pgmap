@@ -1,10 +1,13 @@
 
 #include "pgmap.h"
-#include "db.h"
+#include "dbquery.h"
 #include "dbids.h"
 #include "dbadmin.h"
 #include "dbdecode.h"
 #include "dbreplicate.h"
+#include "dbstore.h"
+#include "dbdump.h"
+#include "dbfilters.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
