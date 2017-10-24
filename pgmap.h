@@ -31,7 +31,7 @@ public:
 	int64_t objId, uid, open_timestamp, close_timestamp;
 	std::string username;
 	TagMap tags;
-	bool is_open;
+	bool is_open, bbox_set;
 	double x1, y1, x2, y2;
 };
 
@@ -107,8 +107,10 @@ public:
 		std::shared_ptr<IDataStreamHandler> &enc);
 	void Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc);
 	int64_t GetAllocatedId(const string &type);
-	bool GetChangeset(int64_t objId,
+	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,
+		class PgMapError &errStr);
+	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		class PgMapError &errStr);
 
 	void Commit();

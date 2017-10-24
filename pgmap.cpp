@@ -78,7 +78,7 @@ PgChangeset::PgChangeset()
 	uid = 0;
 	open_timestamp = 0;
 	close_timestamp = 0;
-	is_open = true;
+	is_open = true; bbox_set = false;
 	x1 = 0.0; y1 = 0.0; x2 = 0.0; y2 = 0.0;
 }
 
@@ -101,6 +101,7 @@ PgChangeset& PgChangeset::operator=(const PgChangeset &obj)
 	username = obj.username;
 	tags = obj.tags;
 	is_open = obj.is_open;
+	bbox_set = obj.bbox_set;
 	x1 = obj.x1; y1 = obj.y1; x2 = obj.x2; y2 = obj.y2;
 	return *this;
 }
@@ -691,7 +692,7 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 	return val;
 }
 
-bool PgTransaction::GetChangeset(int64_t objId,
+int PgTransaction::GetChangeset(int64_t objId,
 	class PgChangeset &changesetOut,
 	class PgMapError &errStr)
 {
@@ -699,16 +700,61 @@ bool PgTransaction::GetChangeset(int64_t objId,
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	string errStrNative;	
-	bool ok = GetChangesetFromDb(work.get(),
+	int ret = GetChangesetFromDb(work.get(),
 		this->tableActivePrefix,
 		objId,
 		changesetOut,
+		errStrNative);
+
+	if(ret == -1)
+	{
+		ret = GetChangesetFromDb(work.get(),
+			this->tableStaticPrefix,
+			objId,
+			changesetOut,
+			errStrNative);
+	}
+
+	errStr.errStr = errStrNative;
+	return ret;
+}
+
+bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	string errStrNative;
+	size_t targetNum = 100;
+	bool ok = GetChangesetsFromDb(work.get(),
+		this->tableActivePrefix, "",
+		targetNum,
+		changesetsOut,
 		errStrNative);
 	if(!ok)
 	{
 		errStr.errStr = errStrNative;
 		return false;
 	}
+
+	if(changesetsOut.size() < targetNum)
+	{
+		std::vector<class PgChangeset> changesetsStatic;
+		ok = GetChangesetsFromDb(work.get(),
+			this->tableStaticPrefix,
+			this->tableActivePrefix,
+			targetNum - changesetsOut.size(),
+			changesetsStatic,
+			errStrNative);
+		if(!ok)
+		{
+			errStr.errStr = errStrNative;
+			return false;
+		}
+		changesetsOut.insert(changesetsOut.end(), changesetsStatic.begin(), changesetsStatic.end());
+	}
+
 	return true;
 }
 
