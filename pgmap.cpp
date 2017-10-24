@@ -8,6 +8,7 @@
 #include "dbstore.h"
 #include "dbdump.h"
 #include "dbfilters.h"
+#include "dbchangeset.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
@@ -67,6 +68,41 @@ bool LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const 
 		return false;
 	}
 	return true;
+}
+
+// **********************************************
+
+PgChangeset::PgChangeset()
+{
+	objId = 0;
+	uid = 0;
+	open_timestamp = 0;
+	close_timestamp = 0;
+	is_open = true;
+	x1 = 0.0; y1 = 0.0; x2 = 0.0; y2 = 0.0;
+}
+
+PgChangeset::PgChangeset(const PgChangeset &obj)
+{
+	*this = obj;
+}
+
+PgChangeset::~PgChangeset()
+{
+
+}
+
+PgChangeset& PgChangeset::operator=(const PgChangeset &obj)
+{
+	objId = obj.objId;
+	uid = obj.uid;
+	open_timestamp = obj.open_timestamp;
+	close_timestamp = obj.close_timestamp;
+	username = obj.username;
+	tags = obj.tags;
+	is_open = obj.is_open;
+	x1 = obj.x1; y1 = obj.y1; x2 = obj.x2; y2 = obj.y2;
+	return *this;
 }
 
 // **********************************************
@@ -653,6 +689,27 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 	if(!ok)
 		throw runtime_error(errStr);
 	return val;
+}
+
+bool PgTransaction::GetChangeset(int64_t objId,
+	class PgChangeset &changesetOut,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	string errStrNative;	
+	bool ok = GetChangesetFromDb(work.get(),
+		this->tableActivePrefix,
+		objId,
+		changesetOut,
+		errStrNative);
+	if(!ok)
+	{
+		errStr.errStr = errStrNative;
+		return false;
+	}
+	return true;
 }
 
 void PgTransaction::Commit()

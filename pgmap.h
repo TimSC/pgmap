@@ -20,6 +20,21 @@ public:
 	std::string errStr;
 };
 
+class PgChangeset
+{
+public:
+	PgChangeset();
+	PgChangeset(const PgChangeset &obj);
+	virtual ~PgChangeset();
+	PgChangeset& operator=(const PgChangeset &obj);
+	
+	int64_t objId, uid, open_timestamp, close_timestamp;
+	std::string username;
+	TagMap tags;
+	bool is_open;
+	double x1, y1, x2, y2;
+};
+
 class PgMapQuery
 {
 private:
@@ -92,6 +107,9 @@ public:
 		std::shared_ptr<IDataStreamHandler> &enc);
 	void Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc);
 	int64_t GetAllocatedId(const string &type);
+	bool GetChangeset(int64_t objId,
+		class PgChangeset &changesetOut,
+		class PgMapError &errStr);
 
 	void Commit();
 	void Abort();

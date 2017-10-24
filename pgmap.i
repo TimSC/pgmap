@@ -239,6 +239,22 @@ public:
 	std::string errStr;
 };
 
+%shared_ptr(PgChangeset)
+
+class PgChangeset
+{
+public:
+	PgChangeset();
+	PgChangeset(const PgChangeset &obj);
+	virtual ~PgChangeset();
+	
+	int64_t objId, uid, open_timestamp, close_timestamp;
+	std::string username;
+	TagMap tags;
+	bool is_open;
+	double x1, y1, x2, y2;
+};
+
 %shared_ptr(PgMapQuery)
 
 class PgMapQuery
@@ -288,6 +304,9 @@ public:
 		std::shared_ptr<IDataStreamHandler> &enc);
 	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
 	int64_t GetAllocatedId(const string &type);
+	bool GetChangeset(int64_t objId,
+		class PgChangeset &changesetOut,
+		class PgMapError &errStr);
 
 	void Commit();
 	void Abort();
