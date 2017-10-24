@@ -16,6 +16,9 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 	int yminCol = rows.column_number("ymin");
 	int ymaxCol = rows.column_number("ymax");
 
+	Reader reader;
+	class JsonToStringMap tagHandler;
+
 	for (unsigned int rownum=0; rownum < rows.size(); ++rownum)
 	{
 		const pqxx::result::tuple row = rows[rownum];
@@ -34,9 +37,11 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 
 		if (!row[tagsCol].is_null())
 		{
-			Reader reader;
-			class JsonToStringMap tagHandler;
-			StringStream ss(row[tagsCol].as<string>().c_str());
+			tagHandler.tagMap.clear();
+
+			// Value needs to be copied out to string or rapidjson has problems
+			string tmp = row[tagsCol].as<string>();
+			StringStream ss(tmp.c_str());
 			reader.Parse(ss, tagHandler);
 			changeset.tags = tagHandler.tagMap;
 		}
