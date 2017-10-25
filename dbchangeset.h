@@ -24,4 +24,11 @@ bool SetChangesetInDb(pqxx::connection &c,
 	const class PgChangeset &changeset,
 	std::string &errStr);
 
+bool CloseChangesetInDb(pqxx::connection &c, 
+	pqxx::work *work, 
+	const std::string &tablePrefix,
+	int64_t changesetId,
+	int64_t closedTimestamp,
+	std::string &errStr);
+
 #endif //_DB_CHANGESET_H

@@ -1,6 +1,7 @@
 #include "dbchangeset.h"
 #include "util.h"
 #include "dbstore.h"
+#include "dbcommon.h"
 using namespace std;
 
 void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &changesets)
@@ -159,5 +160,18 @@ bool SetChangesetInDb(pqxx::connection &c,
 		return false;
 	}
 	return true;
+}
+
+bool CloseChangesetInDb(pqxx::connection &c, 
+	pqxx::work *work, 
+	const std::string &tablePrefix,
+	int64_t changesetId,
+	int64_t closedTimestamp,
+	std::string &errStr)
+{
+	stringstream ss;
+	ss << "UPDATE "<< tablePrefix <<"changesets SET is_open=false WHERE id = "<<changesetId<<";";
+
+	return DbExec(work, ss.str(), errStr);
 }
 

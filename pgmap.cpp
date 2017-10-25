@@ -761,6 +761,9 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 	class PgMapError &errStr)
 {
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+
 	class PgChangeset changesetMod(changeset);
 	if(changesetMod.objId != 0)
 		throw invalid_argument("Changeset ID should be zero since it is allocated by pgmap");
@@ -778,6 +781,24 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 	if(!ok)
 		return 0;
 	return cid;
+}
+
+bool PgTransaction::CloseChangeset(int64_t changesetId,
+	int64_t closedTimestamp,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;
+
+	bool ok = CloseChangesetInDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		changesetId,
+		closedTimestamp,
+		errStrNative);
+
+	errStr.errStr = errStrNative;
+	return ok;
 }
 
 void PgTransaction::Commit()
