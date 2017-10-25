@@ -43,6 +43,7 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 	ok = ClearTable(work, tableActivePrefix + "relation_mems_w", errStr);     if(!ok) return false;
 	ok = ClearTable(work, tableActivePrefix + "relation_mems_r", errStr);     if(!ok) return false;
 	ok = ClearTable(work, tableActivePrefix + "nextids", errStr);             if(!ok) return false;
+	ok = ClearTable(work, tableActivePrefix + "changesets", errStr);             if(!ok) return false;
 
 	map<string, int64_t> nextIdMap;
 	ok = GetNextObjectIds(work, 
