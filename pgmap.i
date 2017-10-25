@@ -308,10 +308,13 @@ public:
 		std::shared_ptr<IDataStreamHandler> &enc);
 	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> &enc);
 	int64_t GetAllocatedId(const string &type);
+
 	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,
 		class PgMapError &errStr);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
+		class PgMapError &errStr);
+	int64_t CreateChangeset(const class PgChangeset &changeset,
 		class PgMapError &errStr);
 
 	void Commit();

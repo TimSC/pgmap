@@ -6,6 +6,8 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
 
+void EncodeTags(const TagMap &tagmap, string &out);
+
 bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
 	const string &tablePrefix, 
 	class OsmData osmData, 

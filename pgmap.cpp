@@ -758,6 +758,28 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	return true;
 }
 
+int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
+	class PgMapError &errStr)
+{
+	class PgChangeset changesetMod(changeset);
+	if(changesetMod.objId != 0)
+		throw invalid_argument("Changeset ID should be zero since it is allocated by pgmap");
+
+	int64_t cid = this->GetAllocatedId("changeset");
+	changesetMod.objId = cid;
+	string errStrNative;	
+
+	bool ok = SetChangesetInDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		changesetMod,
+		errStrNative);
+
+	errStr.errStr = errStrNative;
+	if(!ok)
+		return 0;
+	return cid;
+}
+
 void PgTransaction::Commit()
 {
 	//Release locks

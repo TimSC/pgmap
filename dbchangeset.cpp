@@ -1,5 +1,6 @@
 #include "dbchangeset.h"
 #include "util.h"
+#include "dbstore.h"
 using namespace std;
 
 void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &changesets)
@@ -110,6 +111,53 @@ bool GetChangesetsFromDb(pqxx::work *work,
 	pqxx::result r = work->exec(sql.str());
 
 	DecodeRowsToChangesets(r, changesetOut);
+	return true;
+}
+
+bool SetChangesetInDb(pqxx::connection &c, 
+	pqxx::work *work, 
+	const std::string &tablePrefix,
+	const class PgChangeset &changeset,
+	std::string &errStr)
+{
+	//Insert into live table
+	stringstream ss;
+	ss << "INSERT INTO "<< tablePrefix <<"changesets (id, username, uid, tags, open_timestamp, close_timestamp, is_open, geom)";
+	ss << " VALUES ($1,$2,$3,$4,$5,$6,$7,ST_MakeEnvelope($8, $9, $10, $11, 4326));";
+
+	try
+	{
+		c.prepare(tablePrefix+"insertchangeset", ss.str());
+
+		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertchangeset");
+		invoc(changeset.objId);
+		invoc(changeset.username);
+		invoc(changeset.uid);
+
+		string tagJson;
+		EncodeTags(changeset.tags, tagJson);
+		invoc(tagJson);
+
+		invoc(changeset.open_timestamp);
+		invoc(changeset.close_timestamp);
+		invoc(changeset.is_open);
+		invoc(changeset.x1);
+		invoc(changeset.y1);
+		invoc(changeset.x2);
+		invoc(changeset.y2);
+
+		invoc.exec();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
 	return true;
 }
 
