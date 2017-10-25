@@ -1,11 +1,12 @@
 #include "dbcommon.h"
 using namespace std;
 
-bool DbExec(pqxx::work *work, const string& sql, string &errStr)
+bool DbExec(pqxx::work *work, const string& sql, string &errStr, size_t *rowsAffected)
 {
+	pqxx::result r;
 	try
 	{
-		work->exec(sql);
+		r = work->exec(sql);
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -17,6 +18,8 @@ bool DbExec(pqxx::work *work, const string& sql, string &errStr)
 		errStr = e.what();
 		return false;
 	}
+	if(rowsAffected != nullptr)
+		*rowsAffected = r.affected_rows();
 	return true;
 }
 

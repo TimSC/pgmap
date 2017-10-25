@@ -29,6 +29,15 @@ bool CloseChangesetInDb(pqxx::connection &c,
 	const std::string &tablePrefix,
 	int64_t changesetId,
 	int64_t closedTimestamp,
+	size_t &rowsAffectedOut,
 	std::string &errStr);
+
+bool CopyChangesetToActiveInDb(pqxx::connection &c, 
+	pqxx::work *work, 
+	const std::string &staticPrefix,
+	const std::string &activePrefix,
+	int64_t changesetId,
+	size_t &rowsAffected,
+	std::string &errStrNative);
 
 #endif //_DB_CHANGESET_H

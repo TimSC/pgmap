@@ -108,6 +108,7 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 	pqxx::work *work, 
 	const string &tablePrefix,
 	const string &objType,
+	bool increment,
 	string &errStr,
 	int64_t &val)
 {
@@ -118,11 +119,13 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 		val);
 	if(!ok) return false;
 
-	stringstream ss;
-	ss << "UPDATE "<< tablePrefix <<"nextids SET maxid="<< val+1 <<" WHERE id ='"<<objType<<"';";	
-	work->exec(ss.str());
-	
-	return true;
+	if(increment)
+	{
+		stringstream ss;
+		ss << "UPDATE "<< tablePrefix <<"nextids SET maxid="<< val+1 <<" WHERE id ='"<<objType<<"';";	
+		ok = DbExec(work, ss.str(), errStr);
+	}
+	return ok;
 }
 
 bool ResetChangesetUidCounts(pqxx::work *work, 

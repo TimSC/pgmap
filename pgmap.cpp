@@ -686,7 +686,22 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 	int64_t val;
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
-		type, errStr, val);
+		type, true, errStr, val);
+	if(!ok)
+		throw runtime_error(errStr);
+	return val;
+}
+
+int64_t PgTransaction::PeekNextAllocatedId(const string &type)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	string errStr;
+	int64_t val;
+	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		type, false, errStr, val);
 	if(!ok)
 		throw runtime_error(errStr);
 	return val;
@@ -790,12 +805,50 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 	string errStrNative;
+	size_t rowsAffected = 0;
 
 	bool ok = CloseChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		changesetId,
 		closedTimestamp,
+		rowsAffected,
 		errStrNative);
+
+	if(!ok)
+	{
+		errStr.errStr = errStrNative;
+		return false;
+	}
+
+	if(rowsAffected == 0)
+	{
+		//Close a changeset in the static tables by copying to modify table
+		//and setting the is_open flag to false.
+		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
+			this->tableStaticPrefix,
+			this->tableActivePrefix,
+			changesetId,
+			rowsAffected,
+			errStrNative);
+
+		if(!ok)
+		{
+			errStr.errStr = errStrNative;
+			return false;
+		}
+		if(rowsAffected == 0)
+		{
+			errStr.errStr = "No changeset found in active or static table";
+			return false;
+		}
+
+		ok = CloseChangesetInDb(*dbconn, work.get(),
+			this->tableActivePrefix,
+			changesetId,
+			closedTimestamp,
+			rowsAffected,
+			errStrNative);
+	}
 
 	errStr.errStr = errStrNative;
 	return ok;

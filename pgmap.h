@@ -106,7 +106,9 @@ public:
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
 		std::shared_ptr<IDataStreamHandler> &enc);
 	void Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc);
+
 	int64_t GetAllocatedId(const string &type);
+	int64_t PeekNextAllocatedId(const string &type);
 
 	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,

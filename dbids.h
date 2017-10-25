@@ -36,6 +36,7 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 	pqxx::work *work, 
 	const string &tablePrefix,
 	const string &objType,
+	bool increment,
 	string &errStr,
 	int64_t &val);
 

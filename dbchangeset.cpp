@@ -132,20 +132,42 @@ bool SetChangesetInDb(pqxx::connection &c,
 
 		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertchangeset");
 		invoc(changeset.objId);
-		invoc(changeset.username);
-		invoc(changeset.uid);
+		if(changeset.username.size() > 0)
+			invoc(changeset.username);
+		else
+			invoc();
+		if(changeset.uid != 0)
+			invoc(changeset.uid);
+		else
+			invoc();
 
 		string tagJson;
 		EncodeTags(changeset.tags, tagJson);
 		invoc(tagJson);
 
-		invoc(changeset.open_timestamp);
-		invoc(changeset.close_timestamp);
+		if(changeset.open_timestamp != 0)
+			invoc(changeset.open_timestamp);
+		else
+			invoc();
+		if(changeset.close_timestamp != 0)
+			invoc(changeset.close_timestamp);
+		else
+			invoc();
 		invoc(changeset.is_open);
-		invoc(changeset.x1);
-		invoc(changeset.y1);
-		invoc(changeset.x2);
-		invoc(changeset.y2);
+		if(changeset.bbox_set)
+		{
+			invoc(changeset.x1);
+			invoc(changeset.y1);
+			invoc(changeset.x2);
+			invoc(changeset.y2);
+		}
+		else
+		{
+			invoc();
+			invoc();
+			invoc();
+			invoc();
+		}
 
 		invoc.exec();
 	}
@@ -167,11 +189,41 @@ bool CloseChangesetInDb(pqxx::connection &c,
 	const std::string &tablePrefix,
 	int64_t changesetId,
 	int64_t closedTimestamp,
+	size_t &rowsAffectedOut,
 	std::string &errStr)
 {
 	stringstream ss;
 	ss << "UPDATE "<< tablePrefix <<"changesets SET is_open=false WHERE id = "<<changesetId<<";";
 
-	return DbExec(work, ss.str(), errStr);
+	bool ok = DbExec(work, ss.str(), errStr, &rowsAffectedOut);
+
+	return ok;
+}
+
+bool CopyChangesetToActiveInDb(pqxx::connection &c, 
+	pqxx::work *work, 
+	const std::string &staticPrefix,
+	const std::string &activePrefix,
+	int64_t changesetId,
+	size_t &rowsAffected,
+	std::string &errStrNative)
+{
+	class PgChangeset changeset;
+	int ret = GetChangesetFromDb(work, 
+		staticPrefix,
+		changesetId,
+		changeset,
+		errStrNative);
+
+	if(ret <= 0)
+		return ret != 0;
+
+	bool ok = SetChangesetInDb(c, 
+		work, 
+		activePrefix,
+		changeset,
+		errStrNative);
+
+	return ok;
 }
 
