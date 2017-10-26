@@ -1,7 +1,10 @@
 pgmap
 =====
 
-C++ SWIG module for accessing microcosm's postgis OSM map GIS schema. SWIG can produce a python module containing the functionality, as well as for several other languages.
+C++ SWIG module for accessing microcosm's postgis OSM map GIS schema. It also provides OSM xml and o5m encoding/decoding, because it is far faster than processing this in C++ than within native python. SWIG can produce a python module containing the functionality, as well as for several other languages. 
+
+Installation
+------------
 
 The tools to configure and import the postgis database are here: https://github.com/TimSC/osm2pgcopy (This will eventually be merged into this library and pycrocosm.)
 
@@ -27,11 +30,11 @@ To use this library using Python 2 (note: python 3 support is planned):
 
 	cp config.cfg.template config.cfg
 
-Hopefully you have already imported some data into Add your database config info to config.cfg then:
+Hopefully you have already imported some data into postgis. Add your database config info to config.cfg then check we can connect:
 
 	python test.py
 
-SWIGWORDSIZE64 assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
+The SWIGWORDSIZE64 option assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
 
 Database Design
 ---------------
@@ -41,4 +44,19 @@ Django has an integrated unit test system. This keeps seperate live ("mod") and 
 Another design choice, based on most of the map data is unchanging, is to maintain separate static map tables which don't change even when edits occur. This allows a lengthy map import to be done once and left unchanged. Unfortunately, this makes map query logic more complex, since both the static and active tables need to be checked for objects.
 
 It is quite possibly to import data into the active table and leave the static tables empty.
+
+All reads and writes occur with Postgresql transactions. This ensures database reads see a consistent version of the database, as well as making sure writes are atomic (they are entirely committed or entirely aborted).
+
+Guide to source
+---------------
+
+pgmap.h Public interface to library
+db*.h Low level SQL code to access database
+
+Work in progress
+----------------
+
+* Fix changeset handling, updating tags, expanding bbox.
+* Move osm2pgcopy functionality into this library.
+
 
