@@ -50,13 +50,13 @@ All reads and writes occur with Postgresql transactions. This ensures database r
 Guide to source
 ---------------
 
-pgmap.h Public interface to library
-db*.h Low level SQL code to access database
+* pgmap.h Public interface to library
+* db*.h Low level SQL code to access database
 
 Work in progress
 ----------------
 
 * Fix changeset handling, updating tags, expanding bbox.
 * Move osm2pgcopy functionality into this library.
-
+* Probably should add doxygen documentation (or more comments generally)
 
