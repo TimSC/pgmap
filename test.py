@@ -19,15 +19,17 @@ if __name__=="__main__":
 
 	p = pgmap.PgMap("dbname={} user={} password='{}' hostaddr={} port=5432".format(
 		settings["dbname"], settings["dbuser"], settings["dbpass"], settings["dbhost"]), 
-		settings["dbtableprefix"])
+		settings["dbtableprefix"], settings["dbtabletestprefix"])
 	print ("Connected to database", p.Ready())
+
+	t = p.GetTransaction(b"ACCESS SHARE")
 
 	if 0:
 		sio = io.BytesIO()
 		#enc = pgmap.PyO5mEncode(sio)
 		enc = pgmap.PyOsmXmlEncode(sio)
 
-		print (p.MapQuery((-1.1473846,50.7360206,-0.9901428,50.8649113), 0, enc))
+		print (t.MapQuery((-1.1473846,50.7360206,-0.9901428,50.8649113), 0, enc))
 
 		data = sio.getvalue()
 		print (len(data), "bytes")
@@ -35,10 +37,12 @@ if __name__=="__main__":
 	if 1:
 		osmData = pgmap.OsmData()
 		objectIds = [1000594005591, 1000595178493, 1000594446551]
-		p.GetObjectsById("node", pgmap.seti64(objectIds), osmData);
+		t.GetObjectsById("node", pgmap.seti64(objectIds), osmData);
 		print (len(osmData.nodes))
 		for i in range(len(osmData.nodes)):
 			node = osmData.nodes[i]
 			print (type(node))
 			print (node.objId, node.lat, node.lon)
+
+	t.Commit()
 
