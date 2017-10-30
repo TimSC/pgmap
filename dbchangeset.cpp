@@ -184,6 +184,64 @@ bool SetChangesetInDb(pqxx::connection &c,
 	return true;
 }
 
+int UpdateChangesetInDb(pqxx::connection &c, 
+	pqxx::work *work, 
+	const std::string &tablePrefix,
+	const class PgChangeset &changeset,
+	std::string &errStr)
+{
+	//Insert into live table
+	stringstream ss;
+	ss << "UPDATE "<< tablePrefix <<"changesets SET username=$1, uid=$2, tags=$3, open_timestamp=$4, close_timestamp=$5, ";
+	ss << "is_open=$6, geom=ST_MakeEnvelope($7, $8, $9, $10, 4326)";
+	ss << " WHERE id = $11;";
+	int rowsAffected = 0;
+
+	try
+	{
+		c.prepare(tablePrefix+"updatechangeset", ss.str());
+
+		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatechangeset");
+		invoc(changeset.username);
+		invoc(changeset.uid);
+		string tagJson;
+		EncodeTags(changeset.tags, tagJson);
+		invoc(tagJson);
+		invoc(changeset.open_timestamp);
+		invoc(changeset.close_timestamp);
+		invoc(changeset.is_open);
+		if(changeset.bbox_set)
+		{
+			invoc(changeset.x1);
+			invoc(changeset.y1);
+			invoc(changeset.x2);
+			invoc(changeset.y2);
+		}
+		else
+		{
+			invoc();
+			invoc();
+			invoc();
+			invoc();
+		}
+		invoc(changeset.objId);
+
+		pqxx::result result = invoc.exec();
+		rowsAffected = result.affected_rows();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return -1;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return -1;
+	}
+	return rowsAffected;
+}
+
 bool CloseChangesetInDb(pqxx::connection &c, 
 	pqxx::work *work, 
 	const std::string &tablePrefix,

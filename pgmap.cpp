@@ -798,6 +798,53 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 	return cid;
 }
 
+bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+
+	string errStrNative;	
+
+	//Attempt to update in active table
+	int rowsAffected = UpdateChangesetInDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		changeset,
+		errStrNative);
+
+	if(rowsAffected < 0)
+	{
+		errStr.errStr = errStrNative;
+		return false;
+	}
+
+	if(rowsAffected > 0)
+		return true; //Success
+
+	//Update a changeset in the static tables by copying to active table
+	//and updating its values there
+	size_t rowsAffected2 = 0;
+	bool ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
+		this->tableStaticPrefix,
+		this->tableActivePrefix,
+		changeset.objId,
+		rowsAffected2,
+		errStrNative);
+
+	if(!ok)
+	{
+		errStr.errStr = errStrNative;
+		return false;
+	}
+	if(rowsAffected2 == 0)
+	{
+		errStr.errStr = "No changeset found in active or static table";
+		return false;
+	}
+
+	return rowsAffected2 > 0;
+}
+
 bool PgTransaction::CloseChangeset(int64_t changesetId,
 	int64_t closedTimestamp,
 	class PgMapError &errStr)
@@ -822,7 +869,7 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 
 	if(rowsAffected == 0)
 	{
-		//Close a changeset in the static tables by copying to modify table
+		//Close a changeset in the static tables by copying to active table
 		//and setting the is_open flag to false.
 		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
 			this->tableStaticPrefix,

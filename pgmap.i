@@ -318,6 +318,8 @@ public:
 		class PgMapError &errStr);
 	int64_t CreateChangeset(const class PgChangeset &changeset,
 		class PgMapError &errStr);
+	bool UpdateChangeset(const class PgChangeset &changeset,
+		class PgMapError &errStr);
 	bool CloseChangeset(int64_t changesetId,
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
