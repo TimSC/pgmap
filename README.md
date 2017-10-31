@@ -53,6 +53,11 @@ Guide to source
 * pgmap.h Public interface to library
 * db*.h Low level SQL code to access database
 
+Optimizing postgresql
+---------------------
+
+Postgresql can run faster if shared_buffers is increased in /etc/postgresql/9.5/main/postgresql.conf to about a quarter of total memory. (Having a large amount of memory wouldn't hurt either.) This is known to improve dump performance since the query has to interate over an index.
+
 Work in progress
 ----------------
 
