@@ -18,7 +18,7 @@ bool GetChangesetsFromDb(pqxx::work *work,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr);
 
-bool SetChangesetInDb(pqxx::connection &c, 
+bool InsertChangesetInDb(pqxx::connection &c, 
 	pqxx::work *work, 
 	const std::string &tablePrefix,
 	const class PgChangeset &changeset,

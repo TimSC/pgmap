@@ -115,7 +115,7 @@ bool GetChangesetsFromDb(pqxx::work *work,
 	return true;
 }
 
-bool SetChangesetInDb(pqxx::connection &c, 
+bool InsertChangesetInDb(pqxx::connection &c, 
 	pqxx::work *work, 
 	const std::string &tablePrefix,
 	const class PgChangeset &changeset,
@@ -251,7 +251,7 @@ bool CloseChangesetInDb(pqxx::connection &c,
 	std::string &errStr)
 {
 	stringstream ss;
-	ss << "UPDATE "<< tablePrefix <<"changesets SET is_open=false WHERE id = "<<changesetId<<";";
+	ss << "UPDATE "<< tablePrefix <<"changesets SET is_open=false, close_timestamp="<<closedTimestamp<<" WHERE id = "<<changesetId<<";";
 
 	bool ok = DbExec(work, ss.str(), errStr, &rowsAffectedOut);
 
@@ -276,7 +276,7 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	if(ret <= 0)
 		return ret != 0;
 
-	bool ok = SetChangesetInDb(c, 
+	bool ok = InsertChangesetInDb(c, 
 		work, 
 		activePrefix,
 		changeset,

@@ -787,7 +787,7 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 	changesetMod.objId = cid;
 	string errStrNative;	
 
-	bool ok = SetChangesetInDb(*dbconn, work.get(),
+	bool ok = InsertChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		changesetMod,
 		errStrNative);
