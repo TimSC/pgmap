@@ -14,6 +14,9 @@ void DecodeMetadata(const pqxx::result::const_iterator &c, const MetaDataCols &m
 		metaData.username = "";
 	else
 		metaData.username = c[metaDataCols.usernameCol].c_str();
+	metaData.visible = true;
+	if(metaDataCols.visibleCol >= 0)
+		metaData.visible = c[metaDataCols.visibleCol].as<bool>();
 }
 
 void DecodeTags(const pqxx::result::const_iterator &c, int tagsCol, JsonToStringMap &handler)
@@ -83,9 +86,15 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	metaDataCols.changesetCol = rows.column_number("changeset");
 	metaDataCols.usernameCol = rows.column_number("username");
 	metaDataCols.uidCol = rows.column_number("uid");
-	//int visibleCol = rows.column_number("visible");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
+	metaDataCols.visibleCol = -1;
+	try
+	{
+		metaDataCols.visibleCol = rows.column_number("visible");
+	}
+	catch (invalid_argument &err) {}
+	
 	int tagsCol = rows.column_number("tags");
 	int latCol = rows.column_number("lat");
 	int lonCol = rows.column_number("lon");
@@ -93,8 +102,6 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
 
 		int64_t objId = c[idCol].as<int64_t>();
-		//if(objId == 314382649)
-		//	throw std::runtime_error("Not the dreaded 314382649");
 		double lat = atof(c[latCol].c_str());
 		double lon = atof(c[lonCol].c_str());
 
@@ -136,9 +143,15 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 	metaDataCols.changesetCol = rows.column_number("changeset");
 	metaDataCols.usernameCol = rows.column_number("username");
 	metaDataCols.uidCol = rows.column_number("uid");
-	//int visibleCol = rows.column_number("visible");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
+	metaDataCols.visibleCol = -1;
+	try
+	{
+		metaDataCols.visibleCol = rows.column_number("visible");
+	}
+	catch (invalid_argument &err) {}
+
 	int tagsCol = rows.column_number("tags");
 	int membersCol = rows.column_number("members");
 
@@ -189,9 +202,15 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 		metaDataCols.changesetCol = rows.column_number("changeset");
 		metaDataCols.usernameCol = rows.column_number("username");
 		metaDataCols.uidCol = rows.column_number("uid");
-		//int visibleCol = rows.column_number("visible");
 		metaDataCols.timestampCol = rows.column_number("timestamp");
 		metaDataCols.versionCol = rows.column_number("version");
+		metaDataCols.visibleCol = -1;
+		try
+		{
+			metaDataCols.visibleCol = rows.column_number("visible");
+		}
+		catch (invalid_argument &err) {}
+
 		int tagsCol = rows.column_number("tags");
 		int membersCol = rows.column_number("members");
 		int membersRolesCol = rows.column_number("memberroles");

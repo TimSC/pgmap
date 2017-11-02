@@ -15,6 +15,7 @@ struct MetaDataCols
 	int changesetCol;
 	int uidCol;
 	int usernameCol;
+	int visibleCol;
 };
 
 void DecodeMetadata(const pqxx::result::const_iterator &c, const MetaDataCols &metaDataCols, class MetaData &metaData);
