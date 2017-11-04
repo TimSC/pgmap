@@ -290,7 +290,7 @@ public:
 	std::shared_ptr<class PgMapQuery> GetQueryMgr();
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
-		std::shared_ptr<IDataStreamHandler> &out);
+		std::shared_ptr<IDataStreamHandler> out);
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,

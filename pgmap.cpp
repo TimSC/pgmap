@@ -461,10 +461,13 @@ shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
 	return out;
 }
 
-void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> &out)
+void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> out)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	if(objectIds.size()==0)
+		return;
 
 	if(type == "node")
 	{
@@ -558,19 +561,23 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 }
 
 void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjects,
-	std::shared_ptr<class OsmData> outputObjects)
+	std::shared_ptr<class OsmData> outAffectedObjects)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
+	//Modified nodes are considered to be affected
+	std::set<int64_t> nodeIds, affectedNodeIds, parentWayIds;
+	outAffectedObjects->nodes = inputObjects->nodes;
+	for(size_t i=0; i<outAffectedObjects->nodes.size(); i++)
+		affectedNodeIds.insert(outAffectedObjects->nodes[i].objId);
+
 	//For all nodes modified, find all parent ways and relations affected
-	std::set<int64_t> nodeIds, parentWayIds;
 	for(size_t i=0; i<inputObjects->nodes.size(); i++)
 		nodeIds.insert(inputObjects->nodes[i].objId);
-	std::shared_ptr<class OsmData> parentObjs(new class OsmData());
-	GetWaysForNodes(nodeIds, parentObjs);
-	for(size_t i=0; i<parentObjs->ways.size(); i++)
-		parentWayIds.insert(parentObjs->ways[i].objId);
+	GetWaysForNodes(nodeIds, outAffectedObjects);
+	for(size_t i=0; i<outAffectedObjects->ways.size(); i++)
+		parentWayIds.insert(outAffectedObjects->ways[i].objId);
 	for(size_t i=0; i<inputObjects->ways.size(); i++)
 	{
 		class OsmWay &way = inputObjects->ways[i];
@@ -578,15 +585,15 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 		if(it == parentWayIds.end())
 		{
 			parentWayIds.insert(way.objId);
-			parentObjs->ways.push_back(way);
+			outAffectedObjects->ways.push_back(way);
 		}
 	}
 
-	GetRelationsForObjs("node", nodeIds, parentObjs);
-	GetRelationsForObjs("way", parentWayIds, parentObjs);
+	GetRelationsForObjs("node", nodeIds, outAffectedObjects);
+	GetRelationsForObjs("way", parentWayIds, outAffectedObjects);
 	std::set<int64_t> parentRelationIds, knownRelationIds;
-	for(size_t i=0; i<parentObjs->relations.size(); i++)
-		parentRelationIds.insert(parentObjs->relations[i].objId);
+	for(size_t i=0; i<outAffectedObjects->relations.size(); i++)
+		parentRelationIds.insert(outAffectedObjects->relations[i].objId);
 	for(size_t i=0; i<inputObjects->relations.size(); i++)
 	{
 		class OsmRelation &relation = inputObjects->relations[i];
@@ -594,7 +601,7 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 		if(it == parentRelationIds.end())
 		{
 			parentRelationIds.insert(relation.objId);
-			parentObjs->relations.push_back(relation);
+			outAffectedObjects->relations.push_back(relation);
 		}
 	}
 
@@ -612,7 +619,7 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 			auto it = knownRelationIds.find(relation.objId);
 			if(it == knownRelationIds.end())
 			{
-				parentObjs->relations.push_back(relation);
+				outAffectedObjects->relations.push_back(relation);
 				knownRelationIds.insert(relation.objId);
 				parentRelationIds.insert(relation.objId);
 			}
@@ -620,12 +627,103 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 		depth ++;
 	}
 
-	outputObjects->nodes = parentObjs->nodes;
-	outputObjects->ways = parentObjs->ways;
-	outputObjects->relations = parentObjs->relations;
+	//For affected parents, find all referenced (child) objects, starting 
+	//with relations, then ways, then nodes.
 
-	//For affected parents, find all referenced (child) objects
-	
+	std::vector<class OsmRelation> currentRelations = outAffectedObjects->relations;
+	depth = 0;
+	while(currentRelations.size() > 0 and depth < 10)
+	{
+		std::set<int64_t> memberRelationIds;
+		for(size_t i=0; i<currentRelations.size(); i++)
+		{
+			class OsmRelation &relation = currentRelations[i];
+
+			//Iterate over members, find relations
+			for(size_t j=0;j<relation.refTypeStrs.size(); j++)
+			{		
+				if(relation.refTypeStrs[j] != "relation")
+					continue;
+			
+				auto it = knownRelationIds.find(relation.refIds[j]);
+				if(it != knownRelationIds.end())
+					continue; //Relation already known
+				memberRelationIds.insert(relation.refIds[j]);
+			}
+		}
+
+		std::shared_ptr<class OsmData> newMemberObjs(new class OsmData());
+		GetObjectsById("relation", memberRelationIds, newMemberObjs);
+		for(size_t i=0; i<newMemberObjs->relations.size(); i++)
+		{
+			class OsmRelation &relation = newMemberObjs->relations[i];
+			knownRelationIds.insert(relation.objId);
+			outAffectedObjects->relations.push_back(relation);
+		}
+		currentRelations = newMemberObjs->relations;
+
+		depth ++;
+	}
+
+	//For affected relations, get all way members
+	std::set<int64_t> memberWayIds;
+	for(size_t i=0; i<outAffectedObjects->relations.size(); i++)
+	{
+		class OsmRelation &relation = outAffectedObjects->relations[i];
+
+		//Iterate over members, find ways
+		for(size_t j=0;j<relation.refTypeStrs.size(); j++)
+		{		
+			if(relation.refTypeStrs[j] != "way")
+				continue;
+		
+			auto it = parentWayIds.find(relation.refIds[j]);
+			if(it != parentWayIds.end())
+				continue; //Way already known
+			memberWayIds.insert(relation.refIds[j]);
+		}
+	}
+
+	std::shared_ptr<class OsmData> newMemberObjs(new class OsmData());
+	GetObjectsById("way", memberWayIds, newMemberObjs);
+	for(size_t i=0; i<newMemberObjs->ways.size(); i++)
+	{
+		class OsmWay &way = newMemberObjs->ways[i];
+		parentWayIds.insert(way.objId);
+		outAffectedObjects->ways.push_back(way);
+	}
+
+	//Get all member nodes
+	std::set<int64_t> memberNodeIds;
+	for(size_t i=0; i<currentRelations.size(); i++)
+	{
+		class OsmRelation &relation = currentRelations[i];
+
+		//Iterate over relation members, find nodes
+		for(size_t j=0;j<relation.refTypeStrs.size(); j++)
+		{		
+			if(relation.refTypeStrs[j] != "node")
+				continue;
+		
+			auto it = affectedNodeIds.find(relation.refIds[j]);
+			if(it != affectedNodeIds.end())
+				continue; //Way already known
+			memberNodeIds.insert(relation.refIds[j]);
+		}
+	}
+	for(size_t i=0; i<outAffectedObjects->ways.size(); i++)
+	{
+		class OsmWay &way = outAffectedObjects->ways[i];
+		//Iterate over way members, find nodes
+		for(size_t j=0;j<way.refs.size(); j++)
+		{
+			auto it = affectedNodeIds.find(way.refs[j]);
+			if(it != affectedNodeIds.end())
+				continue; //Way already known
+			memberNodeIds.insert(way.refs[j]);
+		}
+	}
+	GetObjectsById("node", memberNodeIds, outAffectedObjects);
 }
 
 bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
