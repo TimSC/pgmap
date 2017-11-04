@@ -528,7 +528,7 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 }
 
 void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds, 
-	std::shared_ptr<IDataStreamHandler> &out)
+	std::shared_ptr<IDataStreamHandler> out)
 {
 	GetLiveWaysThatContainNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
 
@@ -536,7 +536,7 @@ void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds,
 }
 
 void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
-	std::shared_ptr<IDataStreamHandler> &out)
+	std::shared_ptr<IDataStreamHandler> out)
 {
 	if(type.size() == 0)
 		throw invalid_argument("Type string cannot be zero length");
@@ -555,6 +555,77 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 		GetLiveRelationsForObjects(work.get(), this->tableActivePrefix, "", 
 			type[0], objectIds, it, 1000, empty, out);
 	}
+}
+
+void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjects,
+	std::shared_ptr<class OsmData> outputObjects)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	//For all nodes modified, find all parent ways and relations affected
+	std::set<int64_t> nodeIds, parentWayIds;
+	for(size_t i=0; i<inputObjects->nodes.size(); i++)
+		nodeIds.insert(inputObjects->nodes[i].objId);
+	std::shared_ptr<class OsmData> parentObjs(new class OsmData());
+	GetWaysForNodes(nodeIds, parentObjs);
+	for(size_t i=0; i<parentObjs->ways.size(); i++)
+		parentWayIds.insert(parentObjs->ways[i].objId);
+	for(size_t i=0; i<inputObjects->ways.size(); i++)
+	{
+		class OsmWay &way = inputObjects->ways[i];
+		auto it = parentWayIds.find(way.objId);
+		if(it == parentWayIds.end())
+		{
+			parentWayIds.insert(way.objId);
+			parentObjs->ways.push_back(way);
+		}
+	}
+
+	GetRelationsForObjs("node", nodeIds, parentObjs);
+	GetRelationsForObjs("way", parentWayIds, parentObjs);
+	std::set<int64_t> parentRelationIds, knownRelationIds;
+	for(size_t i=0; i<parentObjs->relations.size(); i++)
+		parentRelationIds.insert(parentObjs->relations[i].objId);
+	for(size_t i=0; i<inputObjects->relations.size(); i++)
+	{
+		class OsmRelation &relation = inputObjects->relations[i];
+		auto it = parentRelationIds.find(relation.objId);
+		if(it == parentRelationIds.end())
+		{
+			parentRelationIds.insert(relation.objId);
+			parentObjs->relations.push_back(relation);
+		}
+	}
+
+	knownRelationIds = parentRelationIds;
+	int depth = 0;
+	while(parentRelationIds.size() > 0 and depth < 10)
+	{
+		std::shared_ptr<class OsmData> parentRelationObjs(new class OsmData());
+		GetRelationsForObjs("relation", parentRelationIds, parentRelationObjs);
+		
+		parentRelationIds.clear();
+		for(size_t i=0; i<parentRelationObjs->relations.size(); i++)
+		{
+			class OsmRelation &relation = parentRelationObjs->relations[i];
+			auto it = knownRelationIds.find(relation.objId);
+			if(it == knownRelationIds.end())
+			{
+				parentObjs->relations.push_back(relation);
+				knownRelationIds.insert(relation.objId);
+				parentRelationIds.insert(relation.objId);
+			}
+		}
+		depth ++;
+	}
+
+	outputObjects->nodes = parentObjs->nodes;
+	outputObjects->ways = parentObjs->ways;
+	outputObjects->relations = parentObjs->relations;
+
+	//For affected parents, find all referenced (child) objects
+	
 }
 
 bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
@@ -610,7 +681,7 @@ bool PgTransaction::UpdateNextIds(class PgMapError &errStr)
 	return true;
 }
 
-void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd, std::shared_ptr<IDataStreamHandler> &enc)
+void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd, std::shared_ptr<IDataStreamHandler> enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -651,7 +722,7 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 	enc->Finish();
 }
 
-void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc)
+void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");

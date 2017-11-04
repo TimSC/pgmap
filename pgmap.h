@@ -97,15 +97,17 @@ public:
 		bool saveToStaticTables,
 		class PgMapError &errStr);
 	void GetWaysForNodes(const std::set<int64_t> &objectIds, 
-		std::shared_ptr<IDataStreamHandler> &out);	
+		std::shared_ptr<IDataStreamHandler> out);	
 	void GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
-		std::shared_ptr<IDataStreamHandler> &out);	
+		std::shared_ptr<IDataStreamHandler> out);	
+	void GetAffectedObjects(std::shared_ptr<class OsmData> inputObjects,
+		std::shared_ptr<class OsmData> outputObjects);
 
 	bool ResetActiveTables(class PgMapError &errStr);
 	bool UpdateNextIds(class PgMapError &errStr);
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
-		std::shared_ptr<IDataStreamHandler> &enc);
-	void Dump(bool order, std::shared_ptr<IDataStreamHandler> &enc);
+		std::shared_ptr<IDataStreamHandler> enc);
+	void Dump(bool order, std::shared_ptr<IDataStreamHandler> enc);
 
 	int64_t GetAllocatedId(const string &type);
 	int64_t PeekNextAllocatedId(const string &type);
