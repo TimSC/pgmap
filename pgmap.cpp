@@ -702,7 +702,7 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 		outAffectedObjects->ways.push_back(way);
 	}
 
-	//Get all member nodes
+	//For affected relations, get all member node IDs
 	std::set<int64_t> memberNodeIds;
 	for(size_t i=0; i<currentRelations.size(); i++)
 	{
@@ -720,6 +720,8 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 			memberNodeIds.insert(relation.refIds[j]);
 		}
 	}
+
+	//For affected ways, get member node IDs 
 	for(size_t i=0; i<outAffectedObjects->ways.size(); i++)
 	{
 		class OsmWay &way = outAffectedObjects->ways[i];
@@ -728,7 +730,7 @@ void PgTransaction::GetAffectedObjects(std::shared_ptr<class OsmData> inputObjec
 		{
 			auto it = affectedNodeIds.find(way.refs[j]);
 			if(it != affectedNodeIds.end())
-				continue; //Way already known
+				continue; //Node already known
 			memberNodeIds.insert(way.refs[j]);
 		}
 	}
