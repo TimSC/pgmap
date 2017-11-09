@@ -129,17 +129,48 @@ public:
 	void Abort();
 };
 
+class PgAdmin
+{
+private:
+	shared_ptr<pqxx::connection> dbconn;
+	std::string tableStaticPrefix;
+	std::string tableModPrefix;
+	std::string tableTestPrefix;
+	std::string connectionString;
+	std::string shareMode;
+	std::shared_ptr<pqxx::work> work;
+
+public:
+	PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
+		const string &tableStaticPrefixIn, 
+		const string &tableModPrefixIn,
+		const string &tableTestPrefixIn,
+		std::shared_ptr<pqxx::work> workIn,
+		const std::string &shareMode);
+	virtual ~PgAdmin();
+
+	bool CreateMapTables(class PgMapError &errStr);
+	bool DropMapTables(class PgMapError &errStr);
+
+	void Commit();
+	void Abort();
+};
+
 class PgMap
 {
 private:
 	shared_ptr<pqxx::connection> dbconn;
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
+	std::string tableModPrefix;
+	std::string tableTestPrefix;
 	std::string connectionString;
 
 public:
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn);
+		const string &tableActivePrefixIn,
+		const string &tableModPrefixIn,
+		const string &tableTestPrefixIn);
 	virtual ~PgMap();
 	PgMap& operator=(const PgMap&) {return *this;};
 
@@ -147,6 +178,7 @@ public:
 
 	//pqxx only supports one active transaction per connection
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
+	std::shared_ptr<class PgAdmin> GetAdmin(const std::string &shareMode);
 };
 
 #endif //_PGMAP_H

@@ -1094,13 +1094,98 @@ void PgTransaction::Abort()
 
 // **********************************************
 
+PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
+		const string &tableStaticPrefixIn, 
+		const string &tableModPrefixIn,
+		const string &tableTestPrefixIn,
+		std::shared_ptr<pqxx::work> workIn,
+		const std::string &shareMode):
+	work(workIn)
+{
+	dbconn = dbconnIn;
+	tableStaticPrefix = tableStaticPrefixIn;
+	tableModPrefix = tableModPrefixIn;
+	tableTestPrefix = tableTestPrefixIn;
+	this->shareMode = shareMode;
+	string errStr;
+	bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
+	ok = LockMap(work, this->tableModPrefix, this->shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
+	ok = LockMap(work, this->tableModPrefix, this->shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
+}
+
+PgAdmin::~PgAdmin()
+{
+	work.reset();
+}
+
+bool PgAdmin::CreateMapTables(class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+
+	bool ok = DbCreateTables(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateTables(*dbconn, work.get(), this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateTables(*dbconn, work.get(), this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+
+	return ok;
+}
+
+bool PgAdmin::DropMapTables(class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+
+	bool ok = DbDropTables(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbDropTables(*dbconn, work.get(), this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbDropTables(*dbconn, work.get(), this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+
+	return ok;
+}
+
+void PgAdmin::Commit()
+{
+	//Release locks
+	work->commit();
+}
+
+void PgAdmin::Abort()
+{
+	work->abort();
+}
+
+// **********************************************
+
 PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableActivePrefixIn)
+	const string &tableActivePrefixIn,
+	const string &tableModPrefixIn,
+	const string &tableTestPrefixIn)
 {
 	dbconn.reset(new pqxx::connection(connection));
 	connectionString = connection;
-	this->tableStaticPrefix = tableStaticPrefixIn;
-	this->tableActivePrefix = tableActivePrefixIn;
+	tableStaticPrefix = tableStaticPrefixIn;
+	tableActivePrefix = tableActivePrefixIn;
+	tableModPrefix = tableModPrefixIn;
+	tableTestPrefix = tableTestPrefixIn;
 }
 
 PgMap::~PgMap()
@@ -1119,6 +1204,14 @@ std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &sh
 	dbconn->cancel_query();
 	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
 	shared_ptr<class PgTransaction> out(new class PgTransaction(dbconn, tableStaticPrefix, tableActivePrefix, work, shareMode));
+	return out;
+}
+
+std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
+{
+	dbconn->cancel_query();
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, shareMode));
 	return out;
 }
 

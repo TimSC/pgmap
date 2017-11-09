@@ -330,17 +330,42 @@ public:
 	void Abort();
 };
 
+%shared_ptr(PgAdmin)
+
+class PgAdmin
+{
+public:
+	PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
+		const string &tableStaticPrefixIn, 
+		const string &tableModPrefixIn,
+		const string &tableTestPrefixIn,
+		std::shared_ptr<pqxx::work> workIn,
+		const std::string &shareMode);
+	virtual ~PgAdmin();
+
+	bool CreateMapTables(class PgMapError &errStr);
+	bool DropMapTables(class PgMapError &errStr);
+
+	void Commit();
+	void Abort();
+};
+
+%shared_ptr(PgMap)
+
 class PgMap
 {
 public:
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn);
+		const string &tableActivePrefixIn,
+		const string &tableModPrefixIn,
+		const string &tableTestPrefixIn);
 	virtual ~PgMap();
 	PgMap& operator=(const PgMap&) {return *this;};
 
 	bool Ready();
 
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
+	std::shared_ptr<class PgAdmin> GetAdmin(const std::string &shareMode);
 };
 
 void LoadFromO5m(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);
