@@ -65,7 +65,7 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 	return ok;	
 }
 
-bool DbCreateTables(pqxx::connection &c, pqxx::work *work, 
+bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	std::string &errStr)
 {
@@ -120,7 +120,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::work *work,
 	return ok;
 }
 
-bool DbDropTables(pqxx::connection &c, pqxx::work *work, 
+bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	std::string &errStr)
 {

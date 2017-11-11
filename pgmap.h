@@ -137,16 +137,14 @@ private:
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
 	std::string connectionString;
-	std::string shareMode;
-	std::shared_ptr<pqxx::work> work;
+	std::shared_ptr<pqxx::transaction_base> work;
 
 public:
 	PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::work> workIn,
-		const std::string &shareMode);
+		std::shared_ptr<pqxx::transaction_base> workIn);
 	virtual ~PgAdmin();
 
 	bool CreateMapTables(class PgMapError &errStr);
@@ -178,7 +176,7 @@ public:
 
 	//pqxx only supports one active transaction per connection
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
-	std::shared_ptr<class PgAdmin> GetAdmin(const std::string &shareMode);
+	std::shared_ptr<class PgAdmin> GetAdmin();
 };
 
 #endif //_PGMAP_H

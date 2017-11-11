@@ -9,11 +9,11 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::work *work,
 	const std::string &tableStaticPrefix,
 	std::string &errStr);
 
-bool DbCreateTables(pqxx::connection &c, pqxx::work *work, 
+bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
-bool DbDropTables(pqxx::connection &c, pqxx::work *work, 
+bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
 	std::string &errStr);
 

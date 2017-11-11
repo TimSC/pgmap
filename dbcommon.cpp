@@ -1,7 +1,7 @@
 #include "dbcommon.h"
 using namespace std;
 
-bool DbExec(pqxx::work *work, const string& sql, string &errStr, size_t *rowsAffected)
+bool DbExec(pqxx::transaction_base *work, const string& sql, string &errStr, size_t *rowsAffected)
 {
 	pqxx::result r;
 	try

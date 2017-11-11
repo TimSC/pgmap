@@ -36,7 +36,7 @@ PgMapError::~PgMapError()
 
 // **********************************************
 
-bool LockMap(std::shared_ptr<pqxx::work> work, const std::string &prefix, const std::string &accessMode, std::string &errStr)
+bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &prefix, const std::string &accessMode, std::string &errStr)
 {
 	try
 	{
@@ -1098,25 +1098,14 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::work> workIn,
-		const std::string &shareMode):
+		std::shared_ptr<pqxx::transaction_base> workIn):
 	work(workIn)
 {
 	dbconn = dbconnIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
-	this->shareMode = shareMode;
 	string errStr;
-	bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
-	if(!ok)
-		throw runtime_error(errStr);
-	ok = LockMap(work, this->tableModPrefix, this->shareMode, errStr);
-	if(!ok)
-		throw runtime_error(errStr);
-	ok = LockMap(work, this->tableModPrefix, this->shareMode, errStr);
-	if(!ok)
-		throw runtime_error(errStr);
 }
 
 PgAdmin::~PgAdmin()
@@ -1127,8 +1116,6 @@ PgAdmin::~PgAdmin()
 bool PgAdmin::CreateMapTables(class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	if(this->shareMode != "EXCLUSIVE")
-		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 
 	bool ok = DbCreateTables(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1146,8 +1133,6 @@ bool PgAdmin::CreateMapTables(class PgMapError &errStr)
 bool PgAdmin::DropMapTables(class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	if(this->shareMode != "EXCLUSIVE")
-		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 
 	bool ok = DbDropTables(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1207,11 +1192,11 @@ std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &sh
 	return out;
 }
 
-std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
+std::shared_ptr<class PgAdmin> PgMap::GetAdmin()
 {
 	dbconn->cancel_query();
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
-	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, shareMode));
+	std::shared_ptr<pqxx::nontransaction> work(new pqxx::nontransaction(*dbconn));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work));
 	return out;
 }
 

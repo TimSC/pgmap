@@ -339,8 +339,7 @@ public:
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::work> workIn,
-		const std::string &shareMode);
+		std::shared_ptr<pqxx::transaction_base> workIn);
 	virtual ~PgAdmin();
 
 	bool CreateMapTables(class PgMapError &errStr);
@@ -365,7 +364,7 @@ public:
 	bool Ready();
 
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
-	std::shared_ptr<class PgAdmin> GetAdmin(const std::string &shareMode);
+	std::shared_ptr<class PgAdmin> GetAdmin();
 };
 
 void LoadFromO5m(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);

@@ -65,3 +65,8 @@ Work in progress
 * Move osm2pgcopy functionality into this library.
 * Probably should add doxygen documentation (or more comments generally)
 
+Instructions in progress
+------------------------
+
+* grant postgres to microcosm;
+
