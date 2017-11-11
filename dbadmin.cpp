@@ -315,3 +315,89 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose); 
 	return ok;
 }
+
+bool DbRefreshMaxIdsOfType(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	const string &objType,
+	int64_t minValIn,
+	std::string &errStr,
+	int64_t *valOut)
+{
+	int64_t val;
+	bool ok = GetMaxObjIdLiveOrOld(work, tablePrefix, objType, "id", errStr, val);
+	if(!ok) return false;
+	val ++; //Increment to make it the next valid ID
+	if(val < minValIn)
+		val = minValIn;
+	if(valOut != nullptr)
+		*valOut = val;
+
+	cout << val << endl;
+	stringstream ss;
+	ss << "INSERT INTO "<<tablePrefix<<"nextids(id, maxid) VALUES ('"<<objType<< "', "<< (val) << ");";
+	ok = DbExec(work, ss.str(), errStr, nullptr, verbose); if(!ok) return ok;
+	if(!ok) return false;
+
+	return ok;
+}
+
+bool DbRefreshMaxIds(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tableStaticPrefix, 
+	const std::string &tableModPrefix, 
+	const std::string &tableTestPrefix, 
+	std::string &errStr)
+{
+	int64_t maxStaticNode=0, maxStaticWay=0, maxStaticRelation=0;
+	bool ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableStaticPrefix, 
+		"node", 1,
+		errStr, &maxStaticNode);
+	if(!ok) return false;
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableModPrefix, 
+		"node", maxStaticNode,
+		errStr, nullptr);
+	if(!ok) return false;
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableTestPrefix, 
+		"node", maxStaticNode,
+		errStr, nullptr);
+	if(!ok) return false;
+
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableStaticPrefix, 
+		"way", 1,
+		errStr, &maxStaticWay);
+	if(!ok) return false;
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableModPrefix, 
+		"way", maxStaticWay,
+		errStr, nullptr);
+	if(!ok) return false;
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableTestPrefix, 
+		"way", maxStaticWay,
+		errStr, nullptr);
+	if(!ok) return false;
+
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableStaticPrefix, 
+		"relation", 1,
+		errStr, &maxStaticRelation);
+	if(!ok) return false;
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableModPrefix, 
+		"relation", maxStaticRelation,
+		errStr, nullptr);
+	if(!ok) return false;
+	ok = DbRefreshMaxIdsOfType(c, work, 
+		verbose, tableTestPrefix, 
+		"relation", maxStaticRelation,
+		errStr, nullptr);
+	if(!ok) return false;
+
+	return true;
+}
+

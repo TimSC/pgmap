@@ -52,6 +52,7 @@ int main(int argc, char **argv)
 		cout << "2. Create tables" << endl;
 		cout << "3. Copy data" << endl;
 		cout << "4. Create indicies" << endl;
+		cout << "5. Refresh max IDs" << endl;
 		cout << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -101,6 +102,18 @@ int main(int argc, char **argv)
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
 			bool ok = admin->CreateMapIndices(verbose, errStr);
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
+			continue;
+		}
+
+		if(inputStr == "5")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->RefreshMapIds(verbose, errStr);
 
 			if(ok)
 				cout << "All done!" << endl;

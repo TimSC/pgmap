@@ -5,19 +5,19 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
 
-bool GetMaxObjIdLiveOrOld(pqxx::work *work, const string &tablePrefix, 
+bool GetMaxObjIdLiveOrOld(pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, 
 	const std::string &field,
 	std::string errStr,
 	int64_t &val);
 
-bool GetMaxFieldInTable(pqxx::work *work, 
+bool GetMaxFieldInTable(pqxx::transaction_base *work, 
 	const string &tableName,
 	const string &field,
 	string &errStr,
 	int64_t &val);
 
-bool ClearNextIdValues(pqxx::work *work, 
+bool ClearNextIdValues(pqxx::transaction_base *work, 
 	const string &tablePrefix);
 
 bool SetNextIdValue(pqxx::connection &c,

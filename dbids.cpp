@@ -1,7 +1,7 @@
 #include "dbids.h"
 #include "dbcommon.h"
 
-bool GetMaxObjIdLiveOrOld(pqxx::work *work, const string &tablePrefix, 
+bool GetMaxObjIdLiveOrOld(pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, 
 	const std::string &field,
 	std::string errStr,
@@ -23,7 +23,7 @@ bool GetMaxObjIdLiveOrOld(pqxx::work *work, const string &tablePrefix,
 	return ok;
 }
 
-bool GetMaxFieldInTable(pqxx::work *work, 
+bool GetMaxFieldInTable(pqxx::transaction_base *work, 
 	const string &tableName,
 	const string &field,
 	string &errStr,
@@ -46,7 +46,7 @@ bool GetMaxFieldInTable(pqxx::work *work,
 	return true;
 }
 
-bool ClearNextIdValues(pqxx::work *work, 
+bool ClearNextIdValues(pqxx::transaction_base *work, 
 	const string &tablePrefix)
 {
 	stringstream ss;

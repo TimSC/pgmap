@@ -1171,6 +1171,22 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 	return ok;
 }
 
+bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
+{
+	ClearNextIdValues(work.get(), this->tableStaticPrefix);
+	ClearNextIdValues(work.get(), this->tableModPrefix);
+	ClearNextIdValues(work.get(), this->tableTestPrefix);
+	
+	std::string nativeErrStr;
+
+	bool ok = DbRefreshMaxIds(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
+		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+
+	return true;
+}
+
 void PgAdmin::Commit()
 {
 	//Release locks
