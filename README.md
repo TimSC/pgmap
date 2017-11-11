@@ -68,5 +68,9 @@ Work in progress
 Instructions in progress
 ------------------------
 
+* ALTER USER microcosm WITH SUPERUSER;
+
+* ALTER USER myuser WITH NOSUPERUSER
+
 * grant postgres to microcosm;
 

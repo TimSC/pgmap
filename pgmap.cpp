@@ -1125,7 +1125,6 @@ bool PgAdmin::CreateMapTables(class PgMapError &errStr)
 	if(!ok) return ok;
 	ok = DbCreateTables(*dbconn, work.get(), this->tableTestPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
 
 	return ok;
 }
@@ -1142,7 +1141,26 @@ bool PgAdmin::DropMapTables(class PgMapError &errStr)
 	if(!ok) return ok;
 	ok = DbDropTables(*dbconn, work.get(), this->tableTestPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
+
+	return ok;
+}
+
+bool PgAdmin::CopyMapData(const std::string &filePrefix, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+
+	bool ok = DbCopyData(*dbconn, work.get(), filePrefix, this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
+bool PgAdmin::CreateMapIndices(class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+
+	bool ok = DbCreateIndices(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
 
 	return ok;
 }

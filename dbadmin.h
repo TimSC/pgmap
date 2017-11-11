@@ -17,4 +17,13 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
+bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &filePrefix,
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
+bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
 #endif //_DB_ADMIN_H

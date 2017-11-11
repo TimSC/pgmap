@@ -344,6 +344,8 @@ public:
 
 	bool CreateMapTables(class PgMapError &errStr);
 	bool DropMapTables(class PgMapError &errStr);
+	bool CopyMapData(class PgMapError &errStr);
+	bool CreateMapIndices(class PgMapError &errStr);
 
 	void Commit();
 	void Abort();

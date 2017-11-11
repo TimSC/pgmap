@@ -165,3 +165,149 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 }
 
+bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &filePrefix,
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	string sql = "COPY "+tablePrefix+"oldnodes FROM PROGRAM 'zcat "+filePrefix+"oldnodes.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	bool ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+
+	sql = "COPY "+tablePrefix+"oldways FROM PROGRAM 'zcat "+filePrefix+"oldways.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"oldrelations FROM PROGRAM 'zcat "+filePrefix+"oldrelations.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+
+	sql = "COPY "+tablePrefix+"livenodes FROM PROGRAM 'zcat "+filePrefix+"livenodes.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"liveways FROM PROGRAM 'zcat "+filePrefix+"liveways.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"liverelations FROM PROGRAM 'zcat "+filePrefix+"liverelations.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+
+	sql = "COPY "+tablePrefix+"nodeids FROM PROGRAM 'zcat "+filePrefix+"nodeids.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"wayids FROM PROGRAM 'zcat "+filePrefix+"wayids.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"relationids FROM PROGRAM 'zcat "+filePrefix+"relationids.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+
+	sql = "COPY "+tablePrefix+"way_mems FROM PROGRAM 'zcat "+filePrefix+"waymems.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"relation_mems_n FROM PROGRAM 'zcat "+filePrefix+"relationmems-n.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"relation_mems_w FROM PROGRAM 'zcat "+filePrefix+"relationmems-w.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "COPY "+tablePrefix+"relation_mems_r FROM PROGRAM 'zcat "+filePrefix+"relationmems-r.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
+	ok = DbExec(work, sql, errStr); 
+	return ok;	
+}
+
+bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	string sql = "ALTER TABLE "+tablePrefix+"oldnodes ADD PRIMARY KEY (id, version);";
+	bool ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "ALTER TABLE "+tablePrefix+"oldways ADD PRIMARY KEY (id, version);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "ALTER TABLE "+tablePrefix+"oldrelations ADD PRIMARY KEY (id, version);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "ALTER TABLE "+tablePrefix+"livenodes ADD PRIMARY KEY (id);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "ALTER TABLE "+tablePrefix+"liveways ADD PRIMARY KEY (id);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "ALTER TABLE "+tablePrefix+"liverelations ADD PRIMARY KEY (id);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "ALTER TABLE "+tablePrefix+"nodeids ADD PRIMARY KEY (id);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "ALTER TABLE "+tablePrefix+"wayids ADD PRIMARY KEY (id);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "ALTER TABLE "+tablePrefix+"relationids ADD PRIMARY KEY (id);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"livenodes_gix ON "+tablePrefix+"livenodes USING GIST (geom);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "VACUUM ANALYZE "+tablePrefix+"livenodes(geom);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"way_mems_mids ON "+tablePrefix+"way_mems (member);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"relation_mems_n_mids ON "+tablePrefix+"relation_mems_n (member);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"relation_mems_w_mids ON "+tablePrefix+"relation_mems_w (member);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"relation_mems_r_mids ON "+tablePrefix+"relation_mems_r (member);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"livenodes_ts ON "+tablePrefix+"livenodes (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liveways_ts ON "+tablePrefix+"liveways (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liverelations_ts ON "+tablePrefix+"liverelations (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	//Timestamp indicies
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldnodes_ts ON "+tablePrefix+"livenodes (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldways_ts ON "+tablePrefix+"liveways (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldrelations_ts ON "+tablePrefix+"liverelations (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"livenodes_ts ON "+tablePrefix+"livenodes (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liveways_ts ON "+tablePrefix+"liveways (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liverelations_ts ON "+tablePrefix+"liverelations (timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	//Object user indices
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldnodes_uid ON "+tablePrefix+"livenodes USING BRIN(uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldways_uid ON "+tablePrefix+"liveways USING BRIN(uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldrelations_uid ON "+tablePrefix+"liverelations USING BRIN(uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"livenodes_uid ON "+tablePrefix+"livenodes USING BRIN(uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liveways_uid ON "+tablePrefix+"liveways USING BRIN(uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liverelations_uid ON "+tablePrefix+"liverelations USING BRIN(uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	//Changeset indices
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldnodes_cs ON "+tablePrefix+"livenodes (changeset);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldways_cs ON "+tablePrefix+"liveways (changeset);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"oldrelations_cs ON "+tablePrefix+"liverelations (changeset);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"livenodes_cs ON "+tablePrefix+"livenodes (changeset);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liveways_cs ON "+tablePrefix+"liveways (changeset);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"liverelations_cs ON "+tablePrefix+"liverelations (changeset);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"changesets_uidx ON "+tablePrefix+"changesets (uid);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"changesets_open_timestampx ON "+tablePrefix+"changesets (open_timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"changesets_close_timestampx ON "+tablePrefix+"changesets (close_timestamp);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"changesets_is_openx ON "+tablePrefix+"changesets (is_open);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;	
+	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"changesets_gix ON "+tablePrefix+"changesets USING GIST (geom);";
+	ok = DbExec(work, sql, errStr); if(!ok) return ok;
+
+	sql = "VACUUM ANALYZE "+tablePrefix+"changesets(geom);";
+	ok = DbExec(work, sql, errStr); 
+	return ok;
+}

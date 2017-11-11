@@ -149,6 +149,8 @@ public:
 
 	bool CreateMapTables(class PgMapError &errStr);
 	bool DropMapTables(class PgMapError &errStr);
+	bool CopyMapData(const std::string &filePrefix, class PgMapError &errStr);
+	bool CreateMapIndices(class PgMapError &errStr);
 
 	void Commit();
 	void Abort();

@@ -1,6 +1,6 @@
 
 
-all: dump extract swigpy2
+all: dump extract admin swigpy2
 
 common = util.cpp dbquery.cpp dbids.cpp dbadmin.cpp dbcommon.cpp dbreplicate.cpp \
 	dbdecode.cpp dbstore.cpp dbdump.cpp dbfilters.cpp dbchangeset.cpp pgmap.cpp cppo5m/o5m.cpp \
@@ -10,6 +10,9 @@ dump: dump.cpp $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
 
 extract: extract.cpp $(common)
+	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
+
+admin: admin.cpp $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
 
 swigpy2: pgmap.i $(common)
