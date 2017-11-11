@@ -147,10 +147,10 @@ public:
 		std::shared_ptr<pqxx::transaction_base> workIn);
 	virtual ~PgAdmin();
 
-	bool CreateMapTables(class PgMapError &errStr);
-	bool DropMapTables(class PgMapError &errStr);
-	bool CopyMapData(const std::string &filePrefix, class PgMapError &errStr);
-	bool CreateMapIndices(class PgMapError &errStr);
+	bool CreateMapTables(int verbose, class PgMapError &errStr);
+	bool DropMapTables(int verbose, class PgMapError &errStr);
+	bool CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr);
+	bool CreateMapIndices(int verbose, class PgMapError &errStr);
 
 	void Commit();
 	void Abort();

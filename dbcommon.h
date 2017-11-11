@@ -13,7 +13,7 @@ template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxx::res
 		invoc(field.as<T>());
 }
 
-bool DbExec(pqxx::transaction_base *work, const std::string& sql, std::string &errStr, size_t *rowsAffected = nullptr);
+bool DbExec(pqxx::transaction_base *work, const std::string& sql, std::string &errStr, size_t *rowsAffected = nullptr, int verbose = 0);
 
 #endif //_DB_COMMON_H
 

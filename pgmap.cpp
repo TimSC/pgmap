@@ -1113,53 +1113,59 @@ PgAdmin::~PgAdmin()
 	work.reset();
 }
 
-bool PgAdmin::CreateMapTables(class PgMapError &errStr)
+bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 
-	bool ok = DbCreateTables(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbCreateTables(*dbconn, work.get(), this->tableModPrefix, nativeErrStr);
+	ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbCreateTables(*dbconn, work.get(), this->tableTestPrefix, nativeErrStr);
+	ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
 }
 
-bool PgAdmin::DropMapTables(class PgMapError &errStr)
+bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 
-	bool ok = DbDropTables(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbDropTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbDropTables(*dbconn, work.get(), this->tableModPrefix, nativeErrStr);
+	ok = DbDropTables(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbDropTables(*dbconn, work.get(), this->tableTestPrefix, nativeErrStr);
+	ok = DbDropTables(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
 }
 
-bool PgAdmin::CopyMapData(const std::string &filePrefix, class PgMapError &errStr)
+bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 
-	bool ok = DbCopyData(*dbconn, work.get(), filePrefix, this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbCopyData(*dbconn, work.get(), verbose, filePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
 }
 
-bool PgAdmin::CreateMapIndices(class PgMapError &errStr)
+bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 
-	bool ok = DbCreateIndices(*dbconn, work.get(), this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbCreateIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateIndices(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateIndices(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
