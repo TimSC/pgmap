@@ -37,4 +37,11 @@ bool DbRefreshMaxIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableTestPrefix, 
 	std::string &errStr);
 
+bool DbRefreshMaxChangesetUid(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tableStaticPrefix, 
+	const std::string &tableModPrefix, 
+	const std::string &tableTestPrefix, 
+	std::string &errStr);
+
 #endif //_DB_ADMIN_H

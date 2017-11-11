@@ -1173,13 +1173,31 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 
 bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 {
-	ClearNextIdValues(work.get(), this->tableStaticPrefix);
-	ClearNextIdValues(work.get(), this->tableModPrefix);
-	ClearNextIdValues(work.get(), this->tableTestPrefix);
+	ClearNextIdValuesById(work.get(), this->tableStaticPrefix, "node");
+	ClearNextIdValuesById(work.get(), this->tableStaticPrefix, "way");
+	ClearNextIdValuesById(work.get(), this->tableStaticPrefix, "relation");
+	ClearNextIdValuesById(work.get(), this->tableModPrefix, "node");
+	ClearNextIdValuesById(work.get(), this->tableModPrefix, "way");
+	ClearNextIdValuesById(work.get(), this->tableModPrefix, "relation");
+	ClearNextIdValuesById(work.get(), this->tableTestPrefix, "node");
+	ClearNextIdValuesById(work.get(), this->tableTestPrefix, "way");
+	ClearNextIdValuesById(work.get(), this->tableTestPrefix, "relation");
 	
 	std::string nativeErrStr;
 
 	bool ok = DbRefreshMaxIds(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
+		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+
+	return true;
+}
+
+bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+
+	bool ok = DbRefreshMaxChangesetUid(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;

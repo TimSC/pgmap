@@ -152,6 +152,7 @@ public:
 	bool CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr);
 	bool CreateMapIndices(int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);
+	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 
 	void Commit();
 	void Abort();

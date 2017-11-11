@@ -20,13 +20,17 @@ bool GetMaxFieldInTable(pqxx::transaction_base *work,
 bool ClearNextIdValues(pqxx::transaction_base *work, 
 	const string &tablePrefix);
 
+bool ClearNextIdValuesById(pqxx::transaction_base *work, 
+	const string &tablePrefix,
+	const string &key);
+
 bool SetNextIdValue(pqxx::connection &c,
 	pqxx::work *work, 
 	const string &tablePrefix,
 	const string &objType,
 	int64_t value);
 
-bool GetNextId(pqxx::work *work, 
+bool GetNextId(pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &objType,
 	std::string &errStr,
@@ -40,7 +44,7 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 	string &errStr,
 	int64_t &val);
 
-bool ResetChangesetUidCounts(pqxx::work *work, 
+bool ResetChangesetUidCounts(pqxx::transaction_base *work, 
 	const string &parentPrefix, const string &tablePrefix, 
 	string &errStr);
 

@@ -401,3 +401,28 @@ bool DbRefreshMaxIds(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+bool DbRefreshMaxChangesetUid(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tableStaticPrefix, 
+	const std::string &tableModPrefix, 
+	const std::string &tableTestPrefix, 
+	std::string &errStr)
+{
+	//Update next changeset and UIDs
+	bool ok = ResetChangesetUidCounts(work, 
+		"", tableStaticPrefix,
+		errStr);
+	if(!ok) return false;
+
+	ok = ResetChangesetUidCounts(work, 
+		tableStaticPrefix, tableModPrefix, 
+		errStr);
+	if(!ok) return false;
+
+	ok = ResetChangesetUidCounts(work, 
+		tableStaticPrefix, tableTestPrefix, 
+		errStr);
+	if(!ok) return false;
+	return true;
+}
+

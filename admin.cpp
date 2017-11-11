@@ -53,6 +53,7 @@ int main(int argc, char **argv)
 		cout << "3. Copy data" << endl;
 		cout << "4. Create indicies" << endl;
 		cout << "5. Refresh max IDs" << endl;
+		cout << "6. Refresh max changeset IDs and UIDs" << endl;
 		cout << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -114,6 +115,18 @@ int main(int argc, char **argv)
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
 			bool ok = admin->RefreshMapIds(verbose, errStr);
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
+			continue;
+		}
+
+		if(inputStr == "6")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->RefreshMaxChangesetUid(verbose, errStr);
 
 			if(ok)
 				cout << "All done!" << endl;

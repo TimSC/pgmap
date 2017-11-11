@@ -55,6 +55,16 @@ bool ClearNextIdValues(pqxx::transaction_base *work,
 	return true;
 }
 
+bool ClearNextIdValuesById(pqxx::transaction_base *work, 
+	const string &tablePrefix,
+	const string &key)
+{
+	stringstream ss;
+	ss << "DELETE FROM "<< tablePrefix <<"nextids WHERE id='"<<key<<"';";
+	work->exec(ss.str());
+	return true;
+}
+
 bool SetNextIdValue(pqxx::connection &c,
 	pqxx::work *work, 
 	const string &tablePrefix,
@@ -69,7 +79,7 @@ bool SetNextIdValue(pqxx::connection &c,
 	return true;
 }
 
-bool GetNextId(pqxx::work *work, 
+bool GetNextId(pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &objType,
 	string &errStr,
@@ -128,7 +138,7 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 	return ok;
 }
 
-bool ResetChangesetUidCounts(pqxx::work *work, 
+bool ResetChangesetUidCounts(pqxx::transaction_base *work, 
 	const string &parentPrefix, const string &tablePrefix, 
 	string &errStr)
 {
