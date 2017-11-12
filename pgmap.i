@@ -305,7 +305,6 @@ public:
 		std::shared_ptr<class OsmData> outputObjects);
 
 	bool ResetActiveTables(class PgMapError &errStr);
-	bool UpdateNextIds(class PgMapError &errStr);
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
 		std::shared_ptr<IDataStreamHandler> enc);
 	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc);
@@ -330,27 +329,6 @@ public:
 	void Abort();
 };
 
-%shared_ptr(PgAdmin)
-
-class PgAdmin
-{
-public:
-	PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
-		const string &tableStaticPrefixIn, 
-		const string &tableModPrefixIn,
-		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn);
-	virtual ~PgAdmin();
-
-	bool CreateMapTables(int verbose, class PgMapError &errStr);
-	bool DropMapTables(int verbose, class PgMapError &errStr);
-	bool CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr);
-	bool CreateMapIndices(int verbose, class PgMapError &errStr);
-
-	void Commit();
-	void Abort();
-};
-
 %shared_ptr(PgMap)
 
 class PgMap
@@ -366,7 +344,6 @@ public:
 	bool Ready();
 
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
-	std::shared_ptr<class PgAdmin> GetAdmin();
 };
 
 void LoadFromO5m(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);

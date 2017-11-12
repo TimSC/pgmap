@@ -46,15 +46,6 @@ bool GetMaxFieldInTable(pqxx::transaction_base *work,
 	return true;
 }
 
-bool ClearNextIdValues(pqxx::transaction_base *work, 
-	const string &tablePrefix)
-{
-	stringstream ss;
-	ss << "DELETE FROM "<< tablePrefix <<"nextids;";
-	work->exec(ss.str());
-	return true;
-}
-
 bool ClearNextIdValuesById(pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &key)

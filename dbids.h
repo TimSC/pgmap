@@ -17,9 +17,6 @@ bool GetMaxFieldInTable(pqxx::transaction_base *work,
 	string &errStr,
 	int64_t &val);
 
-bool ClearNextIdValues(pqxx::transaction_base *work, 
-	const string &tablePrefix);
-
 bool ClearNextIdValuesById(pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &key);

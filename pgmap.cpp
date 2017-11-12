@@ -749,47 +749,6 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	return ok;
 }
 
-bool PgTransaction::UpdateNextIds(class PgMapError &errStr)
-{
-	if(this->shareMode != "EXCLUSIVE")
-		throw runtime_error("Database must be locked in EXCLUSIVE mode");
-	string errStrNative;
-
-	ClearNextIdValues(work.get(), this->tableStaticPrefix);
-	ClearNextIdValues(work.get(), this->tableActivePrefix);
-
-	//Update next node IDs
-	bool ok = UpdateNextIdsOfType(*dbconn, work.get(), 
-		"node", this->tableActivePrefix, this->tableStaticPrefix,
-		errStrNative);
-	errStr.errStr = errStrNative; if(!ok) return false;
-
-	//Update next way IDs
-	ok = UpdateNextIdsOfType(*dbconn, work.get(), 
-		"way", this->tableActivePrefix, this->tableStaticPrefix,
-		errStrNative);
-	errStr.errStr = errStrNative; if(!ok) return false;
-
-	//Update next relation IDs
-	ok = UpdateNextIdsOfType(*dbconn, work.get(), 
-		"relation", this->tableActivePrefix, this->tableStaticPrefix,
-		errStrNative);
-	errStr.errStr = errStrNative; if(!ok) return false;
-
-	//Update next changeset and UIDs
-	ok = ResetChangesetUidCounts(work.get(), 
-		"", this->tableStaticPrefix,
-		errStrNative);
-	errStr.errStr = errStrNative; if(!ok) return false;
-
-	ok = ResetChangesetUidCounts(work.get(), 
-		this->tableStaticPrefix, this->tableActivePrefix, 
-		errStrNative);
-	errStr.errStr = errStrNative; if(!ok) return false;
-
-	return true;
-}
-
 void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd, std::shared_ptr<IDataStreamHandler> enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
@@ -1098,14 +1057,29 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn):
+		std::shared_ptr<pqxx::transaction_base> workIn,
+		const string &shareModeIn):
 	work(workIn)
 {
 	dbconn = dbconnIn;
+	shareMode = shareModeIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
-	string errStr;
+
+	if(shareMode.size() > 0)
+	{
+		string errStr;
+		bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
+		if(!ok)
+			throw runtime_error(errStr);
+		ok = LockMap(work, this->tableModPrefix, this->shareMode, errStr);
+		if(!ok)
+			throw runtime_error(errStr);
+		ok = LockMap(work, this->tableTestPrefix, this->shareMode, errStr);
+		if(!ok)
+			throw runtime_error(errStr);
+	}
 }
 
 PgAdmin::~PgAdmin()
@@ -1254,7 +1228,15 @@ std::shared_ptr<class PgAdmin> PgMap::GetAdmin()
 {
 	dbconn->cancel_query();
 	std::shared_ptr<pqxx::nontransaction> work(new pqxx::nontransaction(*dbconn));
-	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, ""));
+	return out;
+}
+
+std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
+{
+	dbconn->cancel_query();
+	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, shareMode));
 	return out;
 }
 

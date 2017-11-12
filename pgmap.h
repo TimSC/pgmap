@@ -104,7 +104,6 @@ public:
 		std::shared_ptr<class OsmData> outputObjects);
 
 	bool ResetActiveTables(class PgMapError &errStr);
-	bool UpdateNextIds(class PgMapError &errStr);
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
 		std::shared_ptr<IDataStreamHandler> enc);
 	void Dump(bool order, std::shared_ptr<IDataStreamHandler> enc);
@@ -138,13 +137,15 @@ private:
 	std::string tableTestPrefix;
 	std::string connectionString;
 	std::shared_ptr<pqxx::transaction_base> work;
+	std::string shareMode;
 
 public:
 	PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn);
+		std::shared_ptr<pqxx::transaction_base> workIn,
+		const string &shareModeIn);
 	virtual ~PgAdmin();
 
 	bool CreateMapTables(int verbose, class PgMapError &errStr);
@@ -181,6 +182,7 @@ public:
 	//pqxx only supports one active transaction per connection
 	std::shared_ptr<class PgTransaction> GetTransaction(const std::string &shareMode);
 	std::shared_ptr<class PgAdmin> GetAdmin();
+	std::shared_ptr<class PgAdmin> GetAdmin(const std::string &shareMode);
 };
 
 #endif //_PGMAP_H
