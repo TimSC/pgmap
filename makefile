@@ -1,6 +1,6 @@
 
 
-all: dump extract admin swigpy2
+all: dump extract admin osm2csv swigpy2
 
 common = util.cpp dbquery.cpp dbids.cpp dbadmin.cpp dbcommon.cpp dbreplicate.cpp \
 	dbdecode.cpp dbstore.cpp dbdump.cpp dbfilters.cpp dbchangeset.cpp pgmap.cpp cppo5m/o5m.cpp \
@@ -14,6 +14,9 @@ extract: extract.cpp $(common)
 
 admin: admin.cpp $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
+
+osm2csv: osm2csv.cpp cppo5m/o5m.cpp cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/cppiso8601/iso8601.cpp cppGzip/DecodeGzip.cpp cppGzip/EncodeGzip.cpp 
+	g++ $^ -std=c++11 -Wall -lexpat -lz -o $@
 
 swigpy2: pgmap.i $(common)
 	swig -python -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
