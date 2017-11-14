@@ -1,23 +1,8 @@
-#include <rapidjson/writer.h> //rapidjson-dev
-#include <rapidjson/stringbuffer.h>
 #include "dbstore.h"
 #include "dbids.h"
 #include "dbcommon.h"
+#include "dbjson.h"
 using namespace std;
-
-void EncodeTags(const TagMap &tagmap, string &out)
-{
-	rapidjson::StringBuffer buffer;
-	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-	writer.StartObject();
-	for(auto it=tagmap.begin(); it!=tagmap.end(); it++)
-	{
-		writer.Key(it->first.c_str());
-		writer.String(it->second.c_str());
-	}
-	writer.EndObject();
-	out = buffer.GetString();
-}
 
 bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
 	const std::string &typeStr,

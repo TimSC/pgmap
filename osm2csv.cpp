@@ -1,7 +1,9 @@
 #include "cppGzip/DecodeGzip.h"
+#include "cppGzip/EncodeGzip.h"
 #include "cppo5m/OsmData.h"
 #include <iostream>
 #include <fstream>
+#include "dbjson.h"
 using namespace std;
 
 /*
@@ -27,10 +29,30 @@ Import from fosm.org 2015 dump
 COPY planet_relations TO PROGRAM 'gzip > /home/postgres/dumprelations.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');
 */
 
+//https://stackoverflow.com/a/15372760/4288232
+void StrReplaceAll( string &s, const string &search, const string &replace ) {
+    for( size_t pos = 0; ; pos += replace.length() ) {
+        // Locate the substring to replace
+        pos = s.find( search, pos );
+        if( pos == string::npos ) break;
+        // Replace by erasing and inserting
+        s.erase( pos, search.length() );
+        s.insert( pos, replace );
+    }
+}
+
 class CsvStore : public IDataStreamHandler
 {
+private:
+	std::filebuf livenodeFile, livewayFile, liverelationFile, oldnodeFile, oldwayFile, oldrelationFile;
+	std::filebuf nodeIdsFile, wayIdsFile, relationIdsFile;
+	std::filebuf wayMembersFile, relationMemNodesFile, relationMemWaysFile, relationMemRelsFile;
+	std::shared_ptr<class EncodeGzip> livenodeFileGzip, livewayFileGzip, liverelationFileGzip, oldnodeFileGzip, oldwayFileGzip, oldrelationFileGzip;
+	std::shared_ptr<class EncodeGzip> nodeIdsFileGzip, wayIdsFileGzip, relationIdsFileGzip;
+	std::shared_ptr<class EncodeGzip> wayMembersFileGzip, relationMemNodesFileGzip, relationMemWaysFileGzip, relationMemRelsFileGzip;
+
 public:
-	CsvStore();
+	CsvStore(const std::string &outPrefix);
 	virtual ~CsvStore();
 
 	virtual void Sync() {};
@@ -46,16 +68,73 @@ public:
 	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles);
+
 };
 
-CsvStore::CsvStore()
+CsvStore::CsvStore(const std::string &outPrefix)
 {
+	livenodeFile.open(outPrefix+"livenodes.csv.gz", std::ios::out | std::ios::binary);
+	livenodeFileGzip.reset(new class EncodeGzip(livenodeFile));
+	livewayFile.open(outPrefix+"liveways.csv.gz", std::ios::out | std::ios::binary);
+	livewayFileGzip.reset(new class EncodeGzip(livewayFile));
+	liverelationFile.open(outPrefix+"liverelations.csv.gz", std::ios::out | std::ios::binary);
+	liverelationFileGzip.reset(new class EncodeGzip(liverelationFile));
 
+	oldnodeFile.open(outPrefix+"oldnodes.csv.gz", std::ios::out | std::ios::binary);
+	oldnodeFileGzip.reset(new class EncodeGzip(oldnodeFile));
+	oldwayFile.open(outPrefix+"oldways.csv.gz", std::ios::out | std::ios::binary);
+	oldwayFileGzip.reset(new class EncodeGzip(oldwayFile));
+	oldrelationFile.open(outPrefix+"oldrelations.csv.gz", std::ios::out | std::ios::binary);
+	oldrelationFileGzip.reset(new class EncodeGzip(oldrelationFile));
+
+	nodeIdsFile.open(outPrefix+"nodeids.csv.gz", std::ios::out | std::ios::binary);
+	nodeIdsFileGzip.reset(new class EncodeGzip(nodeIdsFile));
+	wayIdsFile.open(outPrefix+"wayids.csv.gz", std::ios::out | std::ios::binary);
+	wayIdsFileGzip.reset(new class EncodeGzip(wayIdsFile));
+	relationIdsFile.open(outPrefix+"relationids.csv.gz", std::ios::out | std::ios::binary);
+	relationIdsFileGzip.reset(new class EncodeGzip(relationIdsFile));
+
+	wayMembersFile.open(outPrefix+"waymems.csv.gz", std::ios::out | std::ios::binary);
+	wayMembersFileGzip.reset(new class EncodeGzip(wayMembersFile));
+	relationMemNodesFile.open(outPrefix+"relationmems-n.csv.gz", std::ios::out | std::ios::binary);
+	relationMemNodesFileGzip.reset(new class EncodeGzip(relationMemNodesFile));
+	relationMemWaysFile.open(outPrefix+"relationmems-w.csv.gz", std::ios::out | std::ios::binary);
+	relationMemWaysFileGzip.reset(new class EncodeGzip(relationMemWaysFile));
+	relationMemRelsFile.open(outPrefix+"relationmems-r.csv.gz", std::ios::out | std::ios::binary);
+	relationMemRelsFileGzip.reset(new class EncodeGzip(relationMemRelsFile));
 }
 
 CsvStore::~CsvStore()
 {
+	livenodeFileGzip.reset();
+	livenodeFile.close();
+	livewayFileGzip.reset();
+	livewayFile.close();
+	liverelationFileGzip.reset();
+	liverelationFile.close();
 
+	oldnodeFileGzip.reset();
+	oldnodeFile.close();
+	oldwayFileGzip.reset();
+	oldwayFile.close();
+	oldrelationFileGzip.reset();
+	oldrelationFile.close();
+
+	nodeIdsFileGzip.reset();
+	nodeIdsFile.close();
+	wayIdsFileGzip.reset();
+	wayIdsFile.close();
+	relationIdsFileGzip.reset();
+	relationIdsFile.close();
+
+	wayMembersFileGzip.reset();
+	wayMembersFile.close();
+	relationMemNodesFileGzip.reset();
+	relationMemNodesFile.close();
+	relationMemWaysFileGzip.reset();
+	relationMemWaysFile.close();
+	relationMemRelsFileGzip.reset();
+	relationMemRelsFile.close();
 }
 
 void CsvStore::Finish()
@@ -66,61 +145,32 @@ void CsvStore::Finish()
 void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
-	cout << "node" << endl;
+	//cout << "node" << endl;
+
+	string tagsJson;
+	EncodeTags(tags, tagsJson);
+	StrReplaceAll(tagsJson, "\"","\"\"");
+	tagsJson += "\n";
+	
+	livenodeFileGzip->sputn(tagsJson.c_str(), tagsJson.size());
 }
 
 void CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
-	cout << "way" << endl;
+	//cout << "way" << endl;
 }
 
 void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
-	cout << "relation" << endl;
+	//cout << "relation" << endl;
 }
-
 
 /*
 class CsvStore(object):
 
-	def __init__(self, outPrefix):
-		self.livenodeFile = gzip.GzipFile(outPrefix+"livenodes.csv.gz", "wb")
-		self.livewayFile = gzip.GzipFile(outPrefix+"liveways.csv.gz", "wb")
-		self.liverelationFile = gzip.GzipFile(outPrefix+"liverelations.csv.gz", "wb")
-
-		self.oldnodeFile = gzip.GzipFile(outPrefix+"oldnodes.csv.gz", "wb")
-		self.oldwayFile = gzip.GzipFile(outPrefix+"oldways.csv.gz", "wb")
-		self.oldrelationFile = gzip.GzipFile(outPrefix+"oldrelations.csv.gz", "wb")
-
-		self.nodeIdsFile = gzip.GzipFile(outPrefix+"nodeids.csv.gz", "wb")
-		self.wayIdsFile = gzip.GzipFile(outPrefix+"wayids.csv.gz", "wb")
-		self.relationIdsFile = gzip.GzipFile(outPrefix+"relationids.csv.gz", "wb")
-
-		self.wayMembersFile = gzip.GzipFile(outPrefix+"waymems.csv.gz", "wb")
-		self.relationMemNodesFile = gzip.GzipFile(outPrefix+"relationmems-n.csv.gz", "wb")
-		self.relationMemWaysFile = gzip.GzipFile(outPrefix+"relationmems-w.csv.gz", "wb")
-		self.relationMemRelsFile = gzip.GzipFile(outPrefix+"relationmems-r.csv.gz", "wb")
-
-	def Close(self):
-		self.livenodeFile.close()
-		self.livewayFile.close()
-		self.liverelationFile.close()
-
-		self.oldnodeFile.close()
-		self.oldwayFile.close()
-		self.oldrelationFile.close()
-
-		self.nodeIdsFile.close()
-		self.wayIdsFile.close()
-		self.relationIdsFile.close()
-
-		self.wayMembersFile.close()
-		self.relationMemNodesFile.close()
-		self.relationMemWaysFile.close()
-		self.relationMemRelsFile.close()
 
 	def FuncStoreNode(self, objectId, metaData, tags, pos):
 		version, timestamp, changeset, uid, username, visible, current = metaData
@@ -247,8 +297,10 @@ int main(int argc, char **argv)
 
 	class DecodeGzip decodeGzip(fb);
 
-	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore());
+	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore("/home/tim/dev/osm2pgcopy/test-"));
 	LoadFromO5m(decodeGzip, csvStore);
 
+	csvStore.reset();
+	cout << "All done!" << endl;
 }
 
