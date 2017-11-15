@@ -196,6 +196,7 @@ void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 	}
 
 	string objIdStr = Int64ToStr(objId);
+	objIdStr += "\n";
 	this->nodeIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
 }
 
@@ -249,6 +250,7 @@ void CsvStore::StoreWay(int64_t objId, const class MetaData &metaData,
 	}
 
 	string objIdStr = Int64ToStr(objId);
+	objIdStr += "\n";
 	this->wayIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
 
 	for(size_t i=0; i<refs.size(); i++)
@@ -271,6 +273,10 @@ void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 	string refsJson;
 	EncodeRelationMems(refTypeStrs, refIds, refsJson);
 	StrReplaceAll(refsJson, "\"", "\"\"");
+
+	string refRolesJson;
+	EncodeStringVec(refRoles, refRolesJson);
+	StrReplaceAll(refRolesJson, "\"", "\"\"");
 
 	string usernameStr = metaData.username;
 	if(metaData.username.size() > 0)
@@ -298,19 +304,20 @@ void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 	if(metaData.current and metaData.visible)
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\"\n";
 		string row(ss.str());
 		this->liverelationFileGzip->sputn(row.c_str(), row.size());
 	}
 	else
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\"\n";
 		string row(ss.str());
 		this->oldrelationFileGzip->sputn(row.c_str(), row.size());
 	}
 
 	string objIdStr = Int64ToStr(objId);
+	objIdStr += "\n";
 	this->relationIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
 
 	for(size_t i=0; i<refIds.size(); i++)

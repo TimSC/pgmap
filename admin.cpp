@@ -92,7 +92,7 @@ int main(int argc, char **argv)
 		if(inputStr == "3")
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
-			bool ok = admin->CopyMapData(verbose, "/home/tim/dev/osm2pgcopy/portsmouth-", errStr);
+			bool ok = admin->CopyMapData(verbose, "/home/tim/dev/osm2pgcopy/test-", errStr);
 
 			if(ok)
 				cout << "All done!" << endl;
