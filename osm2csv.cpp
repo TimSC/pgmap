@@ -3,6 +3,7 @@
 #include "cppo5m/OsmData.h"
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include "dbjson.h"
 using namespace std;
 
@@ -39,6 +40,13 @@ void StrReplaceAll( string &s, const string &search, const string &replace ) {
         s.erase( pos, search.length() );
         s.insert( pos, replace );
     }
+}
+
+inline string Int64ToStr(int64_t val)
+{
+	stringstream ss;
+	ss << val;
+	return ss.str();
 }
 
 class CsvStore : public IDataStreamHandler
@@ -145,14 +153,50 @@ void CsvStore::Finish()
 void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
-	//cout << "node" << endl;
-
 	string tagsJson;
 	EncodeTags(tags, tagsJson);
-	StrReplaceAll(tagsJson, "\"","\"\"");
-	tagsJson += "\n";
+	StrReplaceAll(tagsJson, "\"", "\"\"");
 	
-	livenodeFileGzip->sputn(tagsJson.c_str(), tagsJson.size());
+	string usernameStr = metaData.username;
+	if(metaData.username.size() > 0)
+	{
+		StrReplaceAll(usernameStr, "\"", "\"\"");
+		usernameStr = "\""+usernameStr+"\"";
+	}
+	else
+		usernameStr = "NULL";
+	string uidStr;
+	if(metaData.uid!=0)
+		uidStr = Int64ToStr(metaData.uid);
+	else
+		uidStr = "NULL";
+	string changesetStr = Int64ToStr(metaData.changeset);
+	if(metaData.changeset==0)
+		changesetStr="NULL";
+	string timestampStr = Int64ToStr(metaData.timestamp);
+	if(metaData.timestamp==0)
+		timestampStr="NULL";
+	string visibleStr = metaData.visible ? "true" : "false";
+	std::string changesetIndex="NULL";
+	
+	stringstream ss;
+	if(metaData.current and metaData.visible)
+	{
+		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",SRID=4326;POINT("<<lon<<" "<<lat<<")\n";
+		string row(ss.str());
+		this->livenodeFileGzip->sputn(row.c_str(), row.size());
+	}
+	else
+	{
+		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",SRID=4326;POINT("<<lon<<" "<<lat<<")\n";
+		string row(ss.str());
+		this->oldnodeFileGzip->sputn(row.c_str(), row.size());
+	}
+
+	string objIdStr = Int64ToStr(objId);
+	this->nodeIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
 }
 
 void CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
@@ -170,41 +214,6 @@ void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 
 /*
 class CsvStore(object):
-
-
-	def FuncStoreNode(self, objectId, metaData, tags, pos):
-		version, timestamp, changeset, uid, username, visible, current = metaData
-		tagDump = json.dumps(tags)
-		tagDump = tagDump.replace('"', '""')
-		tagDump = tagDump.replace('\u00b0', '')
-		if username is not None:
-			username = '"'+username.replace('"', '""')+'"'
-		else:
-			username = "NULL"
-		if uid is None:
-			uid = "NULL"
-		if changeset is None:
-			changeset = "NULL"
-		if timestamp is not None:
-			timestamp = timestamp.strftime("%s")
-		else:
-			timestamp = "NULL"
-		if visible is None: visible = True
-		if current is None: current = True
-		changesetIndex = "NULL"
-		
-		if current and visible:
-			li = u'{0},{3},{4},{5},{6},{7},{8},\"{9}\",SRID=4326;POINT({1} {2})\n'. \
-				format(objectId, pos[1], pos[0], changeset, changesetIndex, username, uid, \
-				timestamp, version, tagDump).encode("UTF-8")
-			self.livenodeFile.write(li)
-		else:
-			li = u'{0},{3},{4},{5},{6},{7},{8},{9},\"{10}\",SRID=4326;POINT({1} {2})\n'. \
-				format(objectId, pos[1], pos[0], changeset, changesetIndex, username, uid, visible, \
-				timestamp, version, tagDump).encode("UTF-8")
-			self.oldnodeFile.write(li)
-
-		self.nodeIdsFile.write("{0}\n".format(objectId))
 
 	def FuncStoreWay(self, objectId, metaData, tags, refs):
 		version, timestamp, changeset, uid, username, visible, current = metaData

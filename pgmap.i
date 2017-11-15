@@ -53,7 +53,7 @@ public:
 	int64_t timestamp, changeset;
 	uint64_t uid;
 	std::string username;
-	bool visible;
+	bool visible, current;
 
 	MetaData();
 	virtual ~MetaData();

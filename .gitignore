@@ -1,5 +1,7 @@
 dump
 extract
+osm2csv
+admin
 *.o5m.gz
 config.cfg
 __pycache__/
@@ -7,4 +9,5 @@ _pgmap.so
 pgmap.py
 pgmap.pyc
 pgmap_wrap.cxx
+pgmap_wrap.cpp
 build/
