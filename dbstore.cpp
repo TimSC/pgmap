@@ -34,8 +34,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 
 		//Convert spatial and member data to appropriate formats
 		stringstream wkt;
-		stringstream refsJson;
-		stringstream rolesJson;
+		string refsJson;
+		string rolesJson;
 		if(nodeObject != nullptr)
 		{
 			wkt.precision(9);
@@ -43,37 +43,15 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 		}
 		else if(wayObject != nullptr)
 		{
-			refsJson << "[";
-			for(size_t j=0;j < wayObject->refs.size(); j++)
-			{
-				if(j != 0)
-					refsJson << ", ";
-				refsJson << wayObject->refs[j];
-			}
-			refsJson << "]";
+			EncodeInt64Vec(wayObject->refs, refsJson);
 		}
 		else if(relationObject != nullptr)
 		{
 			if(relationObject->refTypeStrs.size() != relationObject->refIds.size() || relationObject->refTypeStrs.size() != relationObject->refRoles.size())
 				throw std::invalid_argument("Length of ref vectors must be equal");
 
-			refsJson << "[";
-			for(size_t j=0;j < relationObject->refIds.size(); j++)
-			{
-				if(j != 0)
-					refsJson << ", ";
-				refsJson << "[\"" << relationObject->refTypeStrs[j] << "\"," << relationObject->refIds[j] << "]";
-			}
-			refsJson << "]";
-
-			rolesJson << "[";
-			for(size_t j=0;j < relationObject->refRoles.size(); j++)
-			{
-				if(j != 0)
-					rolesJson << ", ";
-				rolesJson << "\"" << relationObject->refRoles[j] << "\"";
-			}
-			rolesJson << "]";
+			EncodeRelationMems(relationObject->refTypeStrs, relationObject->refIds, refsJson);
+			EncodeStringVec(relationObject->refRoles, rolesJson);
 		}
 
 		//Get existing object object in live table (if any)
@@ -321,7 +299,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertway", ss.str());
 						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson.str()).exec();
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson).exec();
 					}
 					else if(relationObject != nullptr)
 					{
@@ -330,7 +308,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						c.prepare(tablePrefix+"insertrelation", ss.str());
 						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-							(tagsJson)(refsJson.str())(rolesJson.str()).exec();
+							(tagsJson)(refsJson)(rolesJson).exec();
 					}
 				}
 				catch (const pqxx::sql_error &e)
@@ -390,7 +368,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updateway", ss.str());
 						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson.str()).exec();
+							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson).exec();
 					}
 					else if(relationObject != nullptr)
 					{
@@ -399,7 +377,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 						c.prepare(tablePrefix+"updaterelation", ss.str());
 						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-							(tagsJson)(objId)(refsJson.str())(rolesJson.str()).exec();
+							(tagsJson)(objId)(refsJson)(rolesJson).exec();
 					}
 
 				}
@@ -471,7 +449,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					c.prepare(tablePrefix+"insertoldway", ss.str());
 					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(refsJson.str()).exec();
+						(tagsJson)(osmObject->metaData.visible)(refsJson).exec();
 				}
 				else if(relationObject != nullptr)
 				{
@@ -480,7 +458,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 					c.prepare(tablePrefix+"insertoldrelation", ss.str());
 					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(refsJson.str())(rolesJson.str()).exec();
+						(tagsJson)(osmObject->metaData.visible)(refsJson)(rolesJson).exec();
 				}
 
 			}

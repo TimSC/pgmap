@@ -202,101 +202,138 @@ void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 void CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
-	//cout << "way" << endl;
+	string tagsJson;
+	EncodeTags(tags, tagsJson);
+	StrReplaceAll(tagsJson, "\"", "\"\"");
+	
+	string refsJson;
+	EncodeInt64Vec(refs, refsJson);
+	StrReplaceAll(refsJson, "\"", "\"\"");
+
+	string usernameStr = metaData.username;
+	if(metaData.username.size() > 0)
+	{
+		StrReplaceAll(usernameStr, "\"", "\"\"");
+		usernameStr = "\""+usernameStr+"\"";
+	}
+	else
+		usernameStr = "NULL";
+	string uidStr;
+	if(metaData.uid!=0)
+		uidStr = Int64ToStr(metaData.uid);
+	else
+		uidStr = "NULL";
+	string changesetStr = Int64ToStr(metaData.changeset);
+	if(metaData.changeset==0)
+		changesetStr="NULL";
+	string timestampStr = Int64ToStr(metaData.timestamp);
+	if(metaData.timestamp==0)
+		timestampStr="NULL";
+	string visibleStr = metaData.visible ? "true" : "false";
+	std::string changesetIndex="NULL";
+	
+	stringstream ss;
+	if(metaData.current and metaData.visible)
+	{
+		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+		string row(ss.str());
+		this->livewayFileGzip->sputn(row.c_str(), row.size());
+	}
+	else
+	{
+		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+		string row(ss.str());
+		this->oldwayFileGzip->sputn(row.c_str(), row.size());
+	}
+
+	string objIdStr = Int64ToStr(objId);
+	this->wayIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
+
+	for(size_t i=0; i<refs.size(); i++)
+	{
+		stringstream ss2;
+		ss2 << objId <<","<< metaData.version <<","<< i <<","<< refs[i] << "\n";
+		string memStr(ss2.str());
+		this->wayMembersFileGzip->sputn(memStr.c_str(), memStr.size());
+	}
 }
 
 void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
-	//cout << "relation" << endl;
+	string tagsJson;
+	EncodeTags(tags, tagsJson);
+	StrReplaceAll(tagsJson, "\"", "\"\"");
+	
+	string refsJson;
+	EncodeRelationMems(refTypeStrs, refIds, refsJson);
+	StrReplaceAll(refsJson, "\"", "\"\"");
+
+	string usernameStr = metaData.username;
+	if(metaData.username.size() > 0)
+	{
+		StrReplaceAll(usernameStr, "\"", "\"\"");
+		usernameStr = "\""+usernameStr+"\"";
+	}
+	else
+		usernameStr = "NULL";
+	string uidStr;
+	if(metaData.uid!=0)
+		uidStr = Int64ToStr(metaData.uid);
+	else
+		uidStr = "NULL";
+	string changesetStr = Int64ToStr(metaData.changeset);
+	if(metaData.changeset==0)
+		changesetStr="NULL";
+	string timestampStr = Int64ToStr(metaData.timestamp);
+	if(metaData.timestamp==0)
+		timestampStr="NULL";
+	string visibleStr = metaData.visible ? "true" : "false";
+	std::string changesetIndex="NULL";
+	
+	stringstream ss;
+	if(metaData.current and metaData.visible)
+	{
+		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+		string row(ss.str());
+		this->liverelationFileGzip->sputn(row.c_str(), row.size());
+	}
+	else
+	{
+		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+		string row(ss.str());
+		this->oldrelationFileGzip->sputn(row.c_str(), row.size());
+	}
+
+	string objIdStr = Int64ToStr(objId);
+	this->relationIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
+
+	for(size_t i=0; i<refIds.size(); i++)
+	{
+		const std::string &refTypeStr = refTypeStrs[i];
+		stringstream ss2;
+		ss2 << objId <<","<< metaData.version <<","<< i <<","<< refIds[i] << "\n";
+		string memStr(ss2.str());
+
+		if(refTypeStr == "node")
+		{
+			this->relationMemNodesFileGzip->sputn(memStr.c_str(), memStr.size());
+		}
+		else if(refTypeStr == "way")
+		{
+			this->relationMemWaysFileGzip->sputn(memStr.c_str(), memStr.size());
+		}
+		else if(refTypeStr == "relation")
+		{
+			this->relationMemRelsFileGzip->sputn(memStr.c_str(), memStr.size());
+		}
+	}
 }
-
-/*
-class CsvStore(object):
-
-	def FuncStoreWay(self, objectId, metaData, tags, refs):
-		version, timestamp, changeset, uid, username, visible, current = metaData
-		tagDump = json.dumps(tags)
-		tagDump = tagDump.replace('"', '""')
-		if username is not None:
-			username = '"'+username.replace('"', '""')+'"'
-		else:
-			username = "NULL"
-		if uid is None:
-			uid = "NULL"
-		if changeset is None:
-			changeset = "NULL"
-		if timestamp is not None:
-			timestamp = timestamp.strftime("%s")
-		else:
-			timestamp = "NULL"
-
-		memDump= json.dumps(refs)
-		if visible is None: visible = True
-		if current is None: current = True
-		changesetIndex = "NULL"
-
-		if current and visible:
-			li = u'{0},{1},{2},{3},{4},{5},{6},\"{7}\",\"{8}\"\n'. \
-				format(objectId, changeset, changesetIndex, username, uid, \
-				timestamp, version, tagDump, memDump).encode("UTF-8")
-			self.livewayFile.write(li)
-		else:
-			li = u'{0},{1},{2},{3},{4},{5},{6},{7},\"{8}\",\"{9}\"\n'. \
-				format(objectId, changeset, changesetIndex, username, uid, visible, \
-				timestamp, version, tagDump, memDump).encode("UTF-8")
-			self.oldwayFile.write(li)
-
-		self.wayIdsFile.write("{0}\n".format(objectId))
-		for i, mem in enumerate(refs):
-			self.wayMembersFile.write("{0},{1},{2},{3}\n".format(objectId, version, i, mem))
-
-	def FuncStoreRelation(self, objectId, metaData, tags, refs):
-		version, timestamp, changeset, uid, username, visible, current = metaData
-		tagDump = json.dumps(tags)
-		tagDump = tagDump.replace('"', '""')
-		if username is not None:
-			username = u'"'+username.replace(u'"', u'""')+u'"'
-		else:
-			username = u"NULL"
-		if uid is None:
-			uid = "NULL"
-		if changeset is None:
-			changeset = "NULL"
-		if timestamp is not None:
-			timestamp = timestamp.strftime("%s")
-		else:
-			timestamp = "NULL"
-
-		memDump= json.dumps([mem[:2] for mem in refs])
-		memDump = memDump.replace('"', '""')
-		rolesDump= json.dumps([mem[2] for mem in refs])
-		rolesDump = rolesDump.replace('"', '""')
-		if visible is None: visible = True
-		if current is None: current = True
-		changesetIndex = "NULL"
-
-		if current and visible:
-			li = u'{0},{1},{2},{3},{4},{5},{6},\"{7}\",\"{8}\",\"{9}\"\n'. \
-				format(objectId, changeset, changesetIndex, username, uid, \
-				timestamp, version, tagDump, memDump, rolesDump).encode("UTF-8")
-			self.liverelationFile.write(li)
-		else:
-			li = u'{0},{1},{2},{3},{4},{5},{6},{7},\"{8}\",\"{9}\",\"{10}\"\n'. \
-				format(objectId, changeset, changesetIndex, username, uid, visible, \
-				timestamp, version, tagDump, memDump, rolesDump).encode("UTF-8")
-			self.oldrelationFile.write(li)
-
-		self.relationIdsFile.write("{0}\n".format(objectId))
-		for i, (memTy, memId, memRole) in enumerate(refs):
-			if memTy == "node":
-				self.relationMemNodesFile.write("{0},{1},{2},{3}\n".format(objectId, version, i, memId))
-			elif memTy == "way":
-				self.relationMemWaysFile.write("{0},{1},{2},{3}\n".format(objectId, version, i, memId))
-			elif memTy == "relation":
-				self.relationMemRelsFile.write("{0},{1},{2},{3}\n".format(objectId, version, i, memId))
-*/
 
 int main(int argc, char **argv)
 {
