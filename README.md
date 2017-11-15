@@ -6,8 +6,6 @@ C++ SWIG module for accessing microcosm's postgis OSM map GIS schema. It also pr
 Installation
 ------------
 
-The tools to configure and import the postgis database are here: https://github.com/TimSC/osm2pgcopy (This will eventually be merged into this library and pycrocosm.)
-
 To use this library using Python 2 (note: python 3 support is planned):
 
 	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip swig3.0
@@ -28,6 +26,8 @@ To use this library using Python 2 (note: python 3 support is planned):
 
 	python setup.py install
 
+	make
+
 	cp config.cfg.template config.cfg
 
 Hopefully you have already imported some data into postgis. Add your database config info to config.cfg then check we can connect:
@@ -35,6 +35,8 @@ Hopefully you have already imported some data into postgis. Add your database co
 	python test.py
 
 The SWIGWORDSIZE64 option assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
+
+To import a database, use osm2csv to convert the data to csv format. Then use the admin tool to create the tables, copy the csv files into the database, then create the indices.
 
 Database Design
 ---------------
