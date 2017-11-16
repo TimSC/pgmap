@@ -869,6 +869,17 @@ int PgTransaction::GetChangeset(int64_t objId,
 			errStrNative);
 	}
 
+/*	if(downloadData)
+	{
+		changesetOut.data.reset(new class OsmData());
+		GetAllNodesByChangeset(work.get(), this->tableStaticPrefix,
+			this->tableActivePrefix, objId,
+			changesetOut.data);
+		GetAllNodesByChangeset(work.get(), this->tableActivePrefix,
+			"", objId,
+			changesetOut.data);
+	}*/
+
 	errStr.errStr = errStrNative;
 	return ret;
 }

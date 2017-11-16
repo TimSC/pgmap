@@ -2,6 +2,7 @@
 #include "util.h"
 #include "dbstore.h"
 #include "dbcommon.h"
+#include "dbdecode.h"
 using namespace std;
 
 void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &changesets)
@@ -61,6 +62,51 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 	}
 }
 
+bool GetOldNewNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	const string &tableLiveOld,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	string nodeTable = tablePrefix + tableLiveOld + "nodes";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "nodeids";
+
+	stringstream sql;
+	sql << "SELECT "<<nodeTable<<".*, ST_X("<<nodeTable<<".geom) as lon, ST_Y("<<nodeTable<<".geom) AS lat";
+	sql << " FROM ";
+	sql << nodeTable;
+	if(excludeTable.size() > 0)
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<nodeTable<<".id = "<<excludeTable<<".id";
+	sql << " WHERE changeset = " << changesetId;
+	if(excludeTable.size() > 0)
+		sql << " AND "<<excludeTable<<".id IS NULL";
+	sql <<";";
+
+	pqxx::icursorstream c( *work, sql.str(), "nodesbychangeset", 1000 );
+
+	NodeResultsToEncoder(c, enc);
+	return true;
+}
+
+bool GetAllNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	bool ok = GetOldNewNodesByChangeset(work, tablePrefix, 
+		excludeTablePrefix,
+		"old", changesetId,
+ 		enc);
+	if(!ok) return false;
+
+	return GetOldNewNodesByChangeset(work, tablePrefix, 
+		excludeTablePrefix,
+		"live", changesetId,
+		enc);
+}
+
 int GetChangesetFromDb(pqxx::work *work, 
 	const std::string &tablePrefix,
 	int64_t objId,
@@ -83,6 +129,7 @@ int GetChangesetFromDb(pqxx::work *work,
 	std::vector<class PgChangeset> changesets;
 	DecodeRowsToChangesets(r, changesets);
 	changesetOut = changesets[0];
+
 	return 1;
 }
 

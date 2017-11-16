@@ -5,6 +5,11 @@
 #include <string>
 #include "pgmap.h"
 
+bool GetAllNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc);
+
 int GetChangesetFromDb(pqxx::work *work, 
 	const std::string &tablePrefix,
 	int64_t objId,
