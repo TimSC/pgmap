@@ -15,7 +15,7 @@ extract: extract.cpp $(common)
 admin: admin.cpp $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
 
-osm2csv: osm2csv.cpp dbjson.cpp cppo5m/o5m.cpp cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/cppiso8601/iso8601.cpp cppGzip/DecodeGzip.cpp cppGzip/EncodeGzip.cpp 
+osm2csv: osm2csv.cpp dbjson.cpp util.cpp cppo5m/o5m.cpp cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/cppiso8601/iso8601.cpp cppGzip/DecodeGzip.cpp cppGzip/EncodeGzip.cpp 
 	g++ $^ -std=c++11 -Wall -lexpat -lz -o $@
 
 swigpy2: pgmap.i $(common)

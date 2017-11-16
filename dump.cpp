@@ -13,18 +13,9 @@ int main(int argc, char **argv)
 
 	shared_ptr<IDataStreamHandler> enc(new O5mEncode(*gzipEnc));
 
-	string configContent;
 	cout << "Reading settings from config.cfg" << endl;
-	ReadFileContents("config.cfg", false, configContent);
-	std::vector<std::string> lines = split(configContent, '\n');
 	std::map<string, string> config;
-	for(size_t i=0; i < lines.size(); i++)
-	{
-		const std::string &line = lines[i];
-		std::vector<std::string> parts = split(line, ':');
-		if (parts.size() < 2) continue;
-		config[parts[0]] = parts[1];
-	}
+	ReadSettingsFile("config.cfg", config);
 	
 	std::stringstream ss;
 	ss << "dbname=";

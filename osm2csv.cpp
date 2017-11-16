@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include "dbjson.h"
+#include "util.h"
 using namespace std;
 
 /*
@@ -180,6 +181,7 @@ void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 	std::string changesetIndex="NULL";
 	
 	stringstream ss;
+	ss.precision(9);
 	if(metaData.current and metaData.visible)
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
@@ -344,13 +346,17 @@ void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 
 int main(int argc, char **argv)
 {
+	cout << "Reading settings from config.cfg" << endl;
+	std::map<string, string> config;
+	ReadSettingsFile("config.cfg", config);
+
 	//Perform gzip decoding
 	std::filebuf fb;
-	fb.open("/home/tim/dev/osm2pgcopy/fosm-portsmouth-2017.o5m.gz", std::ios::in | std::ios::binary);
+	fb.open(config["dump_path"], std::ios::in | std::ios::binary);
 
 	class DecodeGzip decodeGzip(fb);
 
-	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore("/home/tim/dev/osm2pgcopy/test-"));
+	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore(config["csv_absolute_path"]));
 	LoadFromO5m(decodeGzip, csvStore);
 
 	csvStore.reset();

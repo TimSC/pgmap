@@ -236,5 +236,7 @@ public:
 		return true; }
 };
 
+bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut);
+
 #endif //_UTIL_H
 
