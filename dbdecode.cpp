@@ -117,7 +117,8 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 			lastUpdateTime = timeNow;
 		}
 
-		enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
+		if(enc)
+			enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
 	}
 	return count;
 }
@@ -173,7 +174,8 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 			lastUpdateTime = timeNow;
 		}
 
-		enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
+		if(enc)
+			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
 	}
 	return count;
 }
@@ -242,8 +244,9 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 				lastUpdateTime = timeNow;
 			}
 
-			enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
-				relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
+			if(enc)
+				enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
+					relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
 		}
 	}
 }

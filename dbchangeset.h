@@ -51,4 +51,7 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	size_t &rowsAffected,
 	std::string &errStrNative);
 
+void FilterObjectsInOsmChange(int filterMode, 
+	const class OsmData &dataIn, class OsmData &dataOut);
+
 #endif //_DB_CHANGESET_H

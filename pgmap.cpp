@@ -869,19 +869,34 @@ int PgTransaction::GetChangeset(int64_t objId,
 			errStrNative);
 	}
 
-/*	if(downloadData)
-	{
-		changesetOut.data.reset(new class OsmData());
-		GetAllNodesByChangeset(work.get(), this->tableStaticPrefix,
-			this->tableActivePrefix, objId,
-			changesetOut.data);
-		GetAllNodesByChangeset(work.get(), this->tableActivePrefix,
-			"", objId,
-			changesetOut.data);
-	}*/
-
 	errStr.errStr = errStrNative;
 	return ret;
+}
+
+int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
+	std::shared_ptr<class IOsmChangeBlock> output,
+	class PgMapError &errStr)
+{
+	std::shared_ptr<class OsmData> data(new class OsmData());
+	GetAllNodesByChangeset(work.get(), this->tableStaticPrefix,
+		"", changesetId,
+		data);
+	GetAllNodesByChangeset(work.get(), this->tableActivePrefix,
+		"", changesetId,
+		data);
+
+	class OsmData created, modified, deleted;
+	FilterObjectsInOsmChange(1, *data, created);
+	FilterObjectsInOsmChange(2, *data, modified);
+	FilterObjectsInOsmChange(3, *data, deleted);
+
+	if(!created.IsEmpty())
+		output->StoreOsmData("create", created, false);
+	if(!modified.IsEmpty())
+		output->StoreOsmData("modified", modified, false);
+	if(!deleted.IsEmpty())	
+		output->StoreOsmData("deleted", deleted, false);
+	return 1;
 }
 
 bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,

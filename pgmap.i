@@ -6,6 +6,7 @@
 %include "std_map.i"
 %include "std_set.i"
 %include "std_shared_ptr.i"
+%include "streambuf.i"
 %include exception.i
 using std::string;
 
@@ -315,6 +316,9 @@ public:
 	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,
 		class PgMapError &errStr);
+	int GetChangesetOsmChange(int64_t changesetId,
+		std::shared_ptr<class IOsmChangeBlock> output,
+		class PgMapError &errStr);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		class PgMapError &errStr);
 	int64_t CreateChangeset(const class PgChangeset &changeset,
@@ -351,4 +355,5 @@ void LoadFromOsmXml(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler
 void LoadFromOsmChangeXml(std::streambuf &fi, std::shared_ptr<class IOsmChangeBlock> output);
 void SaveToO5m(const class OsmData &osmData, std::streambuf &fi);
 void SaveToOsmXml(const class OsmData &osmData, std::streambuf &fi);
+void SaveToOsmChangeXml(const class OsmChange &osmChange, std::streambuf &fi);
 

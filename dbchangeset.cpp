@@ -332,3 +332,88 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	return ok;
 }
 
+void FilterObjectsInOsmChange(int filterMode, 
+	const class OsmData &dataIn, class OsmData &dataOut)
+{
+	dataOut.Clear();
+
+	if(filterMode == 1)
+	{
+		for(size_t i=0; i<dataIn.nodes.size(); i++)
+		{
+			const class OsmNode &node = dataIn.nodes[i];
+			if(node.metaData.version != 1)
+				continue;
+			dataOut.nodes.push_back(node);
+		}
+
+		for(size_t i=0; i<dataIn.ways.size(); i++)
+		{
+			const class OsmWay &way = dataIn.ways[i];
+			if(way.metaData.version != 1)
+				continue;
+			dataOut.ways.push_back(way);
+		}
+
+		for(size_t i=0; i<dataIn.relations.size(); i++)
+		{
+			const class OsmRelation &relation = dataIn.relations[i];
+			if(relation.metaData.version != 1)
+				continue;
+			dataOut.relations.push_back(relation);
+		}
+	}
+	else if(filterMode == 2)
+	{
+		for(size_t i=0; i<dataIn.nodes.size(); i++)
+		{
+			const class OsmNode &node = dataIn.nodes[i];
+			if(node.metaData.version == 1 or not node.metaData.visible)
+				continue;
+			dataOut.nodes.push_back(node);
+		}
+
+		for(size_t i=0; i<dataIn.ways.size(); i++)
+		{
+			const class OsmWay &way = dataIn.ways[i];
+			if(way.metaData.version == 1 or not way.metaData.visible)
+				continue;
+			dataOut.ways.push_back(way);
+		}
+
+		for(size_t i=0; i<dataIn.relations.size(); i++)
+		{
+			const class OsmRelation &relation = dataIn.relations[i];
+			if(relation.metaData.version == 1 or not relation.metaData.visible)
+				continue;
+			dataOut.relations.push_back(relation);
+		}
+	}
+	else if(filterMode == 3)
+	{
+		for(size_t i=0; i<dataIn.nodes.size(); i++)
+		{
+			const class OsmNode &node = dataIn.nodes[i];
+			if(node.metaData.version == 1 or node.metaData.visible)
+				continue;
+			dataOut.nodes.push_back(node);
+		}
+
+		for(size_t i=0; i<dataIn.ways.size(); i++)
+		{
+			const class OsmWay &way = dataIn.ways[i];
+			if(way.metaData.version == 1 or way.metaData.visible)
+				continue;
+			dataOut.ways.push_back(way);
+		}
+
+		for(size_t i=0; i<dataIn.relations.size(); i++)
+		{
+			const class OsmRelation &relation = dataIn.relations[i];
+			if(relation.metaData.version == 1 or relation.metaData.visible)
+				continue;
+			dataOut.relations.push_back(relation);
+		}
+	}
+}
+
