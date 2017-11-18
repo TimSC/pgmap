@@ -62,6 +62,8 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 	}
 }
 
+// *******************************************************
+
 bool GetOldNewNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
@@ -86,9 +88,81 @@ bool GetOldNewNodesByChangeset(pqxx::work *work, const string &tablePrefix,
 
 	pqxx::icursorstream c( *work, sql.str(), "nodesbychangeset", 1000 );
 
-	NodeResultsToEncoder(c, enc);
+	int count = 1;
+	while(count > 0)
+		count = NodeResultsToEncoder(c, enc);
 	return true;
 }
+
+bool GetOldNewWayByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	const string &tableLiveOld,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	string wayTable = tablePrefix + tableLiveOld + "ways";
+	string wayMemTable = tablePrefix + "way_mems";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "wayids";
+
+	stringstream sql;
+	sql << "SELECT " << wayTable << ".*";
+	if(excludeTable.size() > 0)
+		sql << ", " << excludeTable << ".id";
+
+	sql << " FROM " << wayTable;
+	if(excludeTable.size() > 0)
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<wayTable<<".id = "<<excludeTable<<".id";
+
+	sql << " WHERE changeset = " << changesetId;
+	if(excludeTable.size() > 0)
+		sql << " AND "<<excludeTable<<".id IS NULL";
+	sql << ";";
+
+	pqxx::icursorstream cursor( *work, sql.str(), "waysbychangeset", 1000 );	
+
+	int records = 1;
+	while (records>0)
+		records = WayResultsToEncoder(cursor, enc);
+	return true;
+}
+
+bool GetOldNewRelationByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	const string &tableLiveOld,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	string relTable = tablePrefix + tableLiveOld + "relations";
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = excludeTablePrefix + "relationids";
+
+	int count = 0;
+
+	stringstream sql;
+	sql << "SELECT " << relTable << ".*";
+	if(excludeTable.size() > 0)
+		sql << ", "<<excludeTable<<".id";
+
+	sql << " FROM "<<relTable;
+	if(excludeTable.size() > 0)
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<relTable<<".id = "<<excludeTable<<".id";
+
+	sql << " WHERE changeset = " << changesetId;
+	if(excludeTable.size() > 0)
+		sql << " AND "<<excludeTable<<".id IS NULL";
+	sql << ";";
+
+	pqxx::icursorstream cursor( *work, sql.str(), "relationsbychangeset", 1000 );	
+
+	set<int64_t> emptySkipIds;
+	RelationResultsToEncoder(cursor, emptySkipIds, enc);
+	return true;
+}
+
+// **********************************************
 
 bool GetAllNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
@@ -106,6 +180,42 @@ bool GetAllNodesByChangeset(pqxx::work *work, const string &tablePrefix,
 		"live", changesetId,
 		enc);
 }
+
+bool GetAllWaysByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	bool ok = GetOldNewWayByChangeset(work, tablePrefix, 
+		excludeTablePrefix,
+		"old", changesetId,
+ 		enc);
+	if(!ok) return false;
+
+	return GetOldNewWayByChangeset(work, tablePrefix, 
+		excludeTablePrefix,
+		"live", changesetId,
+		enc);
+}
+
+bool GetAllRelationsByChangeset(pqxx::work *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	int64_t changesetId,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	bool ok = GetOldNewRelationByChangeset(work, tablePrefix, 
+		excludeTablePrefix,
+		"old", changesetId,
+ 		enc);
+	if(!ok) return false;
+
+	return GetOldNewRelationByChangeset(work, tablePrefix, 
+		excludeTablePrefix,
+		"live", changesetId,
+		enc);
+}
+
+// ***********************************************
 
 int GetChangesetFromDb(pqxx::work *work, 
 	const std::string &tablePrefix,

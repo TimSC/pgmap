@@ -885,6 +885,20 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 		"", changesetId,
 		data);
 
+	GetAllWaysByChangeset(work.get(), this->tableStaticPrefix,
+		"", changesetId,
+		data);
+	GetAllWaysByChangeset(work.get(), this->tableActivePrefix,
+		"", changesetId,
+		data);
+
+	GetAllRelationsByChangeset(work.get(), this->tableStaticPrefix,
+		"", changesetId,
+		data);
+	GetAllRelationsByChangeset(work.get(), this->tableActivePrefix,
+		"", changesetId,
+		data);
+
 	class OsmData created, modified, deleted;
 	FilterObjectsInOsmChange(1, *data, created);
 	FilterObjectsInOsmChange(2, *data, modified);
