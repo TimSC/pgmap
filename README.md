@@ -8,7 +8,7 @@ Installation
 
 To use this library using Python 2 (note: python 3 support is planned):
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip swig3.0
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip swig3.0 libboost-filesystem-dev
 
 	sudo pip install --upgrade pip
 

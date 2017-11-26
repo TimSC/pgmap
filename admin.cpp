@@ -43,8 +43,9 @@ int main(int argc, char **argv)
 		cout << "2. Create tables" << endl;
 		cout << "3. Copy data" << endl;
 		cout << "4. Create indicies" << endl;
-		cout << "5. Refresh max IDs" << endl;
-		cout << "6. Refresh max changeset IDs and UIDs" << endl << endl;
+		cout << "5. Apply diffs" << endl;
+		cout << "6. Refresh max IDs" << endl;
+		cout << "7. Refresh max changeset IDs and UIDs" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
 		cout << "b. Reset test tables" << endl << endl;
 		cout << "q. Quit" << endl;
@@ -107,7 +108,7 @@ int main(int argc, char **argv)
 		if(inputStr == "5")
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
-			bool ok = admin->RefreshMapIds(verbose, errStr);
+			bool ok = admin->ApplyDiffs(verbose, errStr);
 
 			if(ok)
 			{
@@ -123,6 +124,24 @@ int main(int argc, char **argv)
 		}
 
 		if(inputStr == "6")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
+			bool ok = admin->RefreshMapIds(verbose, errStr);
+
+			if(ok)
+			{
+				admin->Commit();
+				cout << "All done!" << endl;
+			}
+			else
+			{
+				cout << errStr.errStr << endl;
+				admin->Abort();
+			}
+			continue;
+		}
+
+		if(inputStr == "7")
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
 			bool ok = admin->RefreshMaxChangesetUid(verbose, errStr);
