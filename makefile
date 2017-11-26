@@ -2,20 +2,25 @@
 
 all: dump extract admin osm2csv swigpy2
 
-common = util.cpp dbquery.cpp dbids.cpp dbadmin.cpp dbcommon.cpp dbreplicate.cpp \
-	dbdecode.cpp dbstore.cpp dbdump.cpp dbfilters.cpp dbchangeset.cpp dbjson.cpp pgmap.cpp cppo5m/o5m.cpp \
-	cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/iso8601lib/iso8601.c cppGzip/EncodeGzip.cpp
+%.co: %.c
+	gcc -Wall -fPIC -c -o $@ $<
+%.o: %.cpp
+	g++ -Wall -fPIC -c -std=c++11 -o $@ $<
 
-dump: dump.cpp $(common)
+common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
+	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o pgmap.o cppo5m/o5m.o \
+	cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o
+
+dump: dump.o $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
 
-extract: extract.cpp $(common)
+extract: extract.o $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
 
-admin: admin.cpp $(common)
+admin: admin.o $(common)
 	g++ $^ -std=c++11 -Wall -lpqxx -lexpat -lz -o $@
 
-osm2csv: osm2csv.cpp dbjson.cpp util.cpp cppo5m/o5m.cpp cppo5m/varint.cpp cppo5m/OsmData.cpp cppo5m/osmxml.cpp cppo5m/iso8601lib/iso8601.c cppGzip/DecodeGzip.cpp cppGzip/EncodeGzip.cpp 
+osm2csv: osm2csv.o dbjson.o util.o cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o 
 	g++ $^ -std=c++11 -Wall -lexpat -lz -o $@
 
 swigpy2: pgmap.i $(common)
