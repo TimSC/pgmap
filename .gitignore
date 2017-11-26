@@ -11,3 +11,4 @@ pgmap.pyc
 pgmap_wrap.cxx
 pgmap_wrap.cpp
 build/
+*.o

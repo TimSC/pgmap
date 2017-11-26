@@ -2,7 +2,9 @@
 #include "dbids.h"
 #include "dbcommon.h"
 #include <map>
+#include <boost/filesystem.hpp>
 using namespace std;
+using namespace boost::filesystem;
 
 bool ClearTable(pqxx::work *work, const string &tableName, std::string &errStr)
 {
@@ -424,5 +426,44 @@ bool DbRefreshMaxChangesetUid(pqxx::connection &c, pqxx::transaction_base *work,
 		errStr);
 	if(!ok) return false;
 	return true;
+}
+
+bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tableStaticPrefix, 
+	const std::string &tableModPrefix, 
+	const std::string &tableTestPrefix, 
+	const std::string &diffPath, 
+	std::string &errStr)
+{
+	path p (diffPath);
+
+	if(is_directory(p))
+	{
+		//Recusively walk through directories
+		vector<path> result;
+		copy(directory_iterator(p), directory_iterator(),
+			back_inserter(result));
+		sort(result.begin(), result.end());
+		for (vector<path>::const_iterator it (result.begin()); it != result.end(); ++it)
+		{
+			//cout << "   " << *it << endl;
+
+			string pathStr(it->native());
+			bool ok = DbApplyDiffs(c, work, 
+				verbose, 
+				tableStaticPrefix, 
+				tableModPrefix, 
+				tableTestPrefix, 
+				pathStr, 
+				errStr);
+			if(!ok) return false;
+		}
+	}
+	else
+	{
+		cout << "   " << diffPath << " file: processing TODO" << endl;
+	}
+	return true;	
 }
 

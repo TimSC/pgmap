@@ -1,4 +1,3 @@
-#include <boost/filesystem.hpp>
 #include "pgmap.h"
 #include "dbquery.h"
 #include "dbids.h"
@@ -13,7 +12,6 @@
 #include "cppo5m/OsmData.h"
 #include <algorithm>
 using namespace std;
-using namespace boost::filesystem;
 
 PgMapError::PgMapError()
 {
@@ -1186,14 +1184,14 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 	return ok;
 }
 
-bool PgAdmin::ApplyDiffs(int verbose, class PgMapError &errStr)
+bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr)
 {
-	path p ("/");
+	std::string nativeErrStr;
 
-	copy(directory_iterator(p), directory_iterator(), // directory_iterator::value_type
-	  ostream_iterator<directory_entry>(cout, "\n")); // is directory_entry, which is
-		                                              // converted to a path by the
-		                                              // path stream inserter
+	bool ok = DbApplyDiffs(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
+		this->tableModPrefix, this->tableTestPrefix, diffPath, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
 
 	return true;
 }

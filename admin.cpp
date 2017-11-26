@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 		if(inputStr == "5")
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
-			bool ok = admin->ApplyDiffs(verbose, errStr);
+			bool ok = admin->ApplyDiffs(config["diffs_path"], verbose, errStr);
 
 			if(ok)
 			{
