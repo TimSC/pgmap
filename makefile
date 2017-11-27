@@ -2,27 +2,28 @@
 
 all: dump extract admin osm2csv swigpy2
 
-%.co: %.c
+%.co: %.c %.h
 	gcc -Wall -fPIC -c -o $@ $<
-%.o: %.cpp
+
+%.o: %.cpp %.h
 	g++ -Wall -fPIC -c -std=c++11 -o $@ $<
 
 common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
 	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o pgmap.o cppo5m/o5m.o \
-	cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o
+	cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
 
 libs = -lboost_filesystem -lboost_system -lpqxx -lexpat -lz
 
-dump: dump.o $(common)
+dump: dump.cpp $(common)
 	g++ $^ -std=c++11 -Wall $(libs) -o $@
 
-extract: extract.o $(common)
+extract: extract.cpp $(common)
 	g++ $^ -std=c++11 -Wall $(libs) -o $@
 
-admin: admin.o $(common)
+admin: admin.cpp $(common)
 	g++ $^ -std=c++11 -Wall $(libs) -o $@
 
-osm2csv: osm2csv.o dbjson.o util.o cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o 
+osm2csv: osm2csv.cpp dbjson.o util.o cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o 
 	g++ $^ -std=c++11 -Wall $(libs) -o $@
 
 swigpy2: pgmap.i $(common)

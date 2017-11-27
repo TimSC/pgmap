@@ -1,8 +1,11 @@
 #include "dbadmin.h"
 #include "dbids.h"
 #include "dbcommon.h"
+#include "dbstore.h"
+#include "cppGzip/DecodeGzip.h"
 #include <map>
 #include <boost/filesystem.hpp>
+#include <fstream>
 using namespace std;
 using namespace boost::filesystem;
 
@@ -462,8 +465,46 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 	else
 	{
-		cout << "   " << diffPath << " file: processing TODO" << endl;
+		if (extension(diffPath) == ".gz")
+		{
+			cout << "   " << diffPath << endl;
+			std::string xmlData;
+			DecodeGzipQuickFromFilename(diffPath, xmlData);
+			
+			shared_ptr<class OsmChange> data(new class OsmChange());
+			std::stringbuf sb(xmlData);
+			LoadFromOsmChangeXml(sb, data);
+
+			for(size_t i=0; i<data->blocks.size(); i++)
+			{
+				cout << data->actions[i] << endl;
+				class OsmData &block = data->blocks[i];
+
+				//Set visibility flag depending on action
+				bool isDelete = data->actions[i] == "delete";
+				for(size_t j=0; j<block.nodes.size(); j++)
+					block.nodes[j].metaData.visible = !isDelete;
+				for(size_t j=0; j<block.ways.size(); j++)
+					block.ways[j].metaData.visible = !isDelete;
+				for(size_t j=0; j<block.relations.size(); j++)
+					block.relations[j].metaData.visible = !isDelete;
+
+				//Store objects
+				std::map<int64_t, int64_t> createdNodeIds, createdWayIds, createdRelationIds;
+
+				bool ok = ::StoreObjects(c, work, tableModPrefix, block, 
+					createdNodeIds, createdWayIds, createdRelationIds, errStr);
+
+			}
+		}
 	}
-	return true;	
+
+	return DbRefreshMaxIds(c, work, 
+		verbose, 
+		tableStaticPrefix, 
+		tableModPrefix, 
+		tableTestPrefix, 
+		errStr);
+
 }
 

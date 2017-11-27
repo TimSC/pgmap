@@ -8,7 +8,7 @@
 
 void EncodeTags(const TagMap &tagmap, string &out);
 
-bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
+bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	class OsmData osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 

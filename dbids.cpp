@@ -57,7 +57,7 @@ bool ClearNextIdValuesById(pqxx::transaction_base *work,
 }
 
 bool SetNextIdValue(pqxx::connection &c,
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &objType,
 	int64_t value)
@@ -106,7 +106,7 @@ bool GetNextId(pqxx::transaction_base *work,
 }
 
 bool GetAllocatedIdFromDb(pqxx::connection &c,
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &objType,
 	bool increment,
@@ -195,7 +195,7 @@ bool ResetChangesetUidCounts(pqxx::transaction_base *work,
 	return true;
 }
 
-bool GetNextObjectIds(pqxx::work *work, 
+bool GetNextObjectIds(pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	map<string, int64_t> &nextIdMap,
 	string &errStr)
@@ -239,7 +239,7 @@ bool GetNextObjectIds(pqxx::work *work,
 	return true;
 }
 
-bool UpdateNextObjectIds(pqxx::work *work, 
+bool UpdateNextObjectIds(pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const map<string, int64_t> &nextIdMap,
 	const map<string, int64_t> &nextIdMapOriginal,
@@ -298,7 +298,7 @@ bool UpdateNextObjectIds(pqxx::work *work,
 	return true;
 }
 
-bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::work *work, 
+bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &objType,
 	const string &tableActivePrefix, 
 	const string &tableStaticPrefix,

@@ -4,7 +4,7 @@
 #include "dbjson.h"
 using namespace std;
 
-bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &typeStr,
 	const std::vector<const class OsmObject *> &objPtrs, 
 	std::map<int64_t, int64_t> &createdNodeIds,
@@ -556,7 +556,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::work *work, const string &tabl
 	return true;
 }
 
-bool StoreObjects(pqxx::connection &c, pqxx::work *work, 
+bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	class OsmData osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
