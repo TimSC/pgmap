@@ -499,12 +499,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 		}
 	}
 
-	return DbRefreshMaxIds(c, work, 
-		verbose, 
-		tableStaticPrefix, 
-		tableModPrefix, 
-		tableTestPrefix, 
-		errStr);
-
+	cout << "Now update next object IDs, or bad things might happen!" << endl;
+	return true;
 }
 
