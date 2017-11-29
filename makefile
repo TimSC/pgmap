@@ -9,8 +9,9 @@ all: dump extract admin osm2csv swigpy2
 	g++ -Wall -fPIC -c -std=c++11 -o $@ $<
 
 common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
-	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o pgmap.o cppo5m/o5m.o \
-	cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
+	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o pgmap.o \
+	cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
+	cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
 
 libs = -lboost_filesystem -lboost_system -lpqxx -lexpat -lz
 

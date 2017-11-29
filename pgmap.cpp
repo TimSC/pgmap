@@ -8,6 +8,7 @@
 #include "dbdump.h"
 #include "dbfilters.h"
 #include "dbchangeset.h"
+#include "dbmeta.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
@@ -518,6 +519,11 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	std::string nativeErrStr;
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
 
 	string tablePrefix = this->tableActivePrefix;
 	if(saveToStaticTables)
@@ -753,7 +759,6 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-
 	std::shared_ptr<class OsmData> osmData(new class OsmData);
 
 	GetReplicateDiffNodes(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
@@ -819,6 +824,12 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 {
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	class PgMapError perrStr;
+	if(atoi(this->GetMetaValue("readonly", perrStr).c_str()) == 1)
+	{
+		perrStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
 
 	string errStr;
 	int64_t val;
@@ -956,6 +967,12 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 {
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;	
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
 
 	class PgChangeset changesetMod(changeset);
 	if(changesetMod.objId != 0)
@@ -963,7 +980,6 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 
 	int64_t cid = this->GetAllocatedId("changeset");
 	changesetMod.objId = cid;
-	string errStrNative;	
 
 	bool ok = InsertChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -981,8 +997,12 @@ bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
 {
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
-
 	string errStrNative;	
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
 
 	//Attempt to update in active table
 	int rowsAffected = UpdateChangesetInDb(*dbconn, work.get(),
@@ -1030,6 +1050,12 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 	string errStrNative;
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
+
 	size_t rowsAffected = 0;
 
 	bool ok = CloseChangesetInDb(*dbconn, work.get(),
@@ -1077,6 +1103,48 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 
 	errStr.errStr = errStrNative;
 	return ok;
+}
+
+std::string PgTransaction::GetMetaValue(const std::string &key, 
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	string errStrNative;
+	std::string val;
+
+	try
+	{
+		val = DbGetMetaValue(*dbconn, work.get(),
+			key, 
+			this->tableActivePrefix,
+			errStrNative);
+	}
+	catch(runtime_error &err)
+	{
+		//Hard coded defaults
+		if(key == "readonly")
+			return "0";
+
+		throw err;
+	}
+	return val;
+}
+
+bool PgTransaction::SetMetaValue(const std::string &key, 
+	const std::string &value, 
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;
+	bool ret = DbSetMetaValue(*dbconn, work.get(),
+		key, 
+		value, 
+		this->tableActivePrefix, 
+		errStrNative);
+	errStr.errStr = errStrNative;
+	return ret;
 }
 
 void PgTransaction::Commit()

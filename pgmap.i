@@ -329,6 +329,12 @@ public:
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
 
+	std::string GetMetaValue(const std::string &key, 
+		class PgMapError &errStr);
+	bool SetMetaValue(const std::string &key, 
+		const std::string &value, 
+		class PgMapError &errStr);
+
 	void Commit();
 	void Abort();
 };
