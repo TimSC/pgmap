@@ -114,6 +114,7 @@ int main(int argc, char **argv)
 			{
 				admin->Commit();
 				cout << "All done!" << endl;
+				cout << "Now update next object IDs, or bad things might happen!" << endl;
 			}
 			else
 			{

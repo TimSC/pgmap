@@ -494,12 +494,12 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 
 				bool ok = ::StoreObjects(c, work, tableModPrefix, block, 
 					createdNodeIds, createdWayIds, createdRelationIds, errStr);
-
+				if(!ok)
+					cout << "Warning: " << errStr << endl;
 			}
 		}
 	}
 
-	cout << "Now update next object IDs, or bad things might happen!" << endl;
 	return true;
 }
 
