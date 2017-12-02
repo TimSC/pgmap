@@ -1,10 +1,10 @@
 dbname:db_map
 dbhost:127.0.0.1
-dbuser:microcosm
+dbuser:pycrocosm
 dbpass:k8AY^p$Ytnrh
-dbtableprefix:planet_
-dbtablemodifyprefix:portsmouth_mod_
-dbtabletestprefix:portsmouth_test_
+dbtableprefix:planet_static_
+dbtablemodifyprefix:pycrocosm_mod_
+dbtabletestprefix:pycrocosm_test_
 dump_path:/home/tim/dev/osm2pgcopy/fosm-portsmouth-2017.o5m.gz
 diffs_path:/home/tim/Desktop/103
 csv_absolute_path:/home/tim/dev/osm2pgcopy/test-
