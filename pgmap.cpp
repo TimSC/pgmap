@@ -41,19 +41,24 @@ bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &pr
 	try
 	{
 		//It is important resources are locked in a consistent order to avoid deadlock
-		work->exec("LOCK TABLE "+prefix+ "oldnodes IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "oldways IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "oldrelations IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "livenodes IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "liveways IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "liverelations IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "way_mems IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "relation_mems_n IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "relation_mems_w IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "relation_mems_r IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "nextids IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "changesets IN "+accessMode+" MODE;");
-		work->exec("LOCK TABLE "+prefix+ "meta IN "+accessMode+" MODE;");
+		//Also, lock everything in one command to get a consistent view of the data.
+		string sql = "LOCK TABLE "+prefix+ "oldnodes";
+		sql += ","+prefix+ "oldways";
+		sql += ","+prefix+ "oldrelations";
+		sql += ","+prefix+ "livenodes";
+		sql += ","+prefix+ "liveways";
+		sql += ","+prefix+ "liverelations";
+		sql += ","+prefix+ "way_mems";
+		sql += ","+prefix+ "relation_mems_n";
+		sql += ","+prefix+ "relation_mems_w";
+		sql += ","+prefix+ "relation_mems_r";
+		sql += ","+prefix+ "nextids";
+		sql += ","+prefix+ "changesets";
+		sql += ","+prefix+ "meta";
+		sql += " IN "+accessMode+" MODE;";
+
+		work->exec(sql);
+
 	}
 	catch (const pqxx::sql_error &e)
 	{

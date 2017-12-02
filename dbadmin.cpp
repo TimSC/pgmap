@@ -216,26 +216,56 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
-	string sql = "ALTER TABLE "+tablePrefix+"oldnodes ADD PRIMARY KEY (id, version);";
-	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "ALTER TABLE "+tablePrefix+"oldways ADD PRIMARY KEY (id, version);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "ALTER TABLE "+tablePrefix+"oldrelations ADD PRIMARY KEY (id, version);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	bool ok = true;
+	string sql;
 
-	sql = "ALTER TABLE "+tablePrefix+"livenodes ADD PRIMARY KEY (id);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "ALTER TABLE "+tablePrefix+"liveways ADD PRIMARY KEY (id);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "ALTER TABLE "+tablePrefix+"liverelations ADD PRIMARY KEY (id);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"oldnodes")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"oldnodes ADD PRIMARY KEY (id, version);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"oldways")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"oldways ADD PRIMARY KEY (id, version);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"oldrelations")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"oldrelations ADD PRIMARY KEY (id, version);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
 
-	sql = "ALTER TABLE "+tablePrefix+"nodeids ADD PRIMARY KEY (id);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "ALTER TABLE "+tablePrefix+"wayids ADD PRIMARY KEY (id);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "ALTER TABLE "+tablePrefix+"relationids ADD PRIMARY KEY (id);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"livenodes")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"livenodes ADD PRIMARY KEY (id);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	}
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"liveways")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"liveways ADD PRIMARY KEY (id);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	}
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"liverelations")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"liverelations ADD PRIMARY KEY (id);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"nodeids")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"nodeids ADD PRIMARY KEY (id);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	}
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"wayids")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"wayids ADD PRIMARY KEY (id);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	}
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"relationids")==0)
+	{
+		sql = "ALTER TABLE "+tablePrefix+"relationids ADD PRIMARY KEY (id);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
 
 	sql = "CREATE INDEX IF NOT EXISTS "+tablePrefix+"livenodes_gix ON "+tablePrefix+"livenodes USING GIST (geom);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
