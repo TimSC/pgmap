@@ -82,7 +82,9 @@ public:
 
 CsvStore::CsvStore(const std::string &outPrefix)
 {
+	cout << outPrefix+"livenodes.csv.gz" << endl;
 	livenodeFile.open(outPrefix+"livenodes.csv.gz", std::ios::out | std::ios::binary);
+	if(!livenodeFile.is_open()) throw runtime_error("Error opening output");
 	livenodeFileGzip.reset(new class EncodeGzip(livenodeFile));
 	livewayFile.open(outPrefix+"liveways.csv.gz", std::ios::out | std::ios::binary);
 	livewayFileGzip.reset(new class EncodeGzip(livewayFile));
@@ -353,9 +355,26 @@ int main(int argc, char **argv)
 	//Perform gzip decoding
 	std::filebuf fb;
 	fb.open(config["dump_path"], std::ios::in | std::ios::binary);
+	if(!fb.is_open())
+	{
+		cout << "Error opening input file " << config["dump_path"] << endl;
+		exit(0);
+	}
+	if(fb.in_avail() == 0)
+	{
+		cout << "Error reading from input file " << config["dump_path"] << endl;
+		exit(0);
+	}
+	cout << "Reading from input " << config["dump_path"] << endl;
 
 	class DecodeGzip decodeGzip(fb);
+	if(decodeGzip.in_avail() == 0)
+	{
+		cout << "Error reading from input file" << endl;
+		exit(0);
+	}
 
+	cout << "Writing output to " << config["csv_absolute_path"] << endl;
 	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore(config["csv_absolute_path"]));
 	LoadFromO5m(decodeGzip, csvStore);
 

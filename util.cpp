@@ -39,6 +39,19 @@ vector<string> split(const string &s, char delim) {
     return elems;
 }
 
+// Inspired by PHP's implode and Python's join
+string mergestr(const std::vector<string> &parts, const std::string &glue)
+{
+	stringstream ss;
+	for(size_t i=0; i<parts.size(); i++)
+	{
+		if(i != 0)
+			ss << glue;
+		ss << parts[i];
+	}
+	return ss.str();
+}
+
 bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut)
 {
 	string configContent;
@@ -49,7 +62,9 @@ bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std
 		const std::string &line = lines[i];
 		std::vector<std::string> parts = split(line, ':');
 		if (parts.size() < 2) continue;
-		configOut[parts[0]] = parts[1];
+		std::vector<std::string> partsSlice(++parts.begin(), parts.end());
+		string value = mergestr(partsSlice, ":");
+		configOut[parts[0]] = value;
 	}
 	return true;
 }
