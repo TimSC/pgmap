@@ -5,28 +5,28 @@
 #include <string>
 #include "pgmap.h"
 
-bool GetAllNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc);
 
-bool GetAllWaysByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc);
 
-bool GetAllRelationsByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc);
 
-int GetChangesetFromDb(pqxx::work *work, 
+int GetChangesetFromDb(pqxx::connection &c, pqxx::work *work, 
 	const std::string &tablePrefix,
 	int64_t objId,
 	class PgChangeset &changesetOut,
 	std::string &errStr);
 
-bool GetChangesetsFromDb(pqxx::work *work, 
+bool GetChangesetsFromDb(pqxx::connection &c, pqxx::work *work, 
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	size_t limit,

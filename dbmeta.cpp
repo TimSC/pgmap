@@ -8,7 +8,7 @@ std::string DbGetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr)
 {
-	string metaTable = tablePrefix + "meta";
+	string metaTable = c.quote_name(tablePrefix + "meta");
 
 	stringstream sql;
 	sql << "SELECT value FROM " << metaTable << " WHERE key = $1";
@@ -34,7 +34,7 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr)
 {
-	string metaTable = tablePrefix + "meta";
+	string metaTable = c.quote_name(tablePrefix + "meta");
 
 	stringstream sql;
 	sql << "UPDATE "<< metaTable << " SET value=$2";
