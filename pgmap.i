@@ -1,5 +1,9 @@
 /* pgmap.i */
 %module pgmap
+%module unicode_strings
+%begin %{
+#define SWIG_PYTHON_2_UNICODE
+%}
 %include "stdint.i"
 %include "std_string.i"
 %include "std_vector.i"
