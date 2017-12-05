@@ -4,7 +4,7 @@ using namespace std;
 
 // ************* Basic query methods ***************
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	const string &excludeTablePrefix)
 {
@@ -37,7 +37,7 @@ int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::sh
 	return NodeResultsToEncoder(*c, enc);
 }
 
-void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc)
 {
@@ -83,7 +83,7 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::work *work, const st
 	}
 }
 
-void GetLiveNodesById(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -123,7 +123,7 @@ void GetLiveNodesById(pqxx::connection &c, pqxx::work *work, const string &table
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	char qtype, const set<int64_t> &qids, 
 	set<int64_t>::const_iterator &it, size_t step,
@@ -164,7 +164,7 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::work *work, const str
 	RelationResultsToEncoder(cursor, skipIds, enc);
 }
 
-void GetLiveWaysById(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -205,7 +205,7 @@ void GetLiveWaysById(pqxx::connection &c, pqxx::work *work, const string &tableP
 		records = WayResultsToEncoder(cursor, enc);
 }
 
-void GetLiveRelationsById(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)

@@ -3,7 +3,7 @@
 #include <set>
 using namespace std;
 
-void GetReplicateDiffNodes(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -28,7 +28,7 @@ void GetReplicateDiffNodes(pqxx::connection &c, pqxx::work *work, const string &
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void GetReplicateDiffWays(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -53,7 +53,7 @@ void GetReplicateDiffWays(pqxx::connection &c, pqxx::work *work, const string &t
 		count = WayResultsToEncoder(cursor, enc);
 }
 
-void GetReplicateDiffRelations(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc)

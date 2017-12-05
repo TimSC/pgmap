@@ -9,7 +9,7 @@
 using namespace std;
 using namespace boost::filesystem;
 
-bool ClearTable(pqxx::connection &c, pqxx::work *work, const string &tableName, std::string &errStr)
+bool ClearTable(pqxx::connection &c, pqxx::transaction_base *work, const string &tableName, std::string &errStr)
 {
 	try
 	{
@@ -29,7 +29,7 @@ bool ClearTable(pqxx::connection &c, pqxx::work *work, const string &tableName, 
 	return true;
 }
 
-bool ResetActiveTables(pqxx::connection &c, pqxx::work *work, 
+bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tableActivePrefix, 
 	const string &tableStaticPrefix,
 	std::string &errStr)

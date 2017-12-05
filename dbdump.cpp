@@ -1,7 +1,7 @@
 #include "dbdump.h"
 #include "dbdecode.h"
 
-void DumpNodes(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -43,7 +43,7 @@ void DumpNodes(pqxx::connection &c, pqxx::work *work, const string &tablePrefix,
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void DumpWays(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -75,7 +75,7 @@ void DumpWays(pqxx::connection &c, pqxx::work *work, const string &tablePrefix,
 		count = WayResultsToEncoder(cursor, enc);
 }
 
-void DumpRelations(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)

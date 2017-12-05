@@ -64,7 +64,7 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 
 // *******************************************************
 
-bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
@@ -94,7 +94,7 @@ bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::work *work, const stri
 	return true;
 }
 
-bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
@@ -128,7 +128,7 @@ bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::work *work, const string
 	return true;
 }
 
-bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
@@ -164,7 +164,7 @@ bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::work *work, const s
 
 // **********************************************
 
-bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -181,7 +181,7 @@ bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::work *work, const string 
 		enc);
 }
 
-bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -198,7 +198,7 @@ bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::work *work, const string &
 		enc);
 }
 
-bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::work *work, const string &tablePrefix, 
+bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -217,7 +217,7 @@ bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::work *work, const str
 
 // ***********************************************
 
-int GetChangesetFromDb(pqxx::connection &c, pqxx::work *work, 
+int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t objId,
 	class PgChangeset &changesetOut,
@@ -243,7 +243,7 @@ int GetChangesetFromDb(pqxx::connection &c, pqxx::work *work,
 	return 1;
 }
 
-bool GetChangesetsFromDb(pqxx::connection &c, pqxx::work *work, 
+bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	size_t limit,
@@ -273,7 +273,7 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::work *work,
 }
 
 bool InsertChangesetInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const class PgChangeset &changeset,
 	std::string &errStr)
@@ -342,7 +342,7 @@ bool InsertChangesetInDb(pqxx::connection &c,
 }
 
 int UpdateChangesetInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const class PgChangeset &changeset,
 	std::string &errStr)
@@ -400,7 +400,7 @@ int UpdateChangesetInDb(pqxx::connection &c,
 }
 
 bool CloseChangesetInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t changesetId,
 	int64_t closedTimestamp,
@@ -416,7 +416,7 @@ bool CloseChangesetInDb(pqxx::connection &c,
 }
 
 bool CopyChangesetToActiveInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &staticPrefix,
 	const std::string &activePrefix,
 	int64_t changesetId,

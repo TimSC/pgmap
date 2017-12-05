@@ -272,7 +272,7 @@ public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<pqxx::work> mapQueryWork);
+		std::shared_ptr<pqxx::transaction_base> mapQueryWork);
 	virtual ~PgMapQuery();
 
 	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
@@ -288,7 +288,7 @@ public:
 	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		std::shared_ptr<pqxx::work> workIn,
+		std::shared_ptr<pqxx::transaction_base> workIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
 
@@ -343,7 +343,7 @@ public:
 	void Abort();
 };
 
-%shared_ptr(PgMap)
+%shared_ptr(PgMpap)
 
 class PgMap
 {

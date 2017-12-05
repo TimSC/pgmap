@@ -4,7 +4,7 @@
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include <string>
 
-bool ResetActiveTables(pqxx::connection &c, pqxx::work *work, 
+bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tableActivePrefix, 
 	const std::string &tableStaticPrefix,
 	std::string &errStr);
