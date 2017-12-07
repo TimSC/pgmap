@@ -69,3 +69,40 @@ bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std
 	return true;
 }
 
+//https://stackoverflow.com/a/15372760/4288232
+void StrReplaceAll( string &s, const string &search, const string &replace ) {
+    for( size_t pos = 0; ; pos += replace.length() ) {
+        // Locate the substring to replace
+        pos = s.find( search, pos );
+        if( pos == string::npos ) break;
+        // Replace by erasing and inserting
+        s.erase( pos, search.length() );
+        s.insert( pos, replace );
+    }
+}
+
+// Connection strings should have escaped quotes
+// https://www.postgresql.org/docs/9.6/static/libpq-connect.html
+std::string EscapeQuotes(std::string str)
+{
+	StrReplaceAll(str, "\"", "\\\"");
+	StrReplaceAll(str, "'", "\\'");
+	return str;
+}
+
+std::string GeneratePgConnectionString(std::map<std::string, std::string> config)
+{
+	std::stringstream ss;
+	ss << "dbname=";
+	ss << "'" << EscapeQuotes(config["dbname"]) << "'";
+	ss << " user=";
+	ss << "'" << EscapeQuotes(config["dbuser"]) << "'";
+	ss << " password=";
+	ss << "'" << EscapeQuotes(config["dbpass"]) << "'";
+	ss << " hostaddr=";
+	ss << "'" << EscapeQuotes(config["dbhost"]) << "'";
+	ss << " port=";
+	ss << "5432";
+	return ss.str();
+}
+

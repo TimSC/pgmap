@@ -64,16 +64,16 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 
 // *******************************************************
 
-bool GetOldNewNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string nodeTable = tablePrefix + tableLiveOld + "nodes";
+	string nodeTable = c.quote_name(tablePrefix + tableLiveOld + "nodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "nodeids";
+		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	stringstream sql;
 	sql << "SELECT "<<nodeTable<<".*, ST_X("<<nodeTable<<".geom) as lon, ST_Y("<<nodeTable<<".geom) AS lat";
@@ -86,25 +86,25 @@ bool GetOldNewNodesByChangeset(pqxx::work *work, const string &tablePrefix,
 		sql << " AND "<<excludeTable<<".id IS NULL";
 	sql <<";";
 
-	pqxx::icursorstream c( *work, sql.str(), "nodesbychangeset", 1000 );
+	pqxx::icursorstream cur( *work, sql.str(), "nodesbychangeset", 1000 );
 
 	int count = 1;
 	while(count > 0)
-		count = NodeResultsToEncoder(c, enc);
+		count = NodeResultsToEncoder(cur, enc);
 	return true;
 }
 
-bool GetOldNewWayByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = tablePrefix + tableLiveOld + "ways";
-	string wayMemTable = tablePrefix + "way_mems";
+	string wayTable = c.quote_name(tablePrefix + tableLiveOld + "ways");
+	string wayMemTable = c.quote_name(tablePrefix + "way_mems");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "wayids";
+		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
 
 	stringstream sql;
 	sql << "SELECT " << wayTable << ".*";
@@ -128,16 +128,16 @@ bool GetOldNewWayByChangeset(pqxx::work *work, const string &tablePrefix,
 	return true;
 }
 
-bool GetOldNewRelationByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string relTable = tablePrefix + tableLiveOld + "relations";
+	string relTable = c.quote_name(tablePrefix + tableLiveOld + "relations");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "relationids";
+		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
 
 	int count = 0;
 
@@ -164,52 +164,52 @@ bool GetOldNewRelationByChangeset(pqxx::work *work, const string &tablePrefix,
 
 // **********************************************
 
-bool GetAllNodesByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	bool ok = GetOldNewNodesByChangeset(work, tablePrefix, 
+	bool ok = GetOldNewNodesByChangeset(c, work, tablePrefix, 
 		excludeTablePrefix,
 		"old", changesetId,
  		enc);
 	if(!ok) return false;
 
-	return GetOldNewNodesByChangeset(work, tablePrefix, 
+	return GetOldNewNodesByChangeset(c, work, tablePrefix, 
 		excludeTablePrefix,
 		"live", changesetId,
 		enc);
 }
 
-bool GetAllWaysByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	bool ok = GetOldNewWayByChangeset(work, tablePrefix, 
+	bool ok = GetOldNewWayByChangeset(c, work, tablePrefix, 
 		excludeTablePrefix,
 		"old", changesetId,
  		enc);
 	if(!ok) return false;
 
-	return GetOldNewWayByChangeset(work, tablePrefix, 
+	return GetOldNewWayByChangeset(c, work, tablePrefix, 
 		excludeTablePrefix,
 		"live", changesetId,
 		enc);
 }
 
-bool GetAllRelationsByChangeset(pqxx::work *work, const string &tablePrefix, 
+bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	bool ok = GetOldNewRelationByChangeset(work, tablePrefix, 
+	bool ok = GetOldNewRelationByChangeset(c, work, tablePrefix, 
 		excludeTablePrefix,
 		"old", changesetId,
  		enc);
 	if(!ok) return false;
 
-	return GetOldNewRelationByChangeset(work, tablePrefix, 
+	return GetOldNewRelationByChangeset(c, work, tablePrefix, 
 		excludeTablePrefix,
 		"live", changesetId,
 		enc);
@@ -217,13 +217,13 @@ bool GetAllRelationsByChangeset(pqxx::work *work, const string &tablePrefix,
 
 // ***********************************************
 
-int GetChangesetFromDb(pqxx::work *work, 
+int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t objId,
 	class PgChangeset &changesetOut,
 	std::string &errStr)
 {
-	string changesetTable = tablePrefix + "changesets";
+	string changesetTable = c.quote_name(tablePrefix + "changesets");
 
 	stringstream sql;
 	sql << "SELECT *, ST_XMin(geom) as xmin, ST_XMax(geom) as xmax,";
@@ -243,17 +243,17 @@ int GetChangesetFromDb(pqxx::work *work,
 	return 1;
 }
 
-bool GetChangesetsFromDb(pqxx::work *work, 
+bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	size_t limit,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr)
 {
-	string changesetTable = tablePrefix + "changesets";
+	string changesetTable = c.quote_name(tablePrefix + "changesets");
 	string excludeTable;
 	if(excludePrefix.size() > 0)
-		excludeTable = excludePrefix + "changesets";
+		excludeTable = c.quote_name(excludePrefix + "changesets");
 
 	stringstream sql;
 	sql << "SELECT "<<changesetTable<<".*, ST_XMin("<<changesetTable<<".geom) as xmin, ST_XMax("<<changesetTable<<".geom) as xmax,";
@@ -273,14 +273,14 @@ bool GetChangesetsFromDb(pqxx::work *work,
 }
 
 bool InsertChangesetInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const class PgChangeset &changeset,
 	std::string &errStr)
 {
 	//Insert into live table
 	stringstream ss;
-	ss << "INSERT INTO "<< tablePrefix <<"changesets (id, username, uid, tags, open_timestamp, close_timestamp, is_open, geom)";
+	ss << "INSERT INTO "<< c.quote_name(tablePrefix+"changesets") << " (id, username, uid, tags, open_timestamp, close_timestamp, is_open, geom)";
 	ss << " VALUES ($1,$2,$3,$4,$5,$6,$7,ST_MakeEnvelope($8, $9, $10, $11, 4326));";
 
 	try
@@ -342,14 +342,14 @@ bool InsertChangesetInDb(pqxx::connection &c,
 }
 
 int UpdateChangesetInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const class PgChangeset &changeset,
 	std::string &errStr)
 {
 	//Insert into live table
 	stringstream ss;
-	ss << "UPDATE "<< tablePrefix <<"changesets SET username=$1, uid=$2, tags=$3, open_timestamp=$4, close_timestamp=$5, ";
+	ss << "UPDATE "<< c.quote_name(tablePrefix+"changesets")+" SET username=$1, uid=$2, tags=$3, open_timestamp=$4, close_timestamp=$5, ";
 	ss << "is_open=$6, geom=ST_MakeEnvelope($7, $8, $9, $10, 4326)";
 	ss << " WHERE id = $11;";
 	int rowsAffected = 0;
@@ -400,7 +400,7 @@ int UpdateChangesetInDb(pqxx::connection &c,
 }
 
 bool CloseChangesetInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t changesetId,
 	int64_t closedTimestamp,
@@ -408,7 +408,7 @@ bool CloseChangesetInDb(pqxx::connection &c,
 	std::string &errStr)
 {
 	stringstream ss;
-	ss << "UPDATE "<< tablePrefix <<"changesets SET is_open=false, close_timestamp="<<closedTimestamp<<" WHERE id = "<<changesetId<<";";
+	ss << "UPDATE "<< c.quote_name(tablePrefix+"changesets")<<" SET is_open=false, close_timestamp="<<closedTimestamp<<" WHERE id = "<<changesetId<<";";
 
 	bool ok = DbExec(work, ss.str(), errStr, &rowsAffectedOut);
 
@@ -416,7 +416,7 @@ bool CloseChangesetInDb(pqxx::connection &c,
 }
 
 bool CopyChangesetToActiveInDb(pqxx::connection &c, 
-	pqxx::work *work, 
+	pqxx::transaction_base *work, 
 	const std::string &staticPrefix,
 	const std::string &activePrefix,
 	int64_t changesetId,
@@ -424,7 +424,7 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	std::string &errStrNative)
 {
 	class PgChangeset changeset;
-	int ret = GetChangesetFromDb(work, 
+	int ret = GetChangesetFromDb(c, work, 
 		staticPrefix,
 		changesetId,
 		changeset,

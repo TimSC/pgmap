@@ -4,16 +4,16 @@ using namespace std;
 
 // ************* Basic query methods ***************
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::work *work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	const string &excludeTablePrefix)
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
-	string liveNodeTable = tablePrefix + "livenodes";
+	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "nodeids";
+		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	stringstream sql;
 	sql.precision(9);
@@ -37,16 +37,16 @@ int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::sh
 	return NodeResultsToEncoder(*c, enc);
 }
 
-void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix, 
+void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = tablePrefix + "liveways";
-	string wayMemTable = tablePrefix + "way_mems";
+	string wayTable = c.quote_name(tablePrefix + "liveways");
+	string wayMemTable = c.quote_name(tablePrefix + "way_mems");
 	int step = 1000;
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "wayids";
+		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
 
 	auto it=nodeIds.begin();
 	while(it != nodeIds.end())
@@ -83,15 +83,15 @@ void GetLiveWaysThatContainNodes(pqxx::work *work, const string &tablePrefix,
 	}
 }
 
-void GetLiveNodesById(pqxx::work *work, const string &tablePrefix, 
+void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string nodeTable = tablePrefix + "livenodes";
+	string nodeTable = c.quote_name(tablePrefix + "livenodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "nodeids";
+		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -123,18 +123,18 @@ void GetLiveNodesById(pqxx::work *work, const string &tablePrefix,
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix, 
+void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	char qtype, const set<int64_t> &qids, 
 	set<int64_t>::const_iterator &it, size_t step,
 	const set<int64_t> &skipIds, 
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string relTable = tablePrefix + "liverelations";
-	string relMemTable = tablePrefix + "relation_mems_" + qtype;
+	string relTable = c.quote_name(tablePrefix + "liverelations");
+	string relMemTable = c.quote_name(tablePrefix + "relation_mems_" + qtype);
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "relationids";
+		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -164,15 +164,15 @@ void GetLiveRelationsForObjects(pqxx::work *work, const string &tablePrefix,
 	RelationResultsToEncoder(cursor, skipIds, enc);
 }
 
-void GetLiveWaysById(pqxx::work *work, const string &tablePrefix, 
+void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = tablePrefix + "liveways";
+	string wayTable = c.quote_name(tablePrefix + "liveways");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "wayids";
+		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -205,15 +205,15 @@ void GetLiveWaysById(pqxx::work *work, const string &tablePrefix,
 		records = WayResultsToEncoder(cursor, enc);
 }
 
-void GetLiveRelationsById(pqxx::work *work, const string &tablePrefix, 
+void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string relationTable = tablePrefix + "liverelations";
+	string relationTable = c.quote_name(tablePrefix + "liverelations");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "relationids";
+		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
 
 	stringstream sqlFrags;
 	int count = 0;

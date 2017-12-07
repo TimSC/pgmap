@@ -1,7 +1,7 @@
 #include "dbids.h"
 #include "dbcommon.h"
 
-bool GetMaxObjIdLiveOrOld(pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, 
 	const std::string &field,
 	std::string errStr,
@@ -11,11 +11,11 @@ bool GetMaxObjIdLiveOrOld(pqxx::transaction_base *work, const string &tablePrefi
 	int64_t val1, val2;
 	stringstream ss;
 	ss << tablePrefix << "live" << objType << "s";
-	bool ok = GetMaxFieldInTable(work, ss.str(), field, errStr, val1);
+	bool ok = GetMaxFieldInTable(c, work, ss.str(), field, errStr, val1);
 	if(!ok) return false;
 	stringstream ss2;
 	ss2 << tablePrefix << "old" << objType << "s";
-	ok = GetMaxFieldInTable(work, ss2.str(), field, errStr, val2);
+	ok = GetMaxFieldInTable(c, work, ss2.str(), field, errStr, val2);
 	if(val2 > val1)
 		val = val2;
 	else
@@ -23,7 +23,7 @@ bool GetMaxObjIdLiveOrOld(pqxx::transaction_base *work, const string &tablePrefi
 	return ok;
 }
 
-bool GetMaxFieldInTable(pqxx::transaction_base *work, 
+bool GetMaxFieldInTable(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tableName,
 	const string &field,
 	string &errStr,
@@ -31,7 +31,7 @@ bool GetMaxFieldInTable(pqxx::transaction_base *work,
 {
 	val = 0;
 	stringstream ss;
-	ss << "SELECT MAX("<<field<<") FROM "<<tableName<<";";
+	ss << "SELECT MAX("<<c.quote_name(field)<<") FROM "<<c.quote_name(tableName)<<";";
 	pqxx::result r = work->exec(ss.str());
 	if(r.size()==0)
 	{
@@ -46,12 +46,12 @@ bool GetMaxFieldInTable(pqxx::transaction_base *work,
 	return true;
 }
 
-bool ClearNextIdValuesById(pqxx::transaction_base *work, 
+bool ClearNextIdValuesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &key)
 {
 	stringstream ss;
-	ss << "DELETE FROM "<< tablePrefix <<"nextids WHERE id='"<<key<<"';";
+	ss << "DELETE FROM "<< c.quote_name(tablePrefix+"nextids")<<" WHERE id="<<c.quote(key)<<";";
 	work->exec(ss.str());
 	return true;
 }
@@ -63,14 +63,14 @@ bool SetNextIdValue(pqxx::connection &c,
 	int64_t value)
 {
 	stringstream ss;
-	ss << "INSERT INTO "<<tablePrefix<<"nextids(id, maxid) VALUES ($1, $2);";
+	ss << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << "(id, maxid) VALUES ($1, $2);";
 
 	c.prepare(tablePrefix+"setnextId", ss.str());
 	work->prepared(tablePrefix+"setnextId")(objType)(value).exec();
 	return true;
 }
 
-bool GetNextId(pqxx::transaction_base *work, 
+bool GetNextId(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &objType,
 	string &errStr,
@@ -78,7 +78,7 @@ bool GetNextId(pqxx::transaction_base *work,
 {
 	out = -1;
 	stringstream sstr;
-	sstr << "SELECT maxid FROM "<< tablePrefix <<"nextids WHERE id='"<<objType<<"';";
+	sstr << "SELECT maxid FROM "<< c.quote_name(tablePrefix+"nextids") << " WHERE id="<<c.quote(objType)<<";";
 
 	pqxx::result r;
 	try{
@@ -113,7 +113,7 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 	string &errStr,
 	int64_t &val)
 {
-	bool ok = GetNextId(work, 
+	bool ok = GetNextId(c, work, 
 		tablePrefix,
 		objType,
 		errStr,
@@ -123,13 +123,13 @@ bool GetAllocatedIdFromDb(pqxx::connection &c,
 	if(increment)
 	{
 		stringstream ss;
-		ss << "UPDATE "<< tablePrefix <<"nextids SET maxid="<< val+1 <<" WHERE id ='"<<objType<<"';";	
+		ss << "UPDATE "<< c.quote_name(tablePrefix+"nextids") <<" SET maxid="<< (val+1) <<" WHERE id ="<<c.quote(objType)<<";";	
 		ok = DbExec(work, ss.str(), errStr);
 	}
 	return ok;
 }
 
-bool ResetChangesetUidCounts(pqxx::transaction_base *work, 
+bool ResetChangesetUidCounts(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &parentPrefix, const string &tablePrefix, 
 	string &errStr)
 {
@@ -142,26 +142,26 @@ bool ResetChangesetUidCounts(pqxx::transaction_base *work,
 
 	if(parentPrefix.size()>0)
 	{
-		ok = GetNextId(work, parentPrefix, "changeset", errStr, val);
+		ok = GetNextId(c, work, parentPrefix, "changeset", errStr, val);
 		if(!ok) return false;
 		if(val > maxVal)
 			maxVal = val;
 	}
-	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "node", "changeset", errStr, val);
+	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "node", "changeset", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
-	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "way", "changeset", errStr, val);
+	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "way", "changeset", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
-	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "relation", "changeset", errStr, val);
+	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "relation", "changeset", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
-	ok = GetMaxFieldInTable(work, st.str(), "id", errStr, val);
+	ok = GetMaxFieldInTable(c, work, st.str(), "id", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
 
 	stringstream ss;
-	ss << "DELETE FROM "<<tablePrefix<<"nextids WHERE id = 'changeset';";
+	ss << "DELETE FROM "<<c.quote_name(tablePrefix+"nextids") << " WHERE id = 'changeset';";
 	ok = DbExec(work, ss.str(), errStr);
 	if(!ok) return false;
 	stringstream ss2;
-	ss2 << "INSERT INTO "<<tablePrefix<<"nextids (id, maxid) VALUES ('changeset', "<<(maxVal+1)<<");";
+	ss2 << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << " (id, maxid) VALUES ('changeset', "<<(maxVal+1)<<");";
 	ok = DbExec(work, ss2.str(), errStr);
 	if(!ok) return false;
 
@@ -169,40 +169,40 @@ bool ResetChangesetUidCounts(pqxx::transaction_base *work,
 	maxVal = 0;
 	if(parentPrefix.size()>0)
 	{
-		ok = GetNextId(work, parentPrefix, "uid", errStr, val);
+		ok = GetNextId(c, work, parentPrefix, "uid", errStr, val);
 		if(!ok) return false;
 		if(val > maxVal)
 			maxVal = val;
 	}
-	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "node", "uid", errStr, val);
+	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "node", "uid", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
-	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "way", "uid", errStr, val);
+	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "way", "uid", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
-	ok = GetMaxObjIdLiveOrOld(work, tablePrefix, "relation", "uid", errStr, val);
+	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "relation", "uid", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
-	ok = GetMaxFieldInTable(work, st.str(), "uid", errStr, val);
+	ok = GetMaxFieldInTable(c, work, st.str(), "uid", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
 
 	stringstream ss3;
-	ss3 << "DELETE FROM "<<tablePrefix<<"nextids WHERE id = 'uid';";
+	ss3 << "DELETE FROM "<<c.quote_name(tablePrefix+"nextids") <<" WHERE id = 'uid';";
 	ok = DbExec(work, ss3.str(), errStr);
 	if(!ok) return false;
 	stringstream ss4;
-	ss4 << "INSERT INTO "<<tablePrefix<<"nextids (id, maxid) VALUES ('uid', "<<(maxVal+1)<<");";
+	ss4 << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << " (id, maxid) VALUES ('uid', "<<(maxVal+1)<<");";
 	ok = DbExec(work, ss4.str(), errStr);
 	if(!ok) return false;
 
 	return true;
 }
 
-bool GetNextObjectIds(pqxx::transaction_base *work, 
+bool GetNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	map<string, int64_t> &nextIdMap,
 	string &errStr)
 {
 	nextIdMap.clear();
 	stringstream sstr;
-	sstr << "SELECT RTRIM(id), maxid FROM "<< tablePrefix <<"nextids;";
+	sstr << "SELECT RTRIM(id), maxid FROM "<< c.quote_name(tablePrefix+"nextids") << ";";
 
 	pqxx::result r;
 	try{
@@ -239,7 +239,7 @@ bool GetNextObjectIds(pqxx::transaction_base *work,
 	return true;
 }
 
-bool UpdateNextObjectIds(pqxx::transaction_base *work, 
+bool UpdateNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const map<string, int64_t> &nextIdMap,
 	const map<string, int64_t> &nextIdMapOriginal,
@@ -255,7 +255,7 @@ bool UpdateNextObjectIds(pqxx::transaction_base *work,
 			if(it->second != it2->second)
 			{
 				stringstream ss;
-				ss << "UPDATE "<< tablePrefix <<"nextids SET maxid = "<< it->second <<" WHERE id='"<<it->first<<"';"; 
+				ss << "UPDATE "<< c.quote_name(tablePrefix+"nextids") << " SET maxid = "<< it->second <<" WHERE id="<<c.quote(it->first)<<";"; 
 
 				try
 				{
@@ -277,7 +277,7 @@ bool UpdateNextObjectIds(pqxx::transaction_base *work,
 		{
 			//Insert into table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"nextids (id, maxid) VALUES ('"<<it->first<<"',"<<it->second<<");";
+			ss << "INSERT INTO "<< c.quote_name(tablePrefix+"nextids") << " (id, maxid) VALUES ("<<c.quote(it->first)<<","<<it->second<<");";
 
 			try
 			{
@@ -307,11 +307,11 @@ bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::transaction_base *work,
 	stringstream ss;
 	ss << tableStaticPrefix << objType << "s";
 	int64_t maxStaticNode, maxActiveNode;
-	bool ok = GetMaxFieldInTable(work, ss.str(), "id", errStr, maxStaticNode);
+	bool ok = GetMaxFieldInTable(c, work, ss.str(), "id", errStr, maxStaticNode);
 	if(!ok) return false;
 	stringstream ss2;
 	ss2 << tableActivePrefix << objType << "s";
-	ok = GetMaxFieldInTable(work, ss2.str(), "id", errStr, maxActiveNode);
+	ok = GetMaxFieldInTable(c, work, ss2.str(), "id", errStr, maxActiveNode);
 	if(!ok) return false;
 	if(maxStaticNode < 1) maxStaticNode = 1;
 	if(maxActiveNode == -1) maxActiveNode = maxStaticNode;

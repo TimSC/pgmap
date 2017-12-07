@@ -237,6 +237,9 @@ public:
 };
 
 bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut);
+void StrReplaceAll( string &s, const string &search, const string &replace );
+std::string EscapeQuotes(std::string str);
+std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
 
 #endif //_UTIL_H
 

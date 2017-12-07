@@ -31,18 +31,6 @@ Import from fosm.org 2015 dump
 COPY planet_relations TO PROGRAM 'gzip > /home/postgres/dumprelations.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');
 */
 
-//https://stackoverflow.com/a/15372760/4288232
-void StrReplaceAll( string &s, const string &search, const string &replace ) {
-    for( size_t pos = 0; ; pos += replace.length() ) {
-        // Locate the substring to replace
-        pos = s.find( search, pos );
-        if( pos == string::npos ) break;
-        // Replace by erasing and inserting
-        s.erase( pos, search.length() );
-        s.insert( pos, replace );
-    }
-}
-
 inline string Int64ToStr(int64_t val)
 {
 	stringstream ss;

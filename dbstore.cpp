@@ -55,7 +55,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		}
 
 		//Get existing object object in live table (if any)
-		string checkExistingLiveSql = "SELECT * FROM "+ tablePrefix + "live"+typeStr+"s WHERE (id=$1);";
+		string checkExistingLiveSql = "SELECT * FROM "+ c.quote_name(tablePrefix + "live"+typeStr+"s")+" WHERE (id=$1);";
 		pqxx::result r;
 		try
 		{
@@ -84,7 +84,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		}
 
 		//Get existing object version in old table (if any)
-		string checkExistingOldSql = "SELECT MAX(version) FROM "+ tablePrefix + "old"+typeStr+"s WHERE (id=$1);";
+		string checkExistingOldSql = "SELECT MAX(version) FROM "+ c.quote_name(tablePrefix + "old"+typeStr+"s") + " WHERE (id=$1);";
 		pqxx::result r2;
 		try
 		{
@@ -117,8 +117,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		//Check if we need to delete object from live table
 		if(foundExisting && version >= currentVersion && !osmObject->metaData.visible)
 		{
-			string deletedLiveSql = "DELETE FROM "+ tablePrefix
-				+ "live"+ typeStr +"s WHERE (id=$1);";
+			string deletedLiveSql = "DELETE FROM "+ c.quote_name(tablePrefix
+				+ "live"+ typeStr +"s") + " WHERE (id=$1);";
 			try
 			{
 				if(verbose >= 1)
@@ -145,7 +145,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 			//Insert into live table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
+			ss << "INSERT INTO "<< c.quote_name(tablePrefix+"old"+typeStr+"s") + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
 			if(nodeObject != nullptr)
 				ss << ", geom";
 			else if(wayObject != nullptr)
@@ -247,7 +247,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			{
 				//Insert into live table
 				stringstream ss;
-				ss << "INSERT INTO "<< tablePrefix <<"live"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags";
+				ss << "INSERT INTO "<< c.quote_name(tablePrefix+"live"+typeStr+"s") << " (id, changeset, username, uid, timestamp, version, tags";
 				if(nodeObject != nullptr)
 					ss << ", geom";
 				else if(wayObject != nullptr)
@@ -323,7 +323,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				}
 
 				stringstream ssi;
-				ssi << "INSERT INTO "<< tablePrefix << typeStr << "ids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
 				if(verbose >= 1)
 					cout << ssi.str() << endl;
@@ -335,7 +335,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			{
 				//Update row in place
 				stringstream ss;
-				ss << "UPDATE "<< tablePrefix <<"live"<<typeStr<<"s SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6";
+				ss << "UPDATE "<< c.quote_name(tablePrefix+"live"+typeStr+"s") << " SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6";
 				if(nodeObject != nullptr)
 					ss << ", geom=ST_GeometryFromText($8, 4326)";
 				else if(wayObject != nullptr)
@@ -397,7 +397,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		{
 			//Insert into history table
 			stringstream ss;
-			ss << "INSERT INTO "<< tablePrefix <<"old"<<typeStr<<"s (id, changeset, username, uid, timestamp, version, tags, visible";
+			ss << "INSERT INTO "<< c.quote_name(tablePrefix+"old"+typeStr+"s")+" (id, changeset, username, uid, timestamp, version, tags, visible";
 			if(nodeObject != nullptr)
 				ss << ", geom";
 			else if(wayObject != nullptr)
@@ -478,7 +478,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			}
 
 			stringstream ssi;
-			ssi << "INSERT INTO "<< tablePrefix << typeStr << "ids (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+			ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") +" (id) VALUES ($1) ON CONFLICT DO NOTHING;";
 
 			if(verbose >= 1)
 				cout << ssi.str() << endl;
@@ -494,7 +494,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			{
 				stringstream sswm;
 				size_t insertSize = 0;
-				sswm << "INSERT INTO "<< tablePrefix << "way_mems (id, version, index, member) VALUES ";
+				sswm << "INSERT INTO "<< c.quote_name(tablePrefix+"way_mems") + " (id, version, index, member) VALUES ";
 
 				size_t initialj = j;
 				for(; j<wayObject->refs.size() && insertSize < 1000; j++)
@@ -530,7 +530,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			for(size_t j=0;j < relationObject->refIds.size(); j++)
 			{
 				stringstream ssrm;
-				ssrm << "INSERT INTO "<< tablePrefix << "relation_mems_"<< relationObject->refTypeStrs[j][0] << " (id, version, index, member) VALUES ";
+				ssrm << "INSERT INTO "<< c.quote_name(tablePrefix+"relation_mems_"+relationObject->refTypeStrs[j][0]) << " (id, version, index, member) VALUES ";
 				ssrm << "("<<objId<<","<<relationObject->metaData.version<<","<<j<<","<<relationObject->refIds[j]<<");";
 
 				try
@@ -565,7 +565,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	std::string &errStr)
 {
 	map<string, int64_t> nextIdMapOriginal, nextIdMap;
-	bool ok = GetNextObjectIds(work, tablePrefix, nextIdMapOriginal, errStr);
+	bool ok = GetNextObjectIds(c, work, tablePrefix, nextIdMapOriginal, errStr);
 	if(!ok)
 		return false;
 	nextIdMap = nextIdMapOriginal;
@@ -670,7 +670,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 			return false;
 	}
 
-	ok = UpdateNextObjectIds(work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
+	ok = UpdateNextObjectIds(c, work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
 	if(!ok)
 		return false;
 	return true;

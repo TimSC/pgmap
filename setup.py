@@ -4,6 +4,8 @@
 setup.py file for SWIG pgmap
 """
 
+# -*- coding: utf-8 -*-
+from __future__ import print_function
 from distutils.core import setup, Extension
 
 pgmap_module = Extension('_pgmap',

@@ -116,11 +116,11 @@ PgChangeset& PgChangeset::operator=(const PgChangeset &obj)
 PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<pqxx::work> mapQueryWork)
+		std::shared_ptr<pqxx::transaction_base> mapQueryWork)
 {
 	mapQueryActive = false;
 	dbconn = db;
-	this->mapQueryWork = mapQueryWork;
+	this->workwp = mapQueryWork;
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
@@ -159,6 +159,7 @@ int PgMapQuery::Continue()
 {
 	if(!mapQueryActive)
 		throw runtime_error("Query not active");
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	if(this->mapQueryPhase == 0)
 	{
@@ -171,7 +172,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 1)
 	{
 		//Get nodes in bbox (static db)
-		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
+		cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -196,7 +197,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 3)
 	{
 		//Get nodes in bbox (active db)
-		cursor = LiveNodesInBboxStart(this->mapQueryWork.get(), this->tableActivePrefix, this->mapQueryBbox, "");
+		cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, "");
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -221,9 +222,9 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
-		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
+		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
 
-		GetLiveWaysThatContainNodes(this->mapQueryWork.get(), this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
+		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
 		cout << "Found " << this->retainWayIds->wayIds.size() << " ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
@@ -244,7 +245,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
+			GetLiveNodesById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -259,7 +260,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(this->mapQueryWork.get(), this->tableActivePrefix, "", this->extraNodes, 
+			GetLiveNodesById(*dbconn, work.get(), this->tableActivePrefix, "", this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -277,7 +278,7 @@ int PgMapQuery::Continue()
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(this->mapQueryWork.get(), this->tableStaticPrefix, this->tableActivePrefix, 
+			GetLiveWaysById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, 
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -292,7 +293,7 @@ int PgMapQuery::Continue()
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(this->mapQueryWork.get(), this->tableActivePrefix, "",
+			GetLiveWaysById(*dbconn, work.get(), this->tableActivePrefix, "",
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -310,7 +311,7 @@ int PgMapQuery::Continue()
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
 			set<int64_t> empty;
-			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
 				this->tableActivePrefix, 
 				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
 			return 0;
@@ -326,7 +327,7 @@ int PgMapQuery::Continue()
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
 			set<int64_t> empty;
-			GetLiveRelationsForObjects(this->mapQueryWork.get(),
+			GetLiveRelationsForObjects(*dbconn, work.get(),
 				this->tableActivePrefix, "",
 				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
 			return 0;
@@ -342,7 +343,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
 				this->tableActivePrefix, 
 				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -358,7 +359,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveRelationsForObjects(this->mapQueryWork.get(),
+			GetLiveRelationsForObjects(*dbconn, work.get(),
 				this->tableActivePrefix, "",
 				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -377,7 +378,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveRelationsForObjects(this->mapQueryWork.get(), this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
 				this->tableActivePrefix, 
 				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
 				retainRelationIds->relationIds, retainRelationIds);
@@ -394,7 +395,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveRelationsForObjects(this->mapQueryWork.get(),
+			GetLiveRelationsForObjects(*dbconn, work.get(),
 				this->tableActivePrefix, "",
 				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
 				retainRelationIds->relationIds, retainRelationIds);
@@ -435,15 +436,16 @@ void PgMapQuery::Reset()
 PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 	const string &tableStaticPrefixIn, 
 	const string &tableActivePrefixIn,
-	std::shared_ptr<pqxx::work> workIn,
+	std::shared_ptr<pqxx::transaction_base> workIn,
 	const std::string &shareMode):
-	work(workIn)
+	workwp(workIn)
 {
 	dbconn = dbconnIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
 	this->shareMode = shareMode;
 	string errStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
 	if(!ok)
 		throw runtime_error(errStr);
@@ -454,7 +456,7 @@ PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 
 PgTransaction::~PgTransaction()
 {
-	work.reset();
+	workwp.reset();
 }
 
 shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
@@ -462,7 +464,8 @@ shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn, this->work));
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn, work));
 	return out;
 }
 
@@ -473,39 +476,40 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 
 	if(objectIds.size()==0)
 		return;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	if(type == "node")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveNodesById(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
+			GetLiveNodesById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveNodesById(work.get(), this->tableActivePrefix, "", objectIds, 
+			GetLiveNodesById(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "way")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveWaysById(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
+			GetLiveWaysById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveWaysById(work.get(), this->tableActivePrefix, "", objectIds, 
+			GetLiveWaysById(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "relation")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveRelationsById(work.get(), this->tableStaticPrefix, this->tableActivePrefix,
+			GetLiveRelationsById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix,
 				objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveRelationsById(work.get(), this->tableActivePrefix, "",
+			GetLiveRelationsById(*dbconn, work.get(), this->tableActivePrefix, "",
 				objectIds, 
 				it, 1000, out);
 	}
@@ -533,6 +537,7 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	string tablePrefix = this->tableActivePrefix;
 	if(saveToStaticTables)
 		tablePrefix = this->tableStaticPrefix;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -543,9 +548,11 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds, 
 	std::shared_ptr<IDataStreamHandler> out)
 {
-	GetLiveWaysThatContainNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
-	GetLiveWaysThatContainNodes(work.get(), this->tableActivePrefix, "", objectIds, out);
+	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
+
+	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, out);
 }
 
 void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
@@ -553,19 +560,20 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 {
 	if(type.size() == 0)
 		throw invalid_argument("Type string cannot be zero length");
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	set<int64_t> empty;
 	std::set<int64_t>::const_iterator it = objectIds.begin();
 	while(it != objectIds.end())
 	{
-		GetLiveRelationsForObjects(work.get(), this->tableStaticPrefix, 
+		GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
 			this->tableActivePrefix, 
 			type[0], objectIds, it, 1000, empty, out);
 	}
 	it = objectIds.begin();
 	while(it != objectIds.end())
 	{
-		GetLiveRelationsForObjects(work.get(), this->tableActivePrefix, "", 
+		GetLiveRelationsForObjects(*dbconn, work.get(), this->tableActivePrefix, "", 
 			type[0], objectIds, it, 1000, empty, out);
 	}
 }
@@ -752,6 +760,7 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	std::string nativeErrStr;
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = ::ResetActiveTables(*dbconn, work.get(), this->tableActivePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -764,31 +773,32 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	std::shared_ptr<class OsmData> osmData(new class OsmData);
 
-	GetReplicateDiffNodes(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffNodes(work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffNodes(work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffNodes(work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffWays(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffWays(work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffWays(work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffWays(work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffRelations(work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffRelations(work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffRelations(work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
 
-	GetReplicateDiffRelations(work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
 
 	enc->StoreIsDiff(false);
 
@@ -804,23 +814,24 @@ void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	enc->StoreIsDiff(false);
 
-	DumpNodes(work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+	DumpNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpNodes(work.get(), this->tableActivePrefix, "", order, enc);
+	DumpNodes(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
 
 	enc->Reset();
 
-	DumpWays(work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+	DumpWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpWays(work.get(), this->tableActivePrefix, "", order, enc);
+	DumpWays(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
 
 	enc->Reset();
 		
-	DumpRelations(work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+	DumpRelations(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpRelations(work.get(), this->tableActivePrefix, "", order, enc);
+	DumpRelations(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
 
 	enc->Finish();
 }
@@ -838,6 +849,7 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 
 	string errStr;
 	int64_t val;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		type, true, errStr, val);
@@ -853,6 +865,7 @@ int64_t PgTransaction::PeekNextAllocatedId(const string &type)
 
 	string errStr;
 	int64_t val;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		type, false, errStr, val);
@@ -868,8 +881,9 @@ int PgTransaction::GetChangeset(int64_t objId,
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-	string errStrNative;	
-	int ret = GetChangesetFromDb(work.get(),
+	string errStrNative;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);	
+	int ret = GetChangesetFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		objId,
 		changesetOut,
@@ -877,7 +891,7 @@ int PgTransaction::GetChangeset(int64_t objId,
 
 	if(ret == -1)
 	{
-		ret = GetChangesetFromDb(work.get(),
+		ret = GetChangesetFromDb(*dbconn, work.get(),
 			this->tableStaticPrefix,
 			objId,
 			changesetOut,
@@ -892,25 +906,26 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 	std::shared_ptr<class IOsmChangeBlock> output,
 	class PgMapError &errStr)
 {
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	std::shared_ptr<class OsmData> data(new class OsmData());
-	GetAllNodesByChangeset(work.get(), this->tableStaticPrefix,
+	GetAllNodesByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
 		"", changesetId,
 		data);
-	GetAllNodesByChangeset(work.get(), this->tableActivePrefix,
-		"", changesetId,
-		data);
-
-	GetAllWaysByChangeset(work.get(), this->tableStaticPrefix,
-		"", changesetId,
-		data);
-	GetAllWaysByChangeset(work.get(), this->tableActivePrefix,
+	GetAllNodesByChangeset(*dbconn, work.get(), this->tableActivePrefix,
 		"", changesetId,
 		data);
 
-	GetAllRelationsByChangeset(work.get(), this->tableStaticPrefix,
+	GetAllWaysByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
 		"", changesetId,
 		data);
-	GetAllRelationsByChangeset(work.get(), this->tableActivePrefix,
+	GetAllWaysByChangeset(*dbconn, work.get(), this->tableActivePrefix,
+		"", changesetId,
+		data);
+
+	GetAllRelationsByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
+		"", changesetId,
+		data);
+	GetAllRelationsByChangeset(*dbconn, work.get(), this->tableActivePrefix,
 		"", changesetId,
 		data);
 
@@ -936,7 +951,8 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 
 	string errStrNative;
 	size_t targetNum = 100;
-	bool ok = GetChangesetsFromDb(work.get(),
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
 		targetNum,
 		changesetsOut,
@@ -950,7 +966,7 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	if(changesetsOut.size() < targetNum)
 	{
 		std::vector<class PgChangeset> changesetsStatic;
-		ok = GetChangesetsFromDb(work.get(),
+		ok = GetChangesetsFromDb(*dbconn, work.get(),
 			this->tableStaticPrefix,
 			this->tableActivePrefix,
 			targetNum - changesetsOut.size(),
@@ -985,6 +1001,7 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 
 	int64_t cid = this->GetAllocatedId("changeset");
 	changesetMod.objId = cid;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = InsertChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -1008,6 +1025,7 @@ bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
 		errStr.errStr = "Database is in READ ONLY mode";
 		return false;
 	}
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	//Attempt to update in active table
 	int rowsAffected = UpdateChangesetInDb(*dbconn, work.get(),
@@ -1062,6 +1080,7 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 	}
 
 	size_t rowsAffected = 0;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = CloseChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -1117,6 +1136,7 @@ std::string PgTransaction::GetMetaValue(const std::string &key,
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 	string errStrNative;
 	std::string val;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	try
 	{
@@ -1143,6 +1163,8 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 	string errStrNative;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+
 	bool ret = DbSetMetaValue(*dbconn, work.get(),
 		key, 
 		value, 
@@ -1154,12 +1176,14 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 
 void PgTransaction::Commit()
 {
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	//Release locks
 	work->commit();
 }
 
 void PgTransaction::Abort()
 {
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	work->abort();
 }
 
@@ -1171,13 +1195,14 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableTestPrefixIn,
 		std::shared_ptr<pqxx::transaction_base> workIn,
 		const string &shareModeIn):
-	work(workIn)
+	workwp(workIn)
 {
 	dbconn = dbconnIn;
 	shareMode = shareModeIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	if(shareMode.size() > 0)
 	{
@@ -1196,12 +1221,13 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 
 PgAdmin::~PgAdmin()
 {
-	work.reset();
+	workwp.reset();
 }
 
 bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1218,6 +1244,7 @@ bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
 bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = DbDropTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1234,6 +1261,7 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = DbCopyData(*dbconn, work.get(), verbose, filePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1244,6 +1272,7 @@ bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMa
 bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = DbCreateIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1260,6 +1289,7 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = DbApplyDiffs(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, diffPath, nativeErrStr);
@@ -1271,15 +1301,17 @@ bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapEr
 
 bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 {
-	ClearNextIdValuesById(work.get(), this->tableStaticPrefix, "node");
-	ClearNextIdValuesById(work.get(), this->tableStaticPrefix, "way");
-	ClearNextIdValuesById(work.get(), this->tableStaticPrefix, "relation");
-	ClearNextIdValuesById(work.get(), this->tableModPrefix, "node");
-	ClearNextIdValuesById(work.get(), this->tableModPrefix, "way");
-	ClearNextIdValuesById(work.get(), this->tableModPrefix, "relation");
-	ClearNextIdValuesById(work.get(), this->tableTestPrefix, "node");
-	ClearNextIdValuesById(work.get(), this->tableTestPrefix, "way");
-	ClearNextIdValuesById(work.get(), this->tableTestPrefix, "relation");
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);	
+
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "node");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "way");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "relation");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableModPrefix, "node");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableModPrefix, "way");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableModPrefix, "relation");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableTestPrefix, "node");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableTestPrefix, "way");
+	ClearNextIdValuesById(*dbconn, work.get(), this->tableTestPrefix, "relation");
 	
 	std::string nativeErrStr;
 
@@ -1294,6 +1326,7 @@ bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 
 	bool ok = DbRefreshMaxChangesetUid(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
@@ -1305,12 +1338,14 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 
 void PgAdmin::Commit()
 {
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	//Release locks
 	work->commit();
 }
 
 void PgAdmin::Abort()
 {
+	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
 	work->abort();
 }
 
@@ -1331,6 +1366,8 @@ PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn,
 
 PgMap::~PgMap()
 {
+	this->work.reset();
+
 	dbconn->disconnect();
 	dbconn.reset();
 }
@@ -1343,7 +1380,8 @@ bool PgMap::Ready()
 std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &shareMode)
 {
 	dbconn->cancel_query();
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	this->work.reset();
+	this->work.reset(new pqxx::work(*dbconn));
 	shared_ptr<class PgTransaction> out(new class PgTransaction(dbconn, tableStaticPrefix, tableActivePrefix, work, shareMode));
 	return out;
 }
@@ -1351,7 +1389,8 @@ std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &sh
 std::shared_ptr<class PgAdmin> PgMap::GetAdmin()
 {
 	dbconn->cancel_query();
-	std::shared_ptr<pqxx::nontransaction> work(new pqxx::nontransaction(*dbconn));
+	this->work.reset();
+	this->work.reset(new pqxx::nontransaction(*dbconn));
 	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, ""));
 	return out;
 }
@@ -1359,7 +1398,8 @@ std::shared_ptr<class PgAdmin> PgMap::GetAdmin()
 std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
 {
 	dbconn->cancel_query();
-	std::shared_ptr<pqxx::work> work(new pqxx::work(*dbconn));
+	this->work.reset();
+	this->work.reset(new pqxx::work(*dbconn));
 	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, shareMode));
 	return out;
 }

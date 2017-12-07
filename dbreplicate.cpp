@@ -3,14 +3,14 @@
 #include <set>
 using namespace std;
 
-void GetReplicateDiffNodes(pqxx::work *work, const string &tablePrefix, 
+void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string nodeTable = tablePrefix + "livenodes";
+	string nodeTable = c.quote_name(tablePrefix + "livenodes");
 	if(selectOld)
-		nodeTable = tablePrefix + "oldnodes";
+		nodeTable = c.quote_name(tablePrefix + "oldnodes");
 
 	//Discourage sequential scans of tables, since they is not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
@@ -28,14 +28,14 @@ void GetReplicateDiffNodes(pqxx::work *work, const string &tablePrefix,
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void GetReplicateDiffWays(pqxx::work *work, const string &tablePrefix, 
+void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = tablePrefix + "liveways";
+	string wayTable = c.quote_name(tablePrefix + "liveways");
 	if(selectOld)
-		wayTable = tablePrefix + "oldways";
+		wayTable = c.quote_name(tablePrefix + "oldways");
 
 	//Discourage sequential scans of tables, since they is not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
@@ -53,14 +53,14 @@ void GetReplicateDiffWays(pqxx::work *work, const string &tablePrefix,
 		count = WayResultsToEncoder(cursor, enc);
 }
 
-void GetReplicateDiffRelations(pqxx::work *work, const string &tablePrefix, 
+void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string relationTable = tablePrefix + "liverelations";
+	string relationTable = c.quote_name(tablePrefix + "liverelations");
 	if(selectOld)
-		relationTable = tablePrefix + "oldrelations";
+		relationTable = c.quote_name(tablePrefix + "oldrelations");
 
 	//Discourage sequential scans of tables, since they is not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");

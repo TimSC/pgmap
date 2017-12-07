@@ -1,15 +1,15 @@
 #include "dbdump.h"
 #include "dbdecode.h"
 
-void DumpNodes(pqxx::work *work, const string &tablePrefix, 
+void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string liveNodeTable = tablePrefix + "livenodes";
+	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "nodeids";
+		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	//Discourage sequential scans of tables, since they are not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
@@ -43,15 +43,15 @@ void DumpNodes(pqxx::work *work, const string &tablePrefix,
 		count = NodeResultsToEncoder(cursor, enc);
 }
 
-void DumpWays(pqxx::work *work, const string &tablePrefix, 
+void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = tablePrefix + "liveways";
+	string wayTable = c.quote_name(tablePrefix + "liveways");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "wayids";
+		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
 
 	//Discourage sequential scans of tables, since they are not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
@@ -75,15 +75,15 @@ void DumpWays(pqxx::work *work, const string &tablePrefix,
 		count = WayResultsToEncoder(cursor, enc);
 }
 
-void DumpRelations(pqxx::work *work, const string &tablePrefix, 
+void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string relationTable = tablePrefix + "liverelations";
+	string relationTable = c.quote_name(tablePrefix + "liverelations");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = excludeTablePrefix + "relationids";
+		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
 
 	//Discourage sequential scans of tables, since they are not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");

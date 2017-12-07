@@ -46,7 +46,7 @@ private:
 	std::shared_ptr<class DataStreamRetainIds> retainNodeIds;
 	std::shared_ptr<IDataStreamHandler> mapQueryEnc;
 	vector<double> mapQueryBbox;
-	std::shared_ptr<pqxx::work> mapQueryWork;
+	std::weak_ptr<pqxx::transaction_base> workwp;
 	set<int64_t> extraNodes;
 	std::shared_ptr<class DataStreamRetainIds> retainWayIds;
 	std::shared_ptr<class DataStreamRetainMemIds> retainWayMemIds;
@@ -59,7 +59,7 @@ public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<pqxx::work> mapQueryWork);
+		std::shared_ptr<pqxx::transaction_base> mapQueryWork);
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
@@ -76,13 +76,13 @@ private:
 	std::string tableActivePrefix;
 	std::string connectionString;
 	std::string shareMode;
-	std::shared_ptr<pqxx::work> work;
+	std::weak_ptr<pqxx::transaction_base> workwp;
 
 public:
 	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		std::shared_ptr<pqxx::work> workIn,
+		std::shared_ptr<pqxx::transaction_base> workIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
 
@@ -145,7 +145,7 @@ private:
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
 	std::string connectionString;
-	std::shared_ptr<pqxx::transaction_base> work;
+	std::weak_ptr<pqxx::transaction_base> workwp;
 	std::string shareMode;
 
 public:
@@ -178,6 +178,7 @@ private:
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
 	std::string connectionString;
+	std::shared_ptr<pqxx::transaction_base> work;
 
 public:
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 
