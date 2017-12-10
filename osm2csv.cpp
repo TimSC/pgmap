@@ -334,37 +334,62 @@ void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 	}
 }
 
+void LoadOsmFromFile(const std::string &filename, shared_ptr<class IDataStreamHandler> csvStore)
+{
+	vector<string> filenameSplit = split(filename, '.');
+	size_t filePart = filenameSplit.size()-1;
+	
+	//Open file
+	std::filebuf *fbRaw = new std::filebuf();
+	fbRaw->open(filename, std::ios::in | std::ios::binary);
+	if(!fbRaw->is_open())
+	{
+		cout << "Error opening input file " << filename << endl;
+		exit(0);
+	}
+
+	shared_ptr<std::streambuf> fb(fbRaw);
+	if(fb->in_avail() == 0)
+	{
+		cout << "Error reading from input file " << filename << endl;
+		exit(0);
+	}
+	cout << "Reading from input " << filename << endl;
+
+	shared_ptr<std::streambuf> fb2;	
+	if(filenameSplit[filePart] == "gz")
+	{
+		//Perform gzip decoding
+		fb2.reset(new class DecodeGzip(*fb.get()));
+		if(fb2->in_avail() == 0)
+		{
+			cout << "Error reading from input file" << endl;
+			exit(0);
+		}
+		filePart --;
+	}
+	else
+	{
+		fb2.swap(fb);
+	}
+
+	if(filenameSplit[filePart] == "o5m")
+		LoadFromO5m(*fb2.get(), csvStore);
+	else if (filenameSplit[filePart] == "osm")
+		LoadFromOsmXml(*fb2.get(), csvStore);
+	else
+		throw runtime_error("File extension not supported");
+}
+
 int main(int argc, char **argv)
 {
 	cout << "Reading settings from config.cfg" << endl;
 	std::map<string, string> config;
 	ReadSettingsFile("config.cfg", config);
 
-	//Perform gzip decoding
-	std::filebuf fb;
-	fb.open(config["dump_path"], std::ios::in | std::ios::binary);
-	if(!fb.is_open())
-	{
-		cout << "Error opening input file " << config["dump_path"] << endl;
-		exit(0);
-	}
-	if(fb.in_avail() == 0)
-	{
-		cout << "Error reading from input file " << config["dump_path"] << endl;
-		exit(0);
-	}
-	cout << "Reading from input " << config["dump_path"] << endl;
-
-	class DecodeGzip decodeGzip(fb);
-	if(decodeGzip.in_avail() == 0)
-	{
-		cout << "Error reading from input file" << endl;
-		exit(0);
-	}
-
 	cout << "Writing output to " << config["csv_absolute_path"] << endl;
 	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore(config["csv_absolute_path"]));
-	LoadFromO5m(decodeGzip, csvStore);
+	LoadOsmFromFile(config["dump_path"], csvStore);
 
 	csvStore.reset();
 	cout << "All done!" << endl;

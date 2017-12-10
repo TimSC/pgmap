@@ -93,9 +93,7 @@ Add your database config info to config.cfg then check we can connect:
 
 Download a regional or planet map dump, for example this one: https://archive.org/details/uk-eire-fosm-2017-jan.o5m
 
-The file format should be indicated by the extension .o5m.gz - if you have a different format use osmconvert:
-
-    osmconvert ~/Desktop/extract.osm -o=extract.o5m.gz
+The file format should be indicated by one of the supported extensions: .osm.gz .o5m.gz .osm .o5m
 
 Set the dump_path variable in pgmap's config.cfg to the actual path of the data to import. Set the csv_absolute_path variable in config.cfg to a folder for temporary files (it is possible to use the pgmap source folder). To convert the data to csv format: 
 
