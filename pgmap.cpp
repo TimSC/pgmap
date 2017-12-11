@@ -111,16 +111,45 @@ PgChangeset& PgChangeset::operator=(const PgChangeset &obj)
 	return *this;
 }
 
+// ************************************************
+
+PgWork::PgWork()
+{
+
+}
+
+PgWork::PgWork(pqxx::transaction_base *workIn):
+	work(workIn)
+{
+	
+}
+
+PgWork::PgWork(const PgWork &obj)
+{
+	*this = obj;
+}
+
+PgWork::~PgWork()
+{
+	work.reset();
+}
+
+PgWork& PgWork::operator=(const PgWork &obj)
+{
+	work = obj.work;
+	return *this;
+}
+
 // **********************************************
 
 PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<pqxx::transaction_base> mapQueryWork)
+		std::shared_ptr<class PgWork> sharedWorkIn):
+	sharedWork(sharedWorkIn)
 {
 	mapQueryActive = false;
 	dbconn = db;
-	this->workwp = mapQueryWork;
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
@@ -159,7 +188,7 @@ int PgMapQuery::Continue()
 {
 	if(!mapQueryActive)
 		throw runtime_error("Query not active");
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	if(this->mapQueryPhase == 0)
 	{
@@ -436,16 +465,16 @@ void PgMapQuery::Reset()
 PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 	const string &tableStaticPrefixIn, 
 	const string &tableActivePrefixIn,
-	std::shared_ptr<pqxx::transaction_base> workIn,
+	std::shared_ptr<class PgWork> sharedWorkIn,
 	const std::string &shareMode):
-	workwp(workIn)
+	sharedWork(sharedWorkIn)
 {
 	dbconn = dbconnIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
 	this->shareMode = shareMode;
 	string errStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
 	if(!ok)
 		throw runtime_error(errStr);
@@ -456,7 +485,8 @@ PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 
 PgTransaction::~PgTransaction()
 {
-	workwp.reset();
+	this->sharedWork->work.reset();
+	this->sharedWork.reset();
 }
 
 shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
@@ -464,8 +494,7 @@ shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
-	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn, work));
+	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn, this->sharedWork));
 	return out;
 }
 
@@ -476,7 +505,7 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 
 	if(objectIds.size()==0)
 		return;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	if(type == "node")
 	{
@@ -537,7 +566,7 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	string tablePrefix = this->tableActivePrefix;
 	if(saveToStaticTables)
 		tablePrefix = this->tableStaticPrefix;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -548,7 +577,7 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds, 
 	std::shared_ptr<IDataStreamHandler> out)
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
 
@@ -560,7 +589,7 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 {
 	if(type.size() == 0)
 		throw invalid_argument("Type string cannot be zero length");
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	set<int64_t> empty;
 	std::set<int64_t>::const_iterator it = objectIds.begin();
@@ -760,7 +789,7 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	std::string nativeErrStr;
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = ::ResetActiveTables(*dbconn, work.get(), this->tableActivePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -773,7 +802,7 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	std::shared_ptr<class OsmData> osmData(new class OsmData);
 
 	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
@@ -814,7 +843,7 @@ void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	enc->StoreIsDiff(false);
 
 	DumpNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
@@ -849,7 +878,7 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 
 	string errStr;
 	int64_t val;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		type, true, errStr, val);
@@ -865,7 +894,7 @@ int64_t PgTransaction::PeekNextAllocatedId(const string &type)
 
 	string errStr;
 	int64_t val;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		type, false, errStr, val);
@@ -882,7 +911,7 @@ int PgTransaction::GetChangeset(int64_t objId,
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	string errStrNative;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);	
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);	
 	int ret = GetChangesetFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		objId,
@@ -906,7 +935,7 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 	std::shared_ptr<class IOsmChangeBlock> output,
 	class PgMapError &errStr)
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	std::shared_ptr<class OsmData> data(new class OsmData());
 	GetAllNodesByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
 		"", changesetId,
@@ -951,7 +980,7 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 
 	string errStrNative;
 	size_t targetNum = 100;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
 		targetNum,
@@ -1001,7 +1030,7 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 
 	int64_t cid = this->GetAllocatedId("changeset");
 	changesetMod.objId = cid;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = InsertChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -1025,7 +1054,7 @@ bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
 		errStr.errStr = "Database is in READ ONLY mode";
 		return false;
 	}
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	//Attempt to update in active table
 	int rowsAffected = UpdateChangesetInDb(*dbconn, work.get(),
@@ -1080,7 +1109,7 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 	}
 
 	size_t rowsAffected = 0;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = CloseChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -1136,7 +1165,7 @@ std::string PgTransaction::GetMetaValue(const std::string &key,
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 	string errStrNative;
 	std::string val;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	try
 	{
@@ -1163,7 +1192,7 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 	string errStrNative;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ret = DbSetMetaValue(*dbconn, work.get(),
 		key, 
@@ -1176,14 +1205,14 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 
 void PgTransaction::Commit()
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	//Release locks
 	work->commit();
 }
 
 void PgTransaction::Abort()
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	work->abort();
 }
 
@@ -1193,16 +1222,16 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn,
+		std::shared_ptr<class PgWork> sharedWorkIn,
 		const string &shareModeIn):
-	workwp(workIn)
+	sharedWork(sharedWorkIn)
 {
 	dbconn = dbconnIn;
 	shareMode = shareModeIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	if(shareMode.size() > 0)
 	{
@@ -1221,13 +1250,14 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 
 PgAdmin::~PgAdmin()
 {
-	workwp.reset();
+	this->sharedWork->work.reset();
+	this->sharedWork.reset();
 }
 
 bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1244,7 +1274,7 @@ bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
 bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = DbDropTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1261,7 +1291,7 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = DbCopyData(*dbconn, work.get(), verbose, filePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1272,7 +1302,7 @@ bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMa
 bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = DbCreateIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1289,7 +1319,7 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = DbApplyDiffs(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, diffPath, nativeErrStr);
@@ -1301,7 +1331,7 @@ bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapEr
 
 bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);	
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);	
 
 	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "node");
 	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "way");
@@ -1326,7 +1356,7 @@ bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 
 	bool ok = DbRefreshMaxChangesetUid(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
@@ -1338,14 +1368,14 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 
 void PgAdmin::Commit()
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	//Release locks
 	work->commit();
 }
 
 void PgAdmin::Abort()
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->workwp);
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	work->abort();
 }
 
@@ -1366,7 +1396,9 @@ PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn,
 
 PgMap::~PgMap()
 {
-	this->work.reset();
+	if(this->sharedWork)
+		this->sharedWork->work.reset();
+	this->sharedWork.reset();
 
 	dbconn->disconnect();
 	dbconn.reset();
@@ -1380,27 +1412,30 @@ bool PgMap::Ready()
 std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &shareMode)
 {
 	dbconn->cancel_query();
-	this->work.reset();
-	this->work.reset(new pqxx::work(*dbconn));
-	shared_ptr<class PgTransaction> out(new class PgTransaction(dbconn, tableStaticPrefix, tableActivePrefix, work, shareMode));
+	if(this->sharedWork)
+		this->sharedWork->work.reset();
+	this->sharedWork.reset(new class PgWork(new pqxx::work(*dbconn)));
+	shared_ptr<class PgTransaction> out(new class PgTransaction(dbconn, tableStaticPrefix, tableActivePrefix, this->sharedWork, shareMode));
 	return out;
 }
 
 std::shared_ptr<class PgAdmin> PgMap::GetAdmin()
 {
 	dbconn->cancel_query();
-	this->work.reset();
-	this->work.reset(new pqxx::nontransaction(*dbconn));
-	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, ""));
+	if(this->sharedWork)
+		this->sharedWork->work.reset();
+	this->sharedWork.reset(new class PgWork(new pqxx::nontransaction(*dbconn)));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, this->sharedWork, ""));
 	return out;
 }
 
 std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
 {
 	dbconn->cancel_query();
-	this->work.reset();
-	this->work.reset(new pqxx::work(*dbconn));
-	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, work, shareMode));
+	if(this->sharedWork)
+		this->sharedWork->work.reset();
+	this->sharedWork.reset(new class PgWork(new pqxx::work(*dbconn)));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, this->sharedWork, shareMode));
 	return out;
 }
 

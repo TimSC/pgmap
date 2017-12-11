@@ -35,6 +35,18 @@ public:
 	double x1, y1, x2, y2;
 };
 
+class PgWork
+{
+public:
+	PgWork();
+	PgWork(pqxx::transaction_base *workIn);
+	PgWork(const PgWork &obj);
+	virtual ~PgWork();
+	PgWork& operator=(const PgWork &obj);
+
+	std::shared_ptr<pqxx::transaction_base> work;
+};
+
 class PgMapQuery
 {
 private:
@@ -46,7 +58,7 @@ private:
 	std::shared_ptr<class DataStreamRetainIds> retainNodeIds;
 	std::shared_ptr<IDataStreamHandler> mapQueryEnc;
 	vector<double> mapQueryBbox;
-	std::weak_ptr<pqxx::transaction_base> workwp;
+	std::shared_ptr<class PgWork> sharedWork;
 	set<int64_t> extraNodes;
 	std::shared_ptr<class DataStreamRetainIds> retainWayIds;
 	std::shared_ptr<class DataStreamRetainMemIds> retainWayMemIds;
@@ -59,7 +71,7 @@ public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<pqxx::transaction_base> mapQueryWork);
+		std::shared_ptr<class PgWork> sharedWorkIn);
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
@@ -76,13 +88,13 @@ private:
 	std::string tableActivePrefix;
 	std::string connectionString;
 	std::string shareMode;
-	std::weak_ptr<pqxx::transaction_base> workwp;
+	std::shared_ptr<class PgWork> sharedWork;
 
 public:
 	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn,
+		std::shared_ptr<class PgWork> sharedWorkIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
 
@@ -145,7 +157,7 @@ private:
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
 	std::string connectionString;
-	std::weak_ptr<pqxx::transaction_base> workwp;
+	std::shared_ptr<class PgWork> sharedWork;
 	std::string shareMode;
 
 public:
@@ -153,7 +165,7 @@ public:
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn,
+		std::shared_ptr<class PgWork> sharedWorkIn,
 		const string &shareModeIn);
 	virtual ~PgAdmin();
 
@@ -178,7 +190,7 @@ private:
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
 	std::string connectionString;
-	std::shared_ptr<pqxx::transaction_base> work;
+	std::shared_ptr<class PgWork> sharedWork;
 
 public:
 	PgMap(const string &connection, const string &tableStaticPrefixIn, 

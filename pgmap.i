@@ -264,6 +264,20 @@ namespace std {
 	%template(vectorchangeset) vector<class PgChangeset>;
 };
 
+%shared_ptr(PgWork)
+
+class PgWork
+{
+public:
+	PgWork();
+	PgWork(pqxx::transaction_base *workIn);
+	PgWork(const PgWork &obj);
+	virtual ~PgWork();
+	PgWork& operator=(const PgWork &obj);
+
+	std::shared_ptr<pqxx::transaction_base> work;
+};
+
 %shared_ptr(PgMapQuery)
 
 class PgMapQuery
@@ -272,7 +286,7 @@ public:
 	PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<pqxx::transaction_base> mapQueryWork);
+		std::shared_ptr<class PgWork> sharedWorkIn);
 	virtual ~PgMapQuery();
 
 	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
@@ -288,7 +302,7 @@ public:
 	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
-		std::shared_ptr<pqxx::transaction_base> workIn,
+		std::shared_ptr<class PgWork> sharedWorkIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
 
