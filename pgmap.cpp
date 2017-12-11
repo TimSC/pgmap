@@ -189,6 +189,8 @@ int PgMapQuery::Continue()
 	if(!mapQueryActive)
 		throw runtime_error("Query not active");
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	if(this->mapQueryPhase == 0)
 	{
