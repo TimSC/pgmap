@@ -553,7 +553,10 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 	}
 	sql << ";";
 
-	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", 1000 );	
+	int step = 100;
+	int numWaysProcessed = 0;
+	int numWaysReported = 0;
+	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", step );	
 
 	int count = 1;
 	while (count > 0)
@@ -592,6 +595,7 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 		int tagsCol = rows.column_number("tags");
 		int membersCol = rows.column_number("members");
 		std::set<int64_t> nodeIds;
+		std::map<int64_t, std::set<int64_t> > wayMemDict;
 
 		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
 
@@ -604,13 +608,16 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 			DecodeWayMembers(c, membersCol, wayMemHandler);
 			count ++;
 
-			nodeIds.insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
+			if(wayMemHandler.refs.size() == 0)
+				cout << "Way " << objId << " has no nodes" << endl;
 
+			nodeIds.insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
+			wayMemDict[objId].insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
 		}
 
-		cout << nodeIds.size() << ", ";
+		numWaysProcessed += rows.size();
 
-
+		//Query member nodes in database
 		std::set<int64_t>::const_iterator it = nodeIds.begin();
 		std::shared_ptr<class OsmData> data(new class OsmData());
 		while(it != nodeIds.end())
@@ -621,7 +628,34 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 				1000, data);
 		}
 
-		cout << data->nodes.size() << endl;
+		//Gather found node IDs
+		std::set<int64_t> foundNodeIds;
+		for(size_t i=0; i<data->nodes.size(); i++)
+		{
+			const class OsmNode &node = data->nodes[i];
+			foundNodeIds.insert(node.objId);
+		}
+
+		//Check we have found all nodes we expect
+		for(std::map<int64_t, std::set<int64_t> >::iterator it = wayMemDict.begin();
+			it != wayMemDict.end();
+			it++)
+		{
+			int64_t wayId = it->first;
+			const std::set<int64_t> &memIds = it->second;
+			for(std::set<int64_t>::const_iterator it2 = memIds.begin(); it2 != memIds.end(); it2++)
+			{
+				std::set<int64_t>::iterator exists = foundNodeIds.find(*it2);
+				if(exists == foundNodeIds.end())
+					cout << "Way " << wayId << " references non-existent node " << (*it2) << endl;
+			}
+		}
+
+		if(numWaysProcessed - numWaysReported > 100000)
+		{
+			cout << "Num ways processed " << numWaysProcessed << endl;
+			numWaysReported = numWaysProcessed;
+		}
 
 	}
 }
