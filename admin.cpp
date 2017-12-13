@@ -36,7 +36,8 @@ int main(int argc, char **argv)
 		cout << "6. Refresh max IDs" << endl;
 		cout << "7. Refresh max changeset IDs and UIDs" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
-		cout << "b. Reset test tables" << endl << endl;
+		cout << "b. Reset test tables" << endl;
+		cout << "c. Check nodes exist for ways" << endl << endl;
 		cout << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -183,6 +184,17 @@ int main(int argc, char **argv)
 				cout << errStr.errStr << endl;
 				pgTransaction->Abort();
 			}
+			continue;
+		}
+
+		if(inputStr == "c")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
+			bool ok = admin->CheckNodesExistForWays(errStr);
+
+			cout << "All done!" << endl;
+			admin->Commit();
+
 			continue;
 		}
 

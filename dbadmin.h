@@ -52,5 +52,9 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &diffPath, 
 	std::string &errStr);
 
+void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
+	const std::string &excludeTablePrefix);
+
 #endif //_DB_ADMIN_H
 

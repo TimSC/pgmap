@@ -2,6 +2,9 @@
 #include "dbids.h"
 #include "dbcommon.h"
 #include "dbstore.h"
+#include "dbdecode.h"
+#include "dbquery.h"
+#include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include <map>
 #include <boost/filesystem.hpp>
@@ -529,5 +532,97 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	return true;
+}
+
+void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tablePrefix, 
+	const string &excludeTablePrefix)
+{
+	string wayTable = c.quote_name(tablePrefix + "liveways");
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
+
+	stringstream sql;
+	sql << "SELECT " << wayTable << ".* FROM ";
+	sql << wayTable;
+	if(excludeTable.size() > 0)
+	{
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<wayTable<<".id = "<<excludeTable<<".id";
+		sql << " WHERE "<<excludeTable<<".id IS NULL";
+	}
+	sql << ";";
+
+	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", 1000 );	
+
+	int count = 1;
+	while (count > 0)
+	{
+		class MetaData metaData;
+		JsonToStringMap tagHandler;
+		JsonToWayMembers wayMemHandler;
+		const std::vector<int64_t> refs;
+		double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
+		uint64_t lastUpdateCount = 0;
+		bool verbose = false;
+
+		pqxx::result rows;
+		cursor.get(rows);
+		if ( rows.empty() )
+		{	
+			count = 0; // nothing left to read
+			continue;
+		}
+
+		MetaDataCols metaDataCols;
+
+		int idCol = rows.column_number("id");
+		metaDataCols.changesetCol = rows.column_number("changeset");
+		metaDataCols.usernameCol = rows.column_number("username");
+		metaDataCols.uidCol = rows.column_number("uid");
+		metaDataCols.timestampCol = rows.column_number("timestamp");
+		metaDataCols.versionCol = rows.column_number("version");
+		metaDataCols.visibleCol = -1;
+		try
+		{
+			metaDataCols.visibleCol = rows.column_number("visible");
+		}
+		catch (invalid_argument &err) {}
+
+		int tagsCol = rows.column_number("tags");
+		int membersCol = rows.column_number("members");
+		std::set<int64_t> nodeIds;
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+			int64_t objId = c[idCol].as<int64_t>();
+
+			DecodeMetadata(c, metaDataCols, metaData);
+		
+			DecodeTags(c, tagsCol, tagHandler);
+
+			DecodeWayMembers(c, membersCol, wayMemHandler);
+			count ++;
+
+			nodeIds.insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
+
+		}
+
+		cout << nodeIds.size() << ", ";
+
+
+		std::set<int64_t>::const_iterator it = nodeIds.begin();
+		std::shared_ptr<class OsmData> data(new class OsmData());
+		while(it != nodeIds.end())
+		{
+			GetLiveNodesById(c, work, tablePrefix, 
+				excludeTablePrefix, 
+				nodeIds, it, 
+				1000, data);
+		}
+
+		cout << data->nodes.size() << endl;
+
+	}
 }
 

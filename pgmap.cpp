@@ -1368,6 +1368,17 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 	return true;
 }
 
+bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+
+	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableModPrefix);
+
+	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableModPrefix, "");
+
+	return true;
+}
+
 void PgAdmin::Commit()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

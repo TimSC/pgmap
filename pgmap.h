@@ -176,6 +176,8 @@ public:
 	bool ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
+	
+	bool CheckNodesExistForWays(class PgMapError &errStr);
 
 	void Commit();
 	void Abort();
