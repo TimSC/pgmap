@@ -13,7 +13,7 @@ common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
 	cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
 	cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
 
-libs = -lboost_filesystem -lboost_system -lpqxx -lexpat -lz
+libs = -lboost_filesystem -lboost_program_options -lboost_system -lpqxx -lexpat -lz
 
 dump: dump.cpp $(common)
 	g++ $^ -std=c++11 -Wall $(libs) -o $@

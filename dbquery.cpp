@@ -31,6 +31,31 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, p
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
 }
 
+std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::string &wkt, 
+	const string &excludeTablePrefix)
+{
+	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
+
+	stringstream sql;
+	sql.precision(9);
+	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
+	sql << " FROM ";
+	sql << liveNodeTable;
+	if(excludeTable.size() > 0)
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
+	sql << " WHERE "<<liveNodeTable<<".geom && ST_GeomFromText(";
+	sql << c.quote(wkt) << ", 4326)";
+	if(excludeTable.size() > 0)
+		sql << " AND "<<excludeTable<<".id IS NULL";
+	sql <<";";
+
+	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
+}
+
 int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::shared_ptr<IDataStreamHandler> enc)
 {
 	pqxx::icursorstream *c = cursor.get();

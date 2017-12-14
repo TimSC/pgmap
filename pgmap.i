@@ -290,6 +290,7 @@ public:
 	virtual ~PgMapQuery();
 
 	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
+	int Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();
 	void Reset();
 };

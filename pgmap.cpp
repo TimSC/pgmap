@@ -171,9 +171,31 @@ int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHan
 		throw runtime_error("Query already active");
 	if(dbconn.get() == NULL)
 		throw runtime_error("DB pointer not set for PgMapQuery");
+	if(bbox.size() != 4)
+		throw invalid_argument("bbox must have four values");
+
 	mapQueryActive = true;
 	this->mapQueryPhase = 0;
 	this->mapQueryBbox = bbox;
+
+	this->mapQueryEnc = enc;
+	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
+	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
+	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
+	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
+
+	return 0;
+}
+
+int PgMapQuery::Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler> &enc)
+{
+	if(mapQueryActive)
+		throw runtime_error("Query already active");
+	if(dbconn.get() == NULL)
+		throw runtime_error("DB pointer not set for PgMapQuery");
+	mapQueryActive = true;
+	this->mapQueryPhase = 0;
+	this->mapQueryWkt = wkt;
 
 	this->mapQueryEnc = enc;
 	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
@@ -195,15 +217,21 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 0)
 	{
 		this->mapQueryEnc->StoreIsDiff(false);
-		this->mapQueryEnc->StoreBounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]);
+		if(this->mapQueryBbox.size() == 4)
+			this->mapQueryEnc->StoreBounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]);
 		this->mapQueryPhase ++;
 		return 0;
 	}
 
 	if(this->mapQueryPhase == 1)
 	{
-		//Get nodes in bbox (static db)
-		cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
+		if(this->mapQueryBbox.size() == 4)
+		{
+			//Get nodes in bbox (static db)
+			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
+		}
+		else
+			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, this->tableActivePrefix);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -227,8 +255,13 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 3)
 	{
-		//Get nodes in bbox (active db)
-		cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, "");
+		if(this->mapQueryBbox.size() == 4)
+		{
+			//Get nodes in bbox (active db)
+			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, "");
+		}
+		else
+			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, this->tableActivePrefix);
 
 		this->mapQueryPhase ++;
 		return 0;
