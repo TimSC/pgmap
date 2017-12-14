@@ -261,7 +261,7 @@ int PgMapQuery::Continue()
 			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, "");
 		}
 		else
-			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, this->tableActivePrefix);
+			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryWkt, "");
 
 		this->mapQueryPhase ++;
 		return 0;
