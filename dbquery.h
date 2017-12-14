@@ -11,7 +11,7 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, p
 	const string &excludeTablePrefix);
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
-	const std::string &wkt, 
+	const std::string &wkt, int srid,
 	const string &excludeTablePrefix);
 
 int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::shared_ptr<IDataStreamHandler> enc);

@@ -231,7 +231,7 @@ int PgMapQuery::Continue()
 			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
 		}
 		else
-			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, this->tableActivePrefix);
+			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, 4326, this->tableActivePrefix);
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -261,7 +261,7 @@ int PgMapQuery::Continue()
 			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, "");
 		}
 		else
-			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryWkt, "");
+			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryWkt, 4326, "");
 
 		this->mapQueryPhase ++;
 		return 0;
@@ -510,6 +510,8 @@ PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 	this->shareMode = shareMode;
 	string errStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
 	if(!ok)
 		throw runtime_error(errStr);
@@ -541,6 +543,8 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 	if(objectIds.size()==0)
 		return;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	if(type == "node")
 	{
@@ -602,6 +606,8 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	if(saveToStaticTables)
 		tablePrefix = this->tableStaticPrefix;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -613,6 +619,8 @@ void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds,
 	std::shared_ptr<IDataStreamHandler> out)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
 
@@ -625,6 +633,8 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 	if(type.size() == 0)
 		throw invalid_argument("Type string cannot be zero length");
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	set<int64_t> empty;
 	std::set<int64_t>::const_iterator it = objectIds.begin();
@@ -825,6 +835,8 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = ::ResetActiveTables(*dbconn, work.get(), this->tableActivePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -838,6 +850,8 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	std::shared_ptr<class OsmData> osmData(new class OsmData);
 
 	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
@@ -879,6 +893,8 @@ void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	enc->StoreIsDiff(false);
 
 	DumpNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
@@ -914,6 +930,8 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 	string errStr;
 	int64_t val;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		type, true, errStr, val);
@@ -930,6 +948,8 @@ int64_t PgTransaction::PeekNextAllocatedId(const string &type)
 	string errStr;
 	int64_t val;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		type, false, errStr, val);
@@ -946,7 +966,9 @@ int PgTransaction::GetChangeset(int64_t objId,
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	string errStrNative;
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);	
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	int ret = GetChangesetFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		objId,
@@ -971,6 +993,8 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 	class PgMapError &errStr)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	std::shared_ptr<class OsmData> data(new class OsmData());
 	GetAllNodesByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
 		"", changesetId,
@@ -1016,6 +1040,8 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	string errStrNative;
 	size_t targetNum = 100;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
 		targetNum,
@@ -1066,6 +1092,8 @@ int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
 	int64_t cid = this->GetAllocatedId("changeset");
 	changesetMod.objId = cid;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = InsertChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -1090,6 +1118,8 @@ bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
 		return false;
 	}
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	//Attempt to update in active table
 	int rowsAffected = UpdateChangesetInDb(*dbconn, work.get(),
@@ -1145,6 +1175,8 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 
 	size_t rowsAffected = 0;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = CloseChangesetInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
@@ -1201,6 +1233,8 @@ std::string PgTransaction::GetMetaValue(const std::string &key,
 	string errStrNative;
 	std::string val;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	try
 	{
@@ -1228,6 +1262,8 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
 	string errStrNative;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ret = DbSetMetaValue(*dbconn, work.get(),
 		key, 
@@ -1241,6 +1277,8 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 void PgTransaction::Commit()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	//Release locks
 	work->commit();
 }
@@ -1248,6 +1286,8 @@ void PgTransaction::Commit()
 void PgTransaction::Abort()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	work->abort();
 }
 
@@ -1267,6 +1307,8 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	if(shareMode.size() > 0)
 	{
@@ -1293,6 +1335,8 @@ bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1310,6 +1354,8 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbDropTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1327,6 +1373,8 @@ bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMa
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbCopyData(*dbconn, work.get(), verbose, filePrefix, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1338,6 +1386,8 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbCreateIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -1355,6 +1405,8 @@ bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapEr
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbApplyDiffs(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, diffPath, nativeErrStr);
@@ -1366,7 +1418,9 @@ bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapEr
 
 bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 {
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);	
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");	
 
 	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "node");
 	ClearNextIdValuesById(*dbconn, work.get(), this->tableStaticPrefix, "way");
@@ -1392,6 +1446,8 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbRefreshMaxChangesetUid(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
 		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
@@ -1404,6 +1460,8 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 
 	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableModPrefix);
 
@@ -1415,6 +1473,8 @@ bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 void PgAdmin::Commit()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	//Release locks
 	work->commit();
 }
@@ -1422,6 +1482,8 @@ void PgAdmin::Commit()
 void PgAdmin::Abort()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	work->abort();
 }
 

@@ -32,7 +32,7 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, p
 }
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
-	const std::string &wkt, 
+	const std::string &wkt, int srid,
 	const string &excludeTablePrefix)
 {
 	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
@@ -48,7 +48,7 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pq
 	if(excludeTable.size() > 0)
 		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
 	sql << " WHERE "<<liveNodeTable<<".geom && ST_GeomFromText(";
-	sql << c.quote(wkt) << ", 4326)";
+	sql << c.quote(wkt) << ", "<< srid << ")";
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
 	sql <<";";
