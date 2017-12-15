@@ -608,8 +608,8 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 			DecodeWayMembers(c, membersCol, wayMemHandler);
 			count ++;
 
-			if(wayMemHandler.refs.size() == 0)
-				cout << "Way " << objId << " has no nodes" << endl;
+			if(wayMemHandler.refs.size() < 2)
+				cout << "Way " << objId << " has too few nodes" << endl;
 
 			nodeIds.insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
 			wayMemDict[objId].insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
