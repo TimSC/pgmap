@@ -1,6 +1,6 @@
 
 
-all: dump extract admin osm2csv swigpy2
+all: dump extract admin applydiffs osm2csv swigpy2
 
 %.co: %.c %.h
 	gcc -Wall -fPIC -c -o $@ $<
@@ -22,6 +22,9 @@ extract: extract.cpp $(common)
 	g++ $^ -std=c++11 -Wall $(libs) -o $@
 
 admin: admin.cpp $(common)
+	g++ $^ -std=c++11 -Wall $(libs) -o $@
+
+applydiffs: applydiffs.cpp $(common)
 	g++ $^ -std=c++11 -Wall $(libs) -o $@
 
 osm2csv: osm2csv.cpp dbjson.o util.o cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o 
