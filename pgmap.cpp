@@ -213,6 +213,7 @@ int PgMapQuery::Continue()
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
+	int verbose = 0;
 
 	if(this->mapQueryPhase == 0)
 	{
@@ -220,6 +221,8 @@ int PgMapQuery::Continue()
 		if(this->mapQueryBbox.size() == 4)
 			this->mapQueryEnc->StoreBounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]);
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -234,6 +237,8 @@ int PgMapQuery::Continue()
 			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, 4326, this->tableActivePrefix);
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 
 	}
@@ -250,6 +255,8 @@ int PgMapQuery::Continue()
 		cout << "Found " << retainNodeIds->nodeIds.size() << " static nodes in bbox" << endl;
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -264,6 +271,8 @@ int PgMapQuery::Continue()
 			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryWkt, 4326, "");
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -279,6 +288,8 @@ int PgMapQuery::Continue()
 		cout << "Found " << retainNodeIds->nodeIds.size() << " static+active nodes in bbox" << endl;
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -302,6 +313,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -317,6 +330,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -335,6 +350,8 @@ int PgMapQuery::Continue()
 		this->mapQueryEnc->Reset();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -350,6 +367,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->retainWayIds->wayIds.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -367,6 +386,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->retainNodeIds->nodeIds.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -383,6 +404,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->retainNodeIds->nodeIds.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -400,6 +423,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -416,6 +441,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->extraNodes.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -435,6 +462,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->retainWayIds->wayIds.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -452,6 +481,8 @@ int PgMapQuery::Continue()
 		this->setIterator = this->retainWayIds->wayIds.begin();
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
@@ -469,6 +500,8 @@ int PgMapQuery::Continue()
 		cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
 
 		this->mapQueryPhase ++;
+		if(verbose >= 1)
+			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
