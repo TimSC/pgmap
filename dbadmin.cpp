@@ -534,9 +534,129 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
-void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *work, 
+size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
-	const string &excludeTablePrefix)
+	const string &excludeTablePrefix, 
+	pqxx::icursorstream &cursor,
+	int &numWaysProcessed, int &numWaysReported,
+	const string &nodeStaticPrefix, 
+	const string &nodeActivePrefix)
+{
+	class MetaData metaData;
+	JsonToStringMap tagHandler;
+	JsonToWayMembers wayMemHandler;
+	const std::vector<int64_t> refs;
+	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
+	uint64_t lastUpdateCount = 0;
+	bool verbose = false;
+	size_t count = 0;
+
+	//Get a batch of rows
+	pqxx::result rows;
+	cursor.get(rows);
+	if ( rows.empty() )
+	{	
+		return 0; // nothing left to read
+	}
+
+	MetaDataCols metaDataCols;
+
+	//Prepare to decode rows to way objects
+	int idCol = rows.column_number("id");
+	metaDataCols.changesetCol = rows.column_number("changeset");
+	metaDataCols.usernameCol = rows.column_number("username");
+	metaDataCols.uidCol = rows.column_number("uid");
+	metaDataCols.timestampCol = rows.column_number("timestamp");
+	metaDataCols.versionCol = rows.column_number("version");
+	metaDataCols.visibleCol = -1;
+	try
+	{
+		metaDataCols.visibleCol = rows.column_number("visible");
+	}
+	catch (invalid_argument &err) {}
+
+	int tagsCol = rows.column_number("tags");
+	int membersCol = rows.column_number("members");
+	std::set<int64_t> nodeIds;
+	std::map<int64_t, std::set<int64_t> > wayMemDict;
+	
+	//Collect list of nodes for the ways in this batch of rows
+	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+		int64_t objId = c[idCol].as<int64_t>();
+
+		DecodeMetadata(c, metaDataCols, metaData);
+	
+		DecodeTags(c, tagsCol, tagHandler);
+
+		DecodeWayMembers(c, membersCol, wayMemHandler);
+		count ++;
+
+		if(wayMemHandler.refs.size() < 2)
+			cout << "Way " << objId << " has too few nodes" << endl;
+
+		nodeIds.insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
+		wayMemDict[objId].insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
+	}
+
+	numWaysProcessed += rows.size();
+
+	//Query member nodes in database
+	std::set<int64_t>::const_iterator it = nodeIds.begin();
+	std::shared_ptr<class OsmData> data(new class OsmData());
+	while(it != nodeIds.end())
+	{
+		GetLiveNodesById(c, work, nodeStaticPrefix, 
+			nodeActivePrefix, 
+			nodeIds, it, 
+			1000, data);
+	}
+
+	it = nodeIds.begin();
+	while(it != nodeIds.end())
+	{
+		GetLiveNodesById(c, work, nodeActivePrefix, 
+			"", 
+			nodeIds, it, 
+			1000, data);
+	}
+
+	//Gather found node IDs
+	std::set<int64_t> foundNodeIds;
+	for(size_t i=0; i<data->nodes.size(); i++)
+	{
+		const class OsmNode &node = data->nodes[i];
+		foundNodeIds.insert(node.objId);
+	}
+
+	//Check we have found all nodes we expect
+	for(std::map<int64_t, std::set<int64_t> >::iterator it = wayMemDict.begin();
+		it != wayMemDict.end();
+		it++)
+	{
+		int64_t wayId = it->first;
+		const std::set<int64_t> &memIds = it->second;
+		for(std::set<int64_t>::const_iterator it2 = memIds.begin(); it2 != memIds.end(); it2++)
+		{
+			std::set<int64_t>::iterator exists = foundNodeIds.find(*it2);
+			if(exists == foundNodeIds.end())
+				cout << "Way " << wayId << " references non-existent node " << (*it2) << endl;
+		}
+	}
+
+	if(numWaysProcessed - numWaysReported > 100000)
+	{
+		cout << "Num ways processed " << numWaysProcessed << endl;
+		numWaysReported = numWaysProcessed;
+	}
+	return count;
+}
+
+void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
+	const std::string &excludeTablePrefix,
+	const std::string &nodeStaticPrefix, 
+	const std::string &nodeActivePrefix)
 {
 	string wayTable = c.quote_name(tablePrefix + "liveways");
 	string excludeTable;
@@ -558,105 +678,10 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 	int numWaysReported = 0;
 	pqxx::icursorstream cursor( *work, sql.str(), "waycursor", step );	
 
-	int count = 1;
+	size_t count = 1;
 	while (count > 0)
-	{
-		class MetaData metaData;
-		JsonToStringMap tagHandler;
-		JsonToWayMembers wayMemHandler;
-		const std::vector<int64_t> refs;
-		double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
-		uint64_t lastUpdateCount = 0;
-		bool verbose = false;
-
-		pqxx::result rows;
-		cursor.get(rows);
-		if ( rows.empty() )
-		{	
-			count = 0; // nothing left to read
-			continue;
-		}
-
-		MetaDataCols metaDataCols;
-
-		int idCol = rows.column_number("id");
-		metaDataCols.changesetCol = rows.column_number("changeset");
-		metaDataCols.usernameCol = rows.column_number("username");
-		metaDataCols.uidCol = rows.column_number("uid");
-		metaDataCols.timestampCol = rows.column_number("timestamp");
-		metaDataCols.versionCol = rows.column_number("version");
-		metaDataCols.visibleCol = -1;
-		try
-		{
-			metaDataCols.visibleCol = rows.column_number("visible");
-		}
-		catch (invalid_argument &err) {}
-
-		int tagsCol = rows.column_number("tags");
-		int membersCol = rows.column_number("members");
-		std::set<int64_t> nodeIds;
-		std::map<int64_t, std::set<int64_t> > wayMemDict;
-
-		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
-			int64_t objId = c[idCol].as<int64_t>();
-
-			DecodeMetadata(c, metaDataCols, metaData);
-		
-			DecodeTags(c, tagsCol, tagHandler);
-
-			DecodeWayMembers(c, membersCol, wayMemHandler);
-			count ++;
-
-			if(wayMemHandler.refs.size() < 2)
-				cout << "Way " << objId << " has too few nodes" << endl;
-
-			nodeIds.insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
-			wayMemDict[objId].insert(wayMemHandler.refs.begin(), wayMemHandler.refs.end());
-		}
-
-		numWaysProcessed += rows.size();
-
-		//Query member nodes in database
-		std::set<int64_t>::const_iterator it = nodeIds.begin();
-		std::shared_ptr<class OsmData> data(new class OsmData());
-		while(it != nodeIds.end())
-		{
-			GetLiveNodesById(c, work, tablePrefix, 
-				excludeTablePrefix, 
-				nodeIds, it, 
-				1000, data);
-		}
-
-		//Gather found node IDs
-		std::set<int64_t> foundNodeIds;
-		for(size_t i=0; i<data->nodes.size(); i++)
-		{
-			const class OsmNode &node = data->nodes[i];
-			foundNodeIds.insert(node.objId);
-		}
-
-		//Check we have found all nodes we expect
-		for(std::map<int64_t, std::set<int64_t> >::iterator it = wayMemDict.begin();
-			it != wayMemDict.end();
-			it++)
-		{
-			int64_t wayId = it->first;
-			const std::set<int64_t> &memIds = it->second;
-			for(std::set<int64_t>::const_iterator it2 = memIds.begin(); it2 != memIds.end(); it2++)
-			{
-				std::set<int64_t>::iterator exists = foundNodeIds.find(*it2);
-				if(exists == foundNodeIds.end())
-					cout << "Way " << wayId << " references non-existent node " << (*it2) << endl;
-			}
-		}
-
-		if(numWaysProcessed - numWaysReported > 100000)
-		{
-			cout << "Num ways processed " << numWaysProcessed << endl;
-			numWaysReported = numWaysProcessed;
-		}
-
-	}
+		count = DbCheckWaysFromCursor(c, work, tablePrefix, excludeTablePrefix, cursor, 
+			numWaysProcessed, numWaysReported,
+			nodeStaticPrefix, nodeActivePrefix);
 }
 

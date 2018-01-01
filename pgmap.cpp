@@ -213,7 +213,7 @@ int PgMapQuery::Continue()
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
-	int verbose = 0;
+	int verbose = 1;
 
 	if(this->mapQueryPhase == 0)
 	{
@@ -1496,9 +1496,11 @@ bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableModPrefix);
+	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableModPrefix,
+		this->tableStaticPrefix, this->tableModPrefix);
 
-	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableModPrefix, "");
+	DbCheckNodesExistForAllWays(*dbconn, work.get(), this->tableModPrefix, "",
+		this->tableStaticPrefix, this->tableModPrefix);
 
 	return true;
 }
