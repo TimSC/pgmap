@@ -311,6 +311,9 @@ public:
 
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);
+	void GetFullObjectById(const std::string &type, int64_t objectId, 
+		std::shared_ptr<IDataStreamHandler> out);
+
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,
@@ -353,6 +356,10 @@ public:
 	bool SetMetaValue(const std::string &key, 
 		const std::string &value, 
 		class PgMapError &errStr);
+
+	bool GetHistoricMapQuery(const std::vector<double> &bbox, 
+		int64_t existsAtTimestamp,
+		std::shared_ptr<IDataStreamHandler> &enc);
 
 	void Commit();
 	void Abort();

@@ -231,7 +231,7 @@ int PgMapQuery::Continue()
 		if(this->mapQueryBbox.size() == 4)
 		{
 			//Get nodes in bbox (static db)
-			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, this->tableActivePrefix);
+			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, 0, this->tableActivePrefix);
 		}
 		else
 			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, 4326, this->tableActivePrefix);
@@ -265,7 +265,7 @@ int PgMapQuery::Continue()
 		if(this->mapQueryBbox.size() == 4)
 		{
 			//Get nodes in bbox (active db)
-			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, "");
+			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, 0, "");
 		}
 		else
 			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryWkt, 4326, "");
@@ -617,6 +617,70 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 	else
 		throw invalid_argument("Known object type");
 
+}
+
+void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId, std::shared_ptr<IDataStreamHandler> out)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	if(type == "node")
+		throw invalid_argument("Cannot get full object for nodes");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	//Get main object
+	std::shared_ptr<class OsmData> outData(new class OsmData());
+	std::set<int64_t> objectIds;
+	objectIds.insert(objectId);
+	this->GetObjectsById(type, objectIds, outData);
+
+	//Get members of main object
+	if(type == "way")
+	{
+		if (outData->ways.size() != 1)
+			throw runtime_error("Unexpected number of objects in intermediate result");
+		class OsmWay &mainWay = outData->ways[0];
+
+		std::set<int64_t> memberNodes;
+		for(int64_t i=0; i<mainWay.refs.size(); i++)
+			memberNodes.insert(mainWay.refs[i]);
+		this->GetObjectsById("node", memberNodes, outData);
+ 	}
+	else if(type == "relation")
+	{
+		if (outData->relations.size() != 1)
+			throw runtime_error("Unexpected number of objects in intermediate result");
+		class OsmRelation &mainRelation = outData->relations[0];
+
+		std::set<int64_t> memberNodes, memberWays, memberRelations;
+		for(int64_t i=0; i<mainRelation.refIds.size(); i++)
+		{
+			if(mainRelation.refTypeStrs[i]=="node")
+				memberNodes.insert(mainRelation.refIds[i]);
+			else if(mainRelation.refTypeStrs[i]=="way")
+				memberWays.insert(mainRelation.refIds[i]);
+			else if(mainRelation.refTypeStrs[i]=="relation")
+				memberRelations.insert(mainRelation.refIds[i]);
+		}
+
+		std::shared_ptr<class OsmData> memberWayObjs(new class OsmData());
+		this->GetObjectsById("node", memberNodes, outData);
+		this->GetObjectsById("way", memberWays, memberWayObjs);
+		this->GetObjectsById("relation", memberRelations, outData);
+		memberWayObjs->StreamTo(*outData.get());
+
+		std::set<int64_t> memberNodes2;
+		for(int64_t i=0; i<memberWayObjs->ways.size(); i++)
+			for(int64_t j=0; j<memberWayObjs->ways[i].refs.size(); j++)
+				memberNodes2.insert(memberWayObjs->ways[i].refs[j]);
+		this->GetObjectsById("node", memberNodes2, outData);
+	}
+	else
+		throw invalid_argument("Known object type");
+	
+	outData->StreamTo(*out.get());
 }
 
 bool PgTransaction::StoreObjects(class OsmData &data, 
@@ -1305,6 +1369,53 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 		errStrNative);
 	errStr.errStr = errStrNative;
 	return ret;
+}
+
+bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox, 
+	int64_t existsAtTimestamp,
+	std::shared_ptr<IDataStreamHandler> &enc)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	if (bbox.size()!=4)
+		return false;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	
+	//Get live nodes from static tables
+	std::shared_ptr<class OsmData> nodesInBbox(new class OsmData());	
+	std::shared_ptr<pqxx::icursorstream> cursor;
+	cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, 
+		bbox, existsAtTimestamp, "");
+
+	int ret = 1;
+	while (ret>0)
+		ret = LiveNodesInBboxContinue(cursor, nodesInBbox);
+	
+	//Get old nodes from static tables
+	QueryOldNodesInBbox(*dbconn, work.get(), this->tableStaticPrefix, 
+		bbox, 
+		existsAtTimestamp,
+		nodesInBbox);
+
+	//Get live nodes from active tables
+	cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, 
+		bbox, existsAtTimestamp, "");
+
+	ret = 1;
+	while (ret>0)
+		ret = LiveNodesInBboxContinue(cursor, nodesInBbox);
+	
+	//Get old nodes from active tables
+	QueryOldNodesInBbox(*dbconn, work.get(), this->tableActivePrefix, 
+		bbox, 
+		existsAtTimestamp,
+		nodesInBbox);
+
+	nodesInBbox->StreamTo(*enc.get());
+
+	return true;
 }
 
 void PgTransaction::Commit()

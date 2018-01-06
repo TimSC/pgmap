@@ -6,6 +6,7 @@ using namespace std;
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
+	int64_t existsAtTimestamp,
 	const string &excludeTablePrefix)
 {
 	if(bbox.size() != 4)
@@ -26,6 +27,8 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, p
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
+	if(existsAtTimestamp != 0)
+		sql << " AND timestamp <= existsAtTimestamp";
 	sql <<";";
 
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
@@ -267,5 +270,32 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 
 	set<int64_t> empty;
 	RelationResultsToEncoder(cursor, empty, enc);
+}
+
+void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::vector<double> &bbox, 
+	int64_t existsAtTimestamp,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	if(bbox.size() != 4)
+		throw invalid_argument("Bbox has wrong length");
+	string liveNodeTable = c.quote_name(tablePrefix + "oldnodes");
+
+	stringstream sql;
+	sql.precision(9);
+	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
+	sql << " FROM ";
+	sql << liveNodeTable;
+	sql << " WHERE "<<liveNodeTable<<".geom && ST_MakeEnvelope(";
+	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
+	if(existsAtTimestamp != 0)
+		sql << " AND timestamp <= existsAtTimestamp";
+	sql <<";";
+
+	pqxx::icursorstream cursor( *work, sql.str(), "oldnodesinbbox", 1000 );
+
+	int ret = 1;
+	while(ret > 0)
+		ret = NodeResultsToEncoder(cursor, enc);
 }
 

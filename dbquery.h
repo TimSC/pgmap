@@ -8,6 +8,7 @@
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
+	int64_t existsAtTimestamp,
 	const string &excludeTablePrefix);
 
 std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
@@ -41,6 +42,11 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
+
+void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::vector<double> &bbox, 
+	int64_t existsAtTimestamp,
+	std::shared_ptr<IDataStreamHandler> enc);
 
 #endif //_DB_QUERY_H
 

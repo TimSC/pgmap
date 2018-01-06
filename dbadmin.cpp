@@ -268,10 +268,18 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
+	//Used to do a standard map query
 	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_gix")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"livenodes")+"(geom);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	//Used for quering nodes at a particular point in time
+	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_gix")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" USING GIST (geom);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"oldnodes")+"(geom);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"way_mems_mids")+" ON "+c.quote_name(tablePrefix+"way_mems")+" (member);";
