@@ -22,5 +22,8 @@ void DbGetPrimaryKeyCols(pqxx::connection &c, pqxx::transaction_base *work,
 size_t DbCountPrimaryKeyCols(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tableName);
 
+bool DbCheckIndexExists(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &indexName);
+
 #endif //_DB_COMMON_H
 

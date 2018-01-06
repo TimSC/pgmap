@@ -51,3 +51,17 @@ size_t DbCountPrimaryKeyCols(pqxx::connection &c, pqxx::transaction_base *work,
 	DbGetPrimaryKeyCols(c, work, tableName, cols);
 	return cols.size();
 }
+
+bool DbCheckIndexExists(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &indexName)
+{
+	//Based on http://blog.timmattison.com/archives/2014/09/02/checking-postgresql-to-see-if-an-index-already-exists/
+
+	string sql = "SELECT c.relname FROM pg_class c JOIN pg_namespace n";
+	sql += " ON n.oid = c.relnamespace WHERE n.nspname = 'public'";
+	sql += " AND c.relkind='i' AND c.relname="+c.quote(indexName)+";";
+
+	pqxx::result r = work->exec(sql);
+	return r.size() > 0;
+}
+
