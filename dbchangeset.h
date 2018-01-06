@@ -30,6 +30,7 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	size_t limit,
+	int64_t user_uid,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr);
 

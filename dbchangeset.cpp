@@ -247,6 +247,7 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	size_t limit,
+	int64_t user_uid,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr)
 {
@@ -260,10 +261,14 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << " ST_YMin("<<changesetTable<<".geom) as ymin, ST_YMax("<<changesetTable<<".geom) as ymax";
 	sql << " FROM " << changesetTable;
 	if(excludeTable.size() > 0)
-	{
 		sql << " LEFT JOIN " << excludeTable << " ON " << changesetTable <<".id = " << excludeTable << ".id";
-		sql << " WHERE " << excludeTable << ".id IS NULL";
-	}
+	if(excludeTable.size() > 0 || user_uid != 0)
+		sql << " WHERE TRUE"; 
+	if(excludeTable.size() > 0)
+		sql << " AND " << excludeTable << ".id IS NULL";
+	if(user_uid != 0)
+		sql << " AND " << changesetTable << ".uid=" << user_uid;
+
 	sql << " ORDER BY open_timestamp DESC NULLS LAST LIMIT "<<limit<<";";
 
 	pqxx::result r = work->exec(sql.str());

@@ -342,6 +342,7 @@ public:
 		std::shared_ptr<class IOsmChangeBlock> output,
 		class PgMapError &errStr);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
+		int64_t user_uid,
 		class PgMapError &errStr);
 	int64_t CreateChangeset(const class PgChangeset &changeset,
 		class PgMapError &errStr);

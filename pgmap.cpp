@@ -1129,6 +1129,7 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 }
 
 bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
+	int64_t user_uid,
 	class PgMapError &errStr)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
@@ -1142,6 +1143,7 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
 		targetNum,
+		user_uid,
 		changesetsOut,
 		errStrNative);
 	if(!ok)
@@ -1157,6 +1159,7 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 			this->tableStaticPrefix,
 			this->tableActivePrefix,
 			targetNum - changesetsOut.size(),
+			user_uid,
 			changesetsStatic,
 			errStrNative);
 		if(!ok)
