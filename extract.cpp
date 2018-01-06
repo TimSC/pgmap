@@ -85,7 +85,8 @@ int main(int argc, char **argv)
 		outfi.open(outFina, std::ios::out);
 		gzipEnc = new class EncodeGzip(outfi);
 
-		enc.reset(new OsmXmlEncode(*gzipEnc));
+		TagMap empty;
+		enc.reset(new OsmXmlEncode(*gzipEnc, empty));
 	}
 	else
 	{

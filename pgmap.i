@@ -111,7 +111,7 @@ public:
 class PyOsmXmlEncode : public IDataStreamHandler
 {
 public:
-	PyOsmXmlEncode(PyObject* obj);
+	PyOsmXmlEncode(PyObject* obj, const TagMap &customAttribs);
 	virtual ~PyOsmXmlEncode();	
 
 	void SetOutput(PyObject* obj);
