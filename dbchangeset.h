@@ -65,4 +65,25 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 void FilterObjectsInOsmChange(int filterMode, 
 	const class OsmData &dataIn, class OsmData &dataOut);
 
+class OsmChangesetsDecodeString
+{
+private:
+	bool firstParseCall;
+	XML_Parser parser;
+	int xmlDepth;
+	bool parseCompletedOk;
+	TagMap currentTags;
+
+public:
+	std::string errString;
+
+	OsmChangesetsDecodeString();
+	virtual ~OsmChangesetsDecodeString();
+	
+	void StartElement(const XML_Char *name, const XML_Char **atts);
+	void EndElement(const XML_Char *name);
+	bool DecodeSubString(const char *xml, size_t len, bool done);
+	void XmlAttsToMap(const XML_Char **atts, std::map<std::string, std::string> &attribs);
+};
+
 #endif //_DB_CHANGESET_H

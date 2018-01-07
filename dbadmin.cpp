@@ -357,12 +357,16 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_close_timestampx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (close_timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_is_openx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (is_open);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_gix")+" ON "+c.quote_name(tablePrefix+"changesets")+" USING GIST (geom);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"changesets")+"(geom);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); 
+	if(!DbCheckIndexExists(c, work, tablePrefix+"changesets_gix"))
+	{
+		sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_gix")+" ON "+c.quote_name(tablePrefix+"changesets")+" USING GIST (geom);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"changesets")+"(geom);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); 
+	}
 	return ok;
 }
 

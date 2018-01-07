@@ -30,11 +30,12 @@ int main(int argc, char **argv)
 
 		cout << "1. Drop tables" << endl;
 		cout << "2. Create tables" << endl;
-		cout << "3. Copy data" << endl;
+		cout << "3. Copy map data" << endl;
 		cout << "4. Create indicies" << endl;
 		cout << "5. Apply diffs" << endl;
 		cout << "6. Refresh max IDs" << endl;
-		cout << "7. Refresh max changeset IDs and UIDs" << endl << endl;
+		cout << "7. Import changetset metadata" << endl;
+		cout << "8. Refresh max changeset IDs and UIDs" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
 		cout << "b. Reset test tables" << endl;
 		cout << "c. Check nodes exist for ways" << endl << endl;
@@ -133,6 +134,24 @@ int main(int argc, char **argv)
 		}
 
 		if(inputStr == "7")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
+			bool ok = admin->ImportChangesetMetadata(verbose, errStr);
+
+			if(ok)
+			{
+				admin->Commit();
+				cout << "All done!" << endl;
+			}
+			else
+			{
+				cout << errStr.errStr << endl;
+				admin->Abort();
+			}
+			continue;
+		}
+
+		if(inputStr == "8")
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
 			bool ok = admin->RefreshMaxChangesetUid(verbose, errStr);

@@ -532,3 +532,113 @@ void FilterObjectsInOsmChange(int filterMode,
 	}
 }
 
+// **************************************
+
+static void StartElement(void *userData, const XML_Char *name, const XML_Char **atts)
+{
+	((class OsmChangesetsDecodeString *)userData)->StartElement(name, atts);
+}
+
+static void EndElement(void *userData, const XML_Char *name)
+{
+	((class OsmChangesetsDecodeString *)userData)->EndElement(name);
+}
+
+OsmChangesetsDecodeString::OsmChangesetsDecodeString()
+{
+	xmlDepth = 0;
+	parseCompletedOk = false;
+	parser = XML_ParserCreate(NULL);
+	XML_SetUserData(parser, this);
+	XML_SetElementHandler(parser, ::StartElement, ::EndElement);
+	this->firstParseCall = true;
+}
+
+OsmChangesetsDecodeString::~OsmChangesetsDecodeString()
+{
+	XML_ParserFree(parser);
+}
+
+void OsmChangesetsDecodeString::StartElement(const XML_Char *name, const XML_Char **atts)
+{
+	this->xmlDepth ++;
+	//cout << this->xmlDepth << " startel " << name << endl;
+
+	std::map<std::string, std::string> attribs;
+	XmlAttsToMap(atts, attribs);
+
+	if(this->xmlDepth == 2)
+	{
+		class PgChangeset changesetMeta;
+		for(TagMap::iterator it=attribs.begin(); it != attribs.end(); it++)
+		{
+			//cout << it->first << "," << it->second << endl;
+			changesetMeta.objId = atoll(attribs["id"].c_str());
+			changesetMeta.uid;
+			changesetMeta.open_timestamp;
+			changesetMeta.close_timestamp;
+			changesetMeta.username;
+			//TagMap tags;
+			changesetMeta.is_open;
+			changesetMeta.bbox_set;
+			//double x1, y1, x2, y2;
+		}
+	}
+
+	if(this->xmlDepth == 3)
+	{
+		if(strcmp(name,"tag")==0)	
+			this->currentTags[attribs["k"]] = attribs["v"];
+		
+	}
+}
+
+void OsmChangesetsDecodeString::EndElement(const XML_Char *name)
+{
+	//cout << this->xmlDepth << " endel " << name << endl;
+
+	if(this->xmlDepth == 2)
+	{
+		for(TagMap::iterator it=currentTags.begin(); it != currentTags.end(); it++)
+			cout << it->first << "," << it->second << endl;
+
+
+		this->currentTags.clear();
+	}
+	
+	this->xmlDepth --;
+}
+
+bool OsmChangesetsDecodeString::DecodeSubString(const char *xml, size_t len, bool done)
+{
+
+	if(this->firstParseCall)
+	{
+		this->firstParseCall = false;
+	}
+
+	if (XML_Parse(parser, xml, len, done) == XML_STATUS_ERROR)
+	{
+		stringstream ss;
+		ss << XML_ErrorString(XML_GetErrorCode(parser))
+			<< " at line " << XML_GetCurrentLineNumber(parser) << endl;
+		errString = ss.str();
+		return false;
+	}
+	if(done)
+	{
+		parseCompletedOk = true;
+	}
+	return !done;
+}
+
+void OsmChangesetsDecodeString::XmlAttsToMap(const XML_Char **atts, std::map<std::string, std::string> &attribs)
+{
+	size_t i=0;
+	while(atts[i] != NULL)
+	{
+		attribs[atts[i]] = atts[i+1];
+		i += 2;
+	}
+}
+

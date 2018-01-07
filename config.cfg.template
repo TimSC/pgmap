@@ -8,4 +8,5 @@ dbtabletestprefix:pycrocosm_test_
 dump_path:/home/tim/dev/osm2pgcopy/fosm-portsmouth-2017.o5m.gz
 diffs_path:/home/tim/Desktop/103
 csv_absolute_path:/home/tim/dev/osm2pgcopy/test-
+changesets_import_path:/home/tim/dev/osm2pgcopy/changesets
 

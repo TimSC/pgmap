@@ -185,6 +185,7 @@ public:
 	bool CreateMapIndices(int verbose, class PgMapError &errStr);
 	bool ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);
+	bool ImportChangesetMetadata(int verbose, class PgMapError &errStr);
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 	
 	bool CheckNodesExistForWays(class PgMapError &errStr);

@@ -1589,6 +1589,21 @@ bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 	return true;
 }
 
+bool PgAdmin::ImportChangesetMetadata(int verbose, class PgMapError &errStr)
+{
+	class OsmChangesetsDecodeString osmChangesetsDecodeString;
+
+	std::string content;
+	ReadFileContents("/home/tim/dev/osm2pgcopy/changesets/00000.osm", 0, content);
+	cout << content.length() << endl;
+
+	osmChangesetsDecodeString.DecodeSubString(content.c_str(), content.length(), 1);
+
+	cout << osmChangesetsDecodeString.errString << endl;
+
+	return true;
+}
+
 bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
