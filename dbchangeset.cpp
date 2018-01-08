@@ -3,6 +3,9 @@
 #include "dbstore.h"
 #include "dbcommon.h"
 #include "dbdecode.h"
+extern "C" {
+#include "cppo5m/iso8601lib/iso8601.h"
+}
 using namespace std;
 
 void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &changesets)
@@ -567,29 +570,48 @@ void OsmChangesetsDecodeString::StartElement(const XML_Char *name, const XML_Cha
 	std::map<std::string, std::string> attribs;
 	XmlAttsToMap(atts, attribs);
 
-	if(this->xmlDepth == 2)
+	if(this->xmlDepth == 2 && strcmp(name,"changeset")==0)
 	{
-		class PgChangeset changesetMeta;
-		for(TagMap::iterator it=attribs.begin(); it != attribs.end(); it++)
+		if(attribs.find("id") != attribs.end())
+			this->currentChangeset.objId = atoll(attribs["id"].c_str());
+		if(attribs.find("uid") != attribs.end())
+			this->currentChangeset.uid = atoll(attribs["uid"].c_str());
+		if(attribs.find("created_at") != attribs.end())
 		{
-			//cout << it->first << "," << it->second << endl;
-			changesetMeta.objId = atoll(attribs["id"].c_str());
-			changesetMeta.uid;
-			changesetMeta.open_timestamp;
-			changesetMeta.close_timestamp;
-			changesetMeta.username;
-			//TagMap tags;
-			changesetMeta.is_open;
-			changesetMeta.bbox_set;
-			//double x1, y1, x2, y2;
+			struct tm dt;
+			int timezoneOffsetMin = 0;
+			ParseIso8601Datetime(attribs["created_at"].c_str(), &dt, &timezoneOffsetMin);
+			TmToUtc(&dt, timezoneOffsetMin);
+			time_t ts = mktime (&dt);
+			this->currentChangeset.open_timestamp = (int64_t)ts;
+		}
+		if(attribs.find("closed_at") != attribs.end())
+		{
+			struct tm dt;
+			int timezoneOffsetMin = 0;
+			ParseIso8601Datetime(attribs["closed_at"].c_str(), &dt, &timezoneOffsetMin);
+			TmToUtc(&dt, timezoneOffsetMin);
+			time_t ts = mktime (&dt);
+			this->currentChangeset.close_timestamp = (int64_t)ts;
+		}
+		if(attribs.find("user") != attribs.end())
+			this->currentChangeset.username = attribs["user"];
+		if(attribs.find("open") != attribs.end())
+			this->currentChangeset.is_open = (attribs["open"] == "true");
+		if(attribs.find("min_lon") != attribs.end() && attribs.find("max_lon") != attribs.end()
+			&& attribs.find("min_lat") != attribs.end() && attribs.find("max_lat") != attribs.end())
+		{
+			this->currentChangeset.x1 = atof(attribs["min_lon"].c_str());
+			this->currentChangeset.y1 = atof(attribs["min_lat"].c_str());
+			this->currentChangeset.x2 = atof(attribs["max_lon"].c_str());
+			this->currentChangeset.y2 = atof(attribs["max_lat"].c_str());
+			this->currentChangeset.bbox_set = true;
 		}
 	}
 
-	if(this->xmlDepth == 3)
+	if(this->xmlDepth == 3 && strcmp(name,"tag")==0)
 	{
-		if(strcmp(name,"tag")==0)	
-			this->currentTags[attribs["k"]] = attribs["v"];
-		
+		this->currentTags[attribs["k"]] = attribs["v"];	
 	}
 }
 
@@ -599,10 +621,11 @@ void OsmChangesetsDecodeString::EndElement(const XML_Char *name)
 
 	if(this->xmlDepth == 2)
 	{
-		for(TagMap::iterator it=currentTags.begin(); it != currentTags.end(); it++)
-			cout << it->first << "," << it->second << endl;
+		this->currentChangeset.tags = this->currentTags;
+		this->outChangesets.push_back(this->currentChangeset);
 
-
+		class PgChangeset emptyChangeset;
+		this->currentChangeset = emptyChangeset;
 		this->currentTags.clear();
 	}
 	

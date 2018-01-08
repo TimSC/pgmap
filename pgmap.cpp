@@ -1589,19 +1589,43 @@ bool PgAdmin::RefreshMapIds(int verbose, class PgMapError &errStr)
 	return true;
 }
 
-bool PgAdmin::ImportChangesetMetadata(int verbose, class PgMapError &errStr)
+bool PgAdmin::ImportChangesetMetadata(const std::string &fina, int verbose, class PgMapError &errStr)
 {
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
 	class OsmChangesetsDecodeString osmChangesetsDecodeString;
 
 	std::string content;
-	ReadFileContents("/home/tim/dev/osm2pgcopy/changesets/00000.osm", 0, content);
-	cout << content.length() << endl;
+	ReadFileContents(fina.c_str(), 0, content);
+	cout << fina << "," << content.length() << endl;
 
 	osmChangesetsDecodeString.DecodeSubString(content.c_str(), content.length(), 1);
 
-	cout << osmChangesetsDecodeString.errString << endl;
+	if(!osmChangesetsDecodeString.parseCompletedOk)
+	{
+		errStr = osmChangesetsDecodeString.errString;
+		return false;
+	}
 
-	return true;
+	bool ok = true;
+	for(size_t i=0; i<osmChangesetsDecodeString.outChangesets.size(); i++)
+	{
+		int rowsAffected = UpdateChangesetInDb(*dbconn, work.get(), 
+			this->tableStaticPrefix,
+			osmChangesetsDecodeString.outChangesets[i],
+			errStr.errStr);
+
+		if(rowsAffected==0)
+			ok = InsertChangesetInDb(*dbconn, work.get(), 
+				this->tableStaticPrefix,
+				osmChangesetsDecodeString.outChangesets[i],
+				errStr.errStr);
+		if(!ok)
+			break;
+	}
+
+	return ok;
 }
 
 bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)

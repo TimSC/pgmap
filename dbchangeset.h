@@ -71,11 +71,13 @@ private:
 	bool firstParseCall;
 	XML_Parser parser;
 	int xmlDepth;
-	bool parseCompletedOk;
 	TagMap currentTags;
+	class PgChangeset currentChangeset;
 
 public:
+	bool parseCompletedOk;
 	std::string errString;
+	std::vector<class PgChangeset> outChangesets;
 
 	OsmChangesetsDecodeString();
 	virtual ~OsmChangesetsDecodeString();

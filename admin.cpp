@@ -4,6 +4,28 @@
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
 #include "cppo5m/osmxml.h"
+#include <boost/filesystem.hpp>
+
+//Based on https://gist.github.com/vivithemage/9517678#gistcomment-1658468
+
+std::vector<std::string> get_file_list(const std::string& path)
+{
+	std::vector<std::string> m_file_list;
+    if (!path.empty())
+    {
+        namespace fs = boost::filesystem;
+
+        fs::path apk_path(path);
+        fs::recursive_directory_iterator end;
+
+        for (fs::recursive_directory_iterator i(apk_path); i != end; ++i)
+        {
+            const fs::path cp = (*i);
+            m_file_list.push_back(cp.string());
+        }
+    }
+    return m_file_list;
+}
 
 int main(int argc, char **argv)
 {	
@@ -136,7 +158,20 @@ int main(int argc, char **argv)
 		if(inputStr == "7")
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
-			bool ok = admin->ImportChangesetMetadata(verbose, errStr);
+
+			cout << "Reading files in " << config["changesets_import_path"] << endl;
+			std::vector<std::string> finaList = get_file_list(config["changesets_import_path"]);
+			sort(finaList.begin(), finaList.end());
+			bool ok = true;
+			for(size_t i=0; i<finaList.size(); i++)
+			{
+				ok = admin->ImportChangesetMetadata(finaList[i], verbose, errStr);
+				if(!ok)
+				{
+					cout << errStr.errStr << endl;
+					break;
+				}
+			}
 
 			if(ok)
 			{
@@ -211,7 +246,7 @@ int main(int argc, char **argv)
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
 			bool ok = admin->CheckNodesExistForWays(errStr);
 
-			cout << "All done!" << endl;
+			cout << "All done!" << ok << endl;
 			admin->Commit();
 
 			continue;
