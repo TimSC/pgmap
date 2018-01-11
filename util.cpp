@@ -16,10 +16,19 @@ int ReadFileContents(const char *filename, int binaryMode, std::string &contentO
 	std::streampos length = file.tellg();
 	file.seekg(0,std::ios::beg);
 
-	std::vector<char> buffer(length);
-	file.read(&buffer[0],length);
+	cout << "File length " << length << endl;
+	if(0)
+	{
+		std::vector<char> buffer(length);
+		file.read(&buffer[0],length);
 
-	contentOut.assign(&buffer[0], length);
+		contentOut.assign(&buffer[0], length);
+	}
+	else
+	{
+		contentOut.resize(length);
+		file.read(&contentOut[0],length);
+	}
 	return 1;
 }
 

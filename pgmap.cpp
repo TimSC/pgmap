@@ -1597,10 +1597,19 @@ bool PgAdmin::ImportChangesetMetadata(const std::string &fina, int verbose, clas
 	class OsmChangesetsDecodeString osmChangesetsDecodeString;
 
 	std::string content;
-	int ret = ReadFileContents(fina.c_str(), 0, content);
-	if(ret < 1)
+	try
 	{
-		errStr.errStr = "Error reading file";
+		int ret = ReadFileContents(fina.c_str(), 0, content);
+		if(ret < 1)
+		{
+			errStr.errStr = "Error reading file";
+			return false;
+		}
+	}
+	catch(const std::bad_alloc &err)
+	{
+		errStr.errStr = "Failed to allocate buffer: ";
+		errStr.errStr += err.what();
 		return false;
 	}
 	cout << fina << "," << content.length() << endl;
