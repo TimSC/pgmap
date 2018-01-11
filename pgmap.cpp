@@ -1597,7 +1597,12 @@ bool PgAdmin::ImportChangesetMetadata(const std::string &fina, int verbose, clas
 	class OsmChangesetsDecodeString osmChangesetsDecodeString;
 
 	std::string content;
-	ReadFileContents(fina.c_str(), 0, content);
+	int ret = ReadFileContents(fina.c_str(), 0, content);
+	if(ret < 1)
+	{
+		errStr.errStr = "Error reading file";
+		return false;
+	}
 	cout << fina << "," << content.length() << endl;
 
 	osmChangesetsDecodeString.DecodeSubString(content.c_str(), content.length(), 1);

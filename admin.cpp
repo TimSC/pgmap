@@ -6,6 +6,8 @@
 #include "cppo5m/osmxml.h"
 #include <boost/filesystem.hpp>
 
+namespace fs = boost::filesystem;
+
 //Based on https://gist.github.com/vivithemage/9517678#gistcomment-1658468
 
 std::vector<std::string> get_file_list(const std::string& path)
@@ -13,8 +15,6 @@ std::vector<std::string> get_file_list(const std::string& path)
 	std::vector<std::string> m_file_list;
     if (!path.empty())
     {
-        namespace fs = boost::filesystem;
-
         fs::path apk_path(path);
         fs::recursive_directory_iterator end;
 
@@ -160,17 +160,27 @@ int main(int argc, char **argv)
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
 
 			cout << "Reading files in " << config["changesets_import_path"] << endl;
-			std::vector<std::string> finaList = get_file_list(config["changesets_import_path"]);
-			sort(finaList.begin(), finaList.end());
+			
+			fs::path p(config["changesets_import_path"]);
 			bool ok = true;
-			for(size_t i=0; i<finaList.size(); i++)
+			if(is_directory(p))
 			{
-				ok = admin->ImportChangesetMetadata(finaList[i], verbose, errStr);
-				if(!ok)
+				std::vector<std::string> finaList = get_file_list(config["changesets_import_path"]);
+				sort(finaList.begin(), finaList.end());
+
+				for(size_t i=0; i<finaList.size(); i++)
 				{
-					cout << errStr.errStr << endl;
-					break;
+					ok = admin->ImportChangesetMetadata(finaList[i], verbose, errStr);
+					if(!ok)
+					{
+						cout << errStr.errStr << endl;
+						break;
+					}
 				}
+			}
+			else
+			{
+				ok = admin->ImportChangesetMetadata(config["changesets_import_path"], verbose, errStr);
 			}
 
 			if(ok)
@@ -184,6 +194,7 @@ int main(int argc, char **argv)
 				admin->Abort();
 			}
 			continue;
+
 		}
 
 		if(inputStr == "8")
