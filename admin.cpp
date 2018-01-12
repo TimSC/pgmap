@@ -170,6 +170,8 @@ int main(int argc, char **argv)
 
 				for(size_t i=0; i<finaList.size(); i++)
 				{
+					fs::path p2(finaList[i]);
+					if(is_directory(p2)) continue;
 					ok = admin->ImportChangesetMetadata(finaList[i], verbose, errStr);
 					if(!ok)
 					{
