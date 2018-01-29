@@ -28,7 +28,7 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, p
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
 	if(existsAtTimestamp != 0)
-		sql << " AND timestamp <= existsAtTimestamp";
+		sql << " AND timestamp <= " << existsAtTimestamp;
 	sql <<";";
 
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
@@ -289,7 +289,7 @@ void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, cons
 	sql << " WHERE "<<liveNodeTable<<".geom && ST_MakeEnvelope(";
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
 	if(existsAtTimestamp != 0)
-		sql << " AND timestamp <= existsAtTimestamp";
+		sql << " AND timestamp <= " << existsAtTimestamp;
 	sql <<";";
 
 	pqxx::icursorstream cursor( *work, sql.str(), "oldnodesinbbox", 1000 );
