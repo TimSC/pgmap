@@ -1416,7 +1416,38 @@ bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox,
 		existsAtTimestamp,
 		nodesInBbox);
 
-	nodesInBbox->StreamTo(*enc.get());
+	//Find most recent versions of nodes, ignore non-visible nodes
+	map<int64_t, int64_t> nodeHighestVer;
+	for(size_t i=0; i<nodesInBbox->nodes.size(); i++)
+	{
+		const class OsmNode &node = nodesInBbox->nodes[i];
+		auto it = nodeHighestVer.find(node.objId);
+		if(it == nodeHighestVer.end())
+			nodeHighestVer[node.objId] = node.metaData.version;
+		else
+		{
+			if(node.metaData.version > it->second)
+				it->second = node.metaData.version;
+		}
+	}
+
+	//Filter to find only latest versions of nodes and remove duplicates
+	std::shared_ptr<class OsmData> output(new class OsmData());
+	set<int64_t> nodesInOutput;	
+	for(size_t i=0; i<nodesInBbox->nodes.size(); i++)
+	{
+		const class OsmNode &node = nodesInBbox->nodes[i];
+		auto it = nodeHighestVer.find(node.objId);
+		if(node.metaData.version < it->second)
+			continue;
+		auto it2 = nodesInOutput.find(node.objId);
+		if(it2 != nodesInOutput.end())
+			continue;
+		output->nodes.push_back(node);
+		nodesInOutput.insert(node.objId);
+	}
+
+	output->StreamTo(*enc.get());
 
 	return true;
 }
