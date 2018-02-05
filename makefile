@@ -13,6 +13,9 @@ common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
 	cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
 	cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
 
+osmdata = cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
+	cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o
+
 libs = -lboost_filesystem -lboost_program_options -lboost_system -lpqxx -lexpat -lz
 
 dump: dump.cpp $(common)
@@ -27,7 +30,10 @@ admin: admin.cpp $(common)
 applydiffs: applydiffs.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
-osm2csv: osm2csv.cpp dbjson.o util.o cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o 
+osm2csv: osm2csv.cpp dbjson.o util.o $(osmdata) 
+	g++ $^ $(cppflags) $(libs) -o $@
+
+checkdata: checkdata.cpp dbjson.o util.o $(osmdata) 
 	g++ $^ $(cppflags) $(libs) -o $@
 
 swigpy2: pgmap.i $(common)

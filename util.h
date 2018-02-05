@@ -8,6 +8,9 @@
 using namespace rapidjson;
 #include <iostream>
 using namespace std;
+#include "cppGzip/DecodeGzip.h"
+#include "cppGzip/EncodeGzip.h"
+#include "cppo5m/OsmData.h"
 
 int ReadFileContents(const char *filename, int binaryMode, std::string &contentOut);
 
@@ -240,6 +243,7 @@ bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std
 void StrReplaceAll( string &s, const string &search, const string &replace );
 std::string EscapeQuotes(std::string str);
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
+void LoadOsmFromFile(const std::string &filename, std::shared_ptr<class IDataStreamHandler> csvStore);
 
 #endif //_UTIL_H
 
