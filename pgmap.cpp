@@ -395,10 +395,9 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
-			set<int64_t> empty;
 			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
 				this->tableActivePrefix, 
-				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
+				'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
 		}
 		this->setIterator = this->retainNodeIds->nodeIds.begin();
@@ -413,10 +412,9 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
-			set<int64_t> empty;
 			GetLiveRelationsForObjects(*dbconn, work.get(),
 				this->tableActivePrefix, "",
-				'n', retainNodeIds->nodeIds, this->setIterator, 1000, empty, retainRelationIds);
+				'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
 		}
 
