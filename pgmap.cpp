@@ -982,6 +982,9 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 	enc->Finish();
 }
 
+/**
+* Dump live objects. Only current nodes are dumped, not old (non-visible) nodes.
+*/
 void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
@@ -1445,6 +1448,28 @@ bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox,
 		nodesInOutput.insert(node.objId);
 	}
 
+	//Generate initial list of node IDs
+	std::set<int64_t> nodeIds;
+	for(size_t i=0; i<output->nodes.size(); i++)
+		nodeIds.insert(nodeIds.begin(), output->nodes[i].objId);
+
+	//Find ID and version list of all possible way parents for initial nodes
+	std::set<std::pair<int64_t, int64_t> > parentWayIdVers;
+	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, 
+		nodeIds, parentWayIdVers);
+	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->tableActivePrefix, 
+		nodeIds, parentWayIdVers);
+
+	//Find latest versions of ways that contain nodes of interest and exist at the query timestamp
+	//TODO
+
+	//Complete ways with extra nodes that exist at the query timestamp
+	//TODO
+
+	//Retrieve relations
+	//TODO
+
+	//Write results to output
 	output->StreamTo(*enc.get());
 
 	return true;

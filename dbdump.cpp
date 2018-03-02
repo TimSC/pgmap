@@ -1,6 +1,10 @@
 #include "dbdump.h"
 #include "dbdecode.h"
 
+/**
+* Dump live nodes but skip node IDs that are in the excludeTablePrefix table. Only current
+* nodes are dumped, not old (non-visible) nodes.
+*/
 void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
@@ -35,6 +39,7 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &
 	if(order)
 		sql << " ORDER BY " << liveNodeTable << ".id";
 	sql << ";";
+	cout << sql.str() << endl;
 
 	pqxx::icursorstream cursor( *work, sql.str(), "nodecursor", 1000 );	
 

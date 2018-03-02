@@ -6,6 +6,8 @@
 #include "cppo5m/OsmData.h"
 #include <set>
 
+//Functions for querying current (live) data
+
 std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	int64_t existsAtTimestamp,
@@ -43,10 +45,15 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
+// Functions for historical querys at a specific timestamp
+
 void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	int64_t existsAtTimestamp,
 	std::shared_ptr<IDataStreamHandler> enc);
+
+void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut);
 
 #endif //_DB_QUERY_H
 

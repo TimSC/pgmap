@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 		cout << "Can't open database" << endl;
 		return 1;
 	}
-	bool order = true;	
+	bool order = true;
 
 	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
 	transaction->Dump(order, enc);

@@ -299,3 +299,54 @@ void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, cons
 		ret = NodeResultsToEncoder(cursor, enc);
 }
 
+void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut)
+{
+	string wayMemTable = c.quote_name(tablePrefix + "way_mems");
+	int step = 1000;
+
+	auto it=nodeIds.begin();
+	while(it != nodeIds.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != nodeIds.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << wayMemTable << ".member = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT * FROM "+wayMemTable;
+		sql += " WHERE ("+sqlFrags.str()+")";
+		sql += ";";
+
+		pqxx::icursorstream cursor( *work, sql, "wayidverscontainingnodes", 1000 );	
+
+		int records = 1;
+		while (records>0)
+		{
+			records = 0;
+			pqxx::result rows;
+			cursor.get(rows);
+			if ( rows.empty() )
+			{
+				// nothing left to read
+				continue;
+			}
+
+			int idCol = rows.column_number("id");
+			int verCol = rows.column_number("version");
+
+			for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c)
+			{
+				int64_t objId = c[idCol].as<int64_t>();
+				int64_t objVer = c[verCol].as<int64_t>();
+				std::pair<int64_t, int64_t> idVer(objId, objVer);
+				wayIdVersOut.insert(wayIdVersOut.begin(), idVer);
+				records ++;
+			}
+		}
+	}
+}
