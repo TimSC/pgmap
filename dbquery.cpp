@@ -192,6 +192,7 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 	RelationResultsToEncoder(cursor, skipIds, enc);
 }
 
+//Can this be combined into GetLiveNodesById?
 void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
@@ -233,6 +234,7 @@ void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, const st
 		records = WayResultsToEncoder(cursor, enc);
 }
 
+//Can this be combined into GetLiveNodesById?
 void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
@@ -270,6 +272,47 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 
 	set<int64_t> empty;
 	RelationResultsToEncoder(cursor, empty, enc);
+}
+
+void GetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const string &excludeTablePrefix,
+	const std::string &objType,
+	const std::set<std::pair<int64_t, int64_t> > &objIdVers, std::set<std::pair<int64_t, int64_t> >::const_iterator &it, 
+	size_t step, std::shared_ptr<IDataStreamHandler> enc)
+{
+	string nodeTable = c.quote_name(tablePrefix + "livenodes");
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
+
+	stringstream sqlFrags;
+	int count = 0;
+	for(; it != nodeIds.end() && count < step; it++)
+	{
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << nodeTable << ".id = " << *it;
+		count ++;
+	}
+
+	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat";
+	if(excludeTable.size() > 0)
+		sql += ", "+excludeTable+".id";
+
+	sql += " FROM "+ nodeTable;
+	if(excludeTable.size() > 0)
+		sql += " LEFT JOIN "+excludeTable+" ON "+nodeTable+".id = "+excludeTable+".id";
+
+	sql += " WHERE ("+sqlFrags.str()+")";
+	if(excludeTable.size() > 0)
+		sql += " AND "+excludeTable+".id IS NULL";
+	sql += ";";
+
+	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );	
+
+	count = 1;
+	while(count > 0)
+		count = NodeResultsToEncoder(cursor, enc);
 }
 
 void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
