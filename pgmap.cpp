@@ -712,6 +712,37 @@ void PgTransaction::GetObjectsByIdVer(const std::string &type, const std::set<st
 			it, 1000, out);
 }
 
+void PgTransaction::GetObjectsHistoryById(const std::string &type, const std::set<int64_t> &objectIds, 
+		std::shared_ptr<IDataStreamHandler> out)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	if(objectIds.size()==0)
+		return;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	//Query all tables that might contain object of this id and version
+	std::set<int64_t>::const_iterator it = objectIds.begin();
+	while(it != objectIds.end())
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableStaticPrefix, type, "old", objectIds, 
+			it, 1000, out);
+	it = objectIds.begin();
+	while(it != objectIds.end())
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableStaticPrefix, type, "live", objectIds, 
+			it, 1000, out);
+	it = objectIds.begin();
+	while(it != objectIds.end())
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableActivePrefix, type, "old", objectIds, 
+			it, 1000, out);
+	it = objectIds.begin();
+	while(it != objectIds.end())
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableActivePrefix, type, "live", objectIds, 
+			it, 1000, out);
+}
+
 bool PgTransaction::StoreObjects(class OsmData &data, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,

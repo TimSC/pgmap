@@ -52,6 +52,11 @@ void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, cons
 	const std::set<std::pair<int64_t, int64_t> > &objIdVers, std::set<std::pair<int64_t, int64_t> >::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
+void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::string &objType, const std::string &liveOrOld,
+	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, std::shared_ptr<IDataStreamHandler> enc);
+
 // Functions for historical querys at a specific timestamp
 
 void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 

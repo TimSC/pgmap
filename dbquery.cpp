@@ -300,7 +300,49 @@ void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, cons
 	sql += " WHERE "+sqlFrags.str();
 	sql += ";";
 
-	pqxx::icursorstream cursor( *work, sql, "nodeidvercursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "objectidvercursor", 1000 );	
+
+	count = 1;
+	if(objType == "node") 
+		while(count > 0)
+			count = NodeResultsToEncoder(cursor, enc);
+	if(objType == "way") 
+		while(count > 0)
+			count = WayResultsToEncoder(cursor, enc);
+	if(objType == "relation") 
+	{
+		std::set<int64_t> skipIds;
+		RelationResultsToEncoder(cursor, skipIds, enc);
+	}
+}
+
+void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::string &objType, const std::string &liveOrOld,
+	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
+	size_t step, std::shared_ptr<IDataStreamHandler> enc)
+{
+	string objTable = c.quote_name(tablePrefix+liveOrOld+objType+"s");
+
+	stringstream sqlFrags;
+	int count = 0;
+	if(objType == "relation") //Relations are dumped in one shot
+		step = 0;
+	for(; it != objIds.end() && (count < step || step == 0); it++)
+	{
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << objTable << ".id = " << *it;
+		count ++;
+	}
+
+	string sql = "SELECT *";
+	if(objType == "node")
+		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	sql += " FROM "+ objTable;
+	sql += " WHERE "+sqlFrags.str();
+	sql += ";";
+
+	pqxx::icursorstream cursor( *work, sql, "objecthistorycursor", 1000 );	
 
 	count = 1;
 	if(objType == "node") 
