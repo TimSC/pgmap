@@ -48,6 +48,9 @@ namespace std {
 	%template(mapi64i64) std::map<int64_t, int64_t>;
 
 	%template(seti64) std::set<int64_t>;
+	%template(setpairi64i64) std::set<std::pair<int64_t, int64_t> >;
+
+	%template(pairi64i64) std::pair<int64_t, int64_t>;
 };
 typedef std::map<std::string, std::string> TagMap;
 
@@ -312,6 +315,8 @@ public:
 	void GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);
 	void GetFullObjectById(const std::string &type, int64_t objectId, 
+		std::shared_ptr<IDataStreamHandler> out);
+	void GetObjectsByIdVer(const std::string &type, const std::set<std::pair<int64_t, int64_t> > &objectIdVers, 
 		std::shared_ptr<IDataStreamHandler> out);
 
 	bool StoreObjects(class OsmData &data, 

@@ -106,6 +106,8 @@ public:
 		std::shared_ptr<IDataStreamHandler> out);
 	void GetFullObjectById(const std::string &type, int64_t objectId, 
 		std::shared_ptr<IDataStreamHandler> out);
+	void GetObjectsByIdVer(const std::string &type, const std::set<std::pair<int64_t, int64_t> > &objectIdVers, 
+		std::shared_ptr<IDataStreamHandler> out);
 
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 

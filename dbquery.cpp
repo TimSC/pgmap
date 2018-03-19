@@ -274,45 +274,46 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 	RelationResultsToEncoder(cursor, empty, enc);
 }
 
-void GetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
-	const string &excludeTablePrefix,
-	const std::string &objType,
+void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::string &objType, const std::string &liveOrOld,
 	const std::set<std::pair<int64_t, int64_t> > &objIdVers, std::set<std::pair<int64_t, int64_t> >::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string nodeTable = c.quote_name(tablePrefix + "livenodes");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
+	string objTable = c.quote_name(tablePrefix+liveOrOld+objType+"s");
 
 	stringstream sqlFrags;
 	int count = 0;
-	for(; it != nodeIds.end() && count < step; it++)
+	if(objType == "relation") //Relations are dumped in one shot
+		step = 0;
+	for(; it != objIdVers.end() && (count < step || step == 0); it++)
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << nodeTable << ".id = " << *it;
+		sqlFrags << "(" << objTable << ".id = " << it->first << " AND " << objTable << ".version = " << it->second << ")";
 		count ++;
 	}
 
-	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat";
-	if(excludeTable.size() > 0)
-		sql += ", "+excludeTable+".id";
-
-	sql += " FROM "+ nodeTable;
-	if(excludeTable.size() > 0)
-		sql += " LEFT JOIN "+excludeTable+" ON "+nodeTable+".id = "+excludeTable+".id";
-
-	sql += " WHERE ("+sqlFrags.str()+")";
-	if(excludeTable.size() > 0)
-		sql += " AND "+excludeTable+".id IS NULL";
+	string sql = "SELECT *";
+	if(objType == "node")
+		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	sql += " FROM "+ objTable;
+	sql += " WHERE "+sqlFrags.str();
 	sql += ";";
 
-	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "nodeidvercursor", 1000 );	
 
 	count = 1;
-	while(count > 0)
-		count = NodeResultsToEncoder(cursor, enc);
+	if(objType == "node") 
+		while(count > 0)
+			count = NodeResultsToEncoder(cursor, enc);
+	if(objType == "way") 
+		while(count > 0)
+			count = WayResultsToEncoder(cursor, enc);
+	if(objType == "relation") 
+	{
+		std::set<int64_t> skipIds;
+		RelationResultsToEncoder(cursor, skipIds, enc);
+	}
 }
 
 void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
