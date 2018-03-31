@@ -22,7 +22,7 @@ public:
 	virtual void Finish();
 
 	virtual void StoreIsDiff(bool) {};
-	virtual void StoreBounds(double x1, double y1, double x2, double y2) {};
+	virtual void StoreBounds(double x1, double y1, double x2, double y2);
 	virtual void StoreNode(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, double lat, double lon);
 	virtual void StoreWay(int64_t objId, const class MetaData &metaData, 
@@ -71,6 +71,11 @@ void DataChecker::Finish()
 		if(it->second.size() > 1)
 			cout << "Relation " << it->first << " occurs " << it->second.size() << " times" << endl;
 	}
+}
+
+virtual void DataChecker::StoreBounds(double x1, double y1, double x2, double y2)
+{
+	cout << "bounds " << x1 <<","<< y1 <<","<< x2 <<","<< y2 << endl;
 }
 
 void DataChecker::StoreNode(int64_t objId, const class MetaData &metaData, 
