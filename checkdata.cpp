@@ -62,7 +62,7 @@ void DataChecker::Finish()
 		{
 			cout << "Node " << it->first << " does not exist, but referenced by ways: ";
 			for(size_t i=0; i<it->second.size(); i++)
-				cout << it->second[i] << "," << endl;
+				cout << it->second[i] << ", ";
 			cout << endl;
 		}
 	}
@@ -73,7 +73,7 @@ void DataChecker::Finish()
 	}
 }
 
-virtual void DataChecker::StoreBounds(double x1, double y1, double x2, double y2)
+void DataChecker::StoreBounds(double x1, double y1, double x2, double y2)
 {
 	cout << "bounds " << x1 <<","<< y1 <<","<< x2 <<","<< y2 << endl;
 }
@@ -108,7 +108,9 @@ void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData,
 		wayIdVers[objId] = vers;
 	}
 	else
+	{
 		it->second.push_back(metaData.version);
+	}
 
 	for(size_t i=0; i<refs.size(); i++)
 	{
@@ -118,7 +120,7 @@ void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData,
 		{
 			vector<int64_t> objIds;
 			objIds.push_back(objId);
-			wayIdVers[objId] = objIds;
+			nodeMemForWays[objId] = objIds;
 		}
 		else
 			it->second.push_back(objId);
