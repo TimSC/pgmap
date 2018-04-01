@@ -703,3 +703,43 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 			nodeStaticPrefix, nodeActivePrefix);
 }
 
+void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, const std::string &edition, const std::string &objType)
+{
+	string objTable = c.quote_name(tablePrefix + edition + objType + "s");
+	string excludeTable = c.quote_name(tablePrefix + objType + "ids");
+
+	stringstream sql;
+	sql << "SELECT " << objTable << ".id FROM ";
+	sql << objTable;
+	sql << " LEFT JOIN "<<excludeTable<<" ON "<<objTable<<".id = "<<excludeTable<<".id";
+	sql << " WHERE "<<excludeTable<<".id IS NULL";
+	sql << ";";
+
+	cout << sql.str() << endl;
+
+	int step = 100;
+	pqxx::icursorstream cursor( *work, sql.str(), "objcursor", step );	
+
+	bool found = false;
+	while(true)
+	{
+		pqxx::result rows;
+		cursor.get(rows);
+		if ( rows.empty() )
+			break;
+
+		int idCol = rows.column_number("id");
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+			int64_t objId = c[idCol].as<int64_t>();
+			cout << objType << " ID " << objId << " missing from " << excludeTable << endl;
+			found = true;
+		}
+	}
+
+	if(not found)
+		cout << "No missing IDs found" << endl;
+}
+

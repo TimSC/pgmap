@@ -1788,6 +1788,32 @@ bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 	return true;
 }
 
+bool PgAdmin::CheckObjectIdTables(class PgMapError &errStr)
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	vector<string> objTypes = {"node", "way", "relation"};
+
+	for(size_t i=0; i<objTypes.size(); i++)
+	{
+		DbCheckObjectIdTables(*dbconn, work.get(),
+			this->tableModPrefix, "live", objTypes[i]);
+
+		DbCheckObjectIdTables(*dbconn, work.get(),
+			this->tableModPrefix, "old", objTypes[i]);
+
+		DbCheckObjectIdTables(*dbconn, work.get(),
+			this->tableStaticPrefix, "live", objTypes[i]);
+
+		DbCheckObjectIdTables(*dbconn, work.get(),
+			this->tableStaticPrefix, "old", objTypes[i]);
+	}
+	
+	return true;
+}
+
 void PgAdmin::Commit()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

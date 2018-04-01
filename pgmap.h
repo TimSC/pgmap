@@ -193,6 +193,7 @@ public:
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 	
 	bool CheckNodesExistForWays(class PgMapError &errStr);
+	bool CheckObjectIdTables(class PgMapError &errStr);
 
 	void Commit();
 	void Abort();

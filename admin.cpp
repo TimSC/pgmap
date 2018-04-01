@@ -60,8 +60,9 @@ int main(int argc, char **argv)
 		cout << "8. Refresh max changeset IDs and UIDs" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
 		cout << "b. Reset test tables" << endl;
-		cout << "c. Check nodes exist for ways" << endl << endl;
-		cout << "q. Quit" << endl;
+		cout << "c. Check nodes exist for ways" << endl;
+		cout << "d. Check object ID tables" << endl;
+		cout << endl << "q. Quit" << endl;
 
 		cin >> inputStr;
 		int verbose = 1;
@@ -258,6 +259,17 @@ int main(int argc, char **argv)
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
 			bool ok = admin->CheckNodesExistForWays(errStr);
+
+			cout << "All done!" << ok << endl;
+			admin->Commit();
+
+			continue;
+		}
+
+		if(inputStr == "d")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
+			bool ok = admin->CheckObjectIdTables(errStr);
 
 			cout << "All done!" << ok << endl;
 			admin->Commit();

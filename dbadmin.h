@@ -58,5 +58,8 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 	const std::string &nodeStaticPrefix, 
 	const std::string &nodeActivePrefix);
 
+void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, const std::string &edition, const std::string &objType);
+
 #endif //_DB_ADMIN_H
 
