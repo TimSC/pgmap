@@ -175,14 +175,14 @@ void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 	if(metaData.current and metaData.visible)
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",SRID=4326;POINT("<<lon<<" "<<lat<<")\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",SRID=4326;POINT("<< fixed << lon<<" "<<lat<<")\n";
 		string row(ss.str());
 		this->livenodeFileGzip->sputn(row.c_str(), row.size());
 	}
 	else
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",SRID=4326;POINT("<<lon<<" "<<lat<<")\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",SRID=4326;POINT("<< fixed << lon<<" "<<lat<<")\n";
 		string row(ss.str());
 		this->oldnodeFileGzip->sputn(row.c_str(), row.size());
 	}
