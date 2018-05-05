@@ -115,15 +115,15 @@ void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData,
 	for(size_t i=0; i<refs.size(); i++)
 	{
 		int64_t nid = refs[i];
-		it = nodeMemForWays.find(nid);
-		if(it == nodeMemForWays.end())
+		map<int64_t, vector<int64_t> >::iterator it2 = nodeMemForWays.find(nid);
+		if(it2 == nodeMemForWays.end())
 		{
 			vector<int64_t> objIds;
 			objIds.push_back(objId);
-			nodeMemForWays[objId] = objIds;
+			nodeMemForWays[nid] = objIds;
 		}
 		else
-			it->second.push_back(objId);
+			it2->second.push_back(objId);
 	}
 }
 
