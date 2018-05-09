@@ -142,10 +142,17 @@ bool ResetChangesetUidCounts(pqxx::connection &c, pqxx::transaction_base *work,
 
 	if(parentPrefix.size()>0)
 	{
-		ok = GetNextId(c, work, parentPrefix, "changeset", errStr, val);
-		if(!ok) return false;
-		if(val > maxVal)
-			maxVal = val;
+		try
+		{
+			ok = GetNextId(c, work, parentPrefix, "changeset", errStr, val);
+			if(!ok) return false;
+			if(val > maxVal)
+				maxVal = val;
+		}
+		catch (runtime_error &err)
+		{
+			//Changeset ID max not defined in parent table
+		}
 	}
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "node", "changeset", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
@@ -169,10 +176,17 @@ bool ResetChangesetUidCounts(pqxx::connection &c, pqxx::transaction_base *work,
 	maxVal = 0;
 	if(parentPrefix.size()>0)
 	{
-		ok = GetNextId(c, work, parentPrefix, "uid", errStr, val);
-		if(!ok) return false;
-		if(val > maxVal)
-			maxVal = val;
+		try
+		{
+			ok = GetNextId(c, work, parentPrefix, "uid", errStr, val);
+			if(!ok) return false;
+			if(val > maxVal)
+				maxVal = val;
+		}
+		catch (runtime_error &err)
+		{
+			//UID max not defined in parent table
+		}
 	}
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "node", "uid", errStr, val);
 	if(!ok) return false; if(val > maxVal) maxVal = val;
