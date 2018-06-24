@@ -6,7 +6,7 @@ using namespace std;
 void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc)
+	class OsmChange &out)
 {
 	string nodeTable = c.quote_name(tablePrefix + "livenodes");
 	if(selectOld)
@@ -23,15 +23,22 @@ void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, co
 
 	pqxx::icursorstream cursor( *work, sql.str(), "nodediff", 1000 );	
 
+	std::shared_ptr<class OsmData> data = make_shared<class OsmData>();
 	int count = 1;
 	while(count > 0)
-		count = NodeResultsToEncoder(cursor, enc);
+		count = NodeResultsToEncoder(cursor, data);
+
+	for(size_t i=0; i < data->nodes.size(); i++)
+	{
+		const class OsmObject &obj = data->nodes[i];
+		out.StoreOsmData(&obj, false);
+	}
 }
 
 void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc)
+	class OsmChange &out)
 {
 	string wayTable = c.quote_name(tablePrefix + "liveways");
 	if(selectOld)
@@ -48,15 +55,22 @@ void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, con
 
 	pqxx::icursorstream cursor( *work, sql.str(), "waydiff", 1000 );	
 
+	std::shared_ptr<class OsmData> data = make_shared<class OsmData>();
 	int count = 1;
 	while (count > 0)
-		count = WayResultsToEncoder(cursor, enc);
+		count = WayResultsToEncoder(cursor, data);
+
+	for(size_t i=0; i < data->ways.size(); i++)
+	{
+		const class OsmObject &obj = data->ways[i];
+		out.StoreOsmData(&obj, false);
+	}
 }
 
 void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc)
+	class OsmChange &out)
 {
 	string relationTable = c.quote_name(tablePrefix + "liverelations");
 	if(selectOld)
@@ -73,7 +87,14 @@ void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work
 
 	pqxx::icursorstream cursor( *work, sql.str(), "relationdiff", 1000 );	
 
+	std::shared_ptr<class OsmData> data = make_shared<class OsmData>();
 	set<int64_t> empty;
-	RelationResultsToEncoder(cursor, empty, enc);
+	RelationResultsToEncoder(cursor, empty, data);
+
+	for(size_t i=0; i < data->relations.size(); i++)
+	{
+		const class OsmObject &obj = data->relations[i];
+		out.StoreOsmData(&obj, false);
+	}
 }
 

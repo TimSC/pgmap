@@ -9,16 +9,16 @@
 void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc);
+	class OsmChange &out);
 
 void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc);
+	class OsmChange &out);
 
 void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
-	std::shared_ptr<IDataStreamHandler> enc);
+	class OsmChange &out);
 
 #endif //_DB_REPLICATE_H

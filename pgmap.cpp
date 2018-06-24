@@ -1001,7 +1001,7 @@ bool PgTransaction::ResetActiveTables(class PgMapError &errStr)
 	return ok;
 }
 
-void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd, std::shared_ptr<IDataStreamHandler> enc)
+void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd, class OsmChange &out)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1011,37 +1011,29 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 		throw runtime_error("Transaction has been deleted");
 	std::shared_ptr<class OsmData> osmData(new class OsmData);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, osmData);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, osmData);
-
-	enc->StoreIsDiff(false);
-
-	osmData->StreamTo(*enc.get());
-	
-	enc->Reset();
-
-	enc->Finish();
+	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, out);
 }
 
 /**

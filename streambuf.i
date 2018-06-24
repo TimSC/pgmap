@@ -38,6 +38,5 @@ protected:
 	PyObject* m_PyObj;
 	PyObject* m_Write;
 };
-
 %} 
 
