@@ -67,6 +67,18 @@ bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std
 	return true;
 }
 
+void WriteSettingsFile(const std::string &settingsPath, const std::map<std::string, std::string> &config)
+{
+	std::ofstream outfile;
+	outfile.open (settingsPath);
+	for(auto it=config.begin(); it!=config.end(); it++)
+	{
+		outfile << it->first << ":" << it->second << endl;
+	}
+
+	outfile.close();
+}
+
 //https://stackoverflow.com/a/15372760/4288232
 void StrReplaceAll( string &s, const string &search, const string &replace ) {
     for( size_t pos = 0; ; pos += replace.length() ) {

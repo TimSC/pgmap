@@ -240,6 +240,8 @@ public:
 };
 
 bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut);
+void WriteSettingsFile(const std::string &settingsPath, const std::map<std::string, std::string> &config);
+
 void StrReplaceAll( string &s, const string &search, const string &replace );
 std::string EscapeQuotes(std::string str);
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
