@@ -73,22 +73,28 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;	
 }
 
-bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
-	int verbose, 
-	const string &tablePrefix, 
-	std::string &errStr)
+void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut)
 {
 	//PostgreSQL 9.3 and earlier does not support JSONB
 	string sql = "SELECT current_setting('server_version_num');";
 	pqxx::result r = work->exec(sql);
 	int ver = r[0][0].as<int>();
-	int majorVer = ver / 10000;
-	int minorVer = (ver / 100) % 100;
+	majorVerOut = ver / 10000;
+	minorVerOut = (ver / 100) % 100;
+}
+
+bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	int majorVer=0, minorVer=0;
+	DbGetVersion(c, work, majorVer, minorVer);
 	string j = "JSONB";
 	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
 		j = "JSON";
 
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
+	string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
@@ -229,6 +235,11 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	bool ok = true;
 	string sql;
+	int majorVer=0, minorVer=0;
+	DbGetVersion(c, work, majorVer, minorVer);
+	string ine = "IF NOT EXISTS ";
+	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+		ine = "";	
 
 	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"oldnodes")==0)
 	{
@@ -281,7 +292,7 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_gix"))
 	{
 		//Used to do a standard map query
-		sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_gix")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom);";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_gix")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"livenodes")+"(geom);";
@@ -291,87 +302,87 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	if(!DbCheckIndexExists(c, work, tablePrefix+"oldnodes_gix"))
 	{
 		//Used for quering nodes at a particular point in time
-		sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes_gix")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" USING GIST (geom);";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_gix")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" USING GIST (geom);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"oldnodes")+"(geom);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"way_mems_mids")+" ON "+c.quote_name(tablePrefix+"way_mems")+" (member);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"way_mems_mids")+" ON "+c.quote_name(tablePrefix+"way_mems")+" (member);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_n_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_n")+" (member);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"relation_mems_n_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_n")+" (member);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_w_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_w")+" (member);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"relation_mems_w_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_w")+" (member);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_r_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_r")+" (member);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"relation_mems_r_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_r")+" (member);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	//Timestamp indicies
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	//Object user indices
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	//Changeset indices
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways_cs")+" ON "+c.quote_name(tablePrefix+"liveways")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_cs")+" ON "+c.quote_name(tablePrefix+"liveways")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations_cs")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_cs")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways_cs")+" ON "+c.quote_name(tablePrefix+"liveways")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_cs")+" ON "+c.quote_name(tablePrefix+"liveways")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations_cs")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_cs")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_uidx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (uid);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"changesets_uidx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (uid);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_open_timestampx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (open_timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"changesets_open_timestampx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (open_timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_close_timestampx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (close_timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"changesets_close_timestampx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (close_timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_is_openx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (is_open);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"changesets_is_openx")+" ON "+c.quote_name(tablePrefix+"changesets")+" (is_open);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	if(!DbCheckIndexExists(c, work, tablePrefix+"changesets_gix"))
 	{
-		sql = "CREATE INDEX IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets_gix")+" ON "+c.quote_name(tablePrefix+"changesets")+" USING GIST (geom);";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"changesets_gix")+" ON "+c.quote_name(tablePrefix+"changesets")+" USING GIST (geom);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"changesets")+"(geom);";
