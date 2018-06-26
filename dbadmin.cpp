@@ -319,13 +319,6 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"relation_mems_r_mids")+" ON "+c.quote_name(tablePrefix+"relation_mems_r")+" (member);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
 	//Timestamp indicies
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
