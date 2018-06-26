@@ -67,7 +67,6 @@ int main(int argc, char **argv)
 	r = w2.exec("GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "+config["dbuser"]+";");
 	r = w2.exec("CREATE EXTENSION postgis;");
 	r = w2.exec("CREATE EXTENSION postgis_topology;");
-	r = w2.exec("CREATE EXTENSION postgis_sfcgal;");
 
 	string cstr = GeneratePgConnectionString(config);
 	class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);

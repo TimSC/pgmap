@@ -68,8 +68,6 @@ Disconnect using ctrl-D. As the user postgres, enable PostGIS on the database.
 	CREATE EXTENSION postgis;
 
 	CREATE EXTENSION postgis_topology;
-
-	CREATE EXTENSION postgis_sfcgal;
 	
 Disconnect using ctrl-D (repeatedly) to get back to your normal user. Check you can connect using psql; it often works out of the box. 
 
