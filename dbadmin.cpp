@@ -238,8 +238,12 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	int majorVer=0, minorVer=0;
 	DbGetVersion(c, work, majorVer, minorVer);
 	string ine = "IF NOT EXISTS ";
+	bool brinSupported = true;
 	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-		ine = "";	
+	{
+		ine = "";
+		brinSupported = false;
+	}
 
 	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"oldnodes")==0)
 	{
@@ -334,20 +338,24 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	//Object user indices
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	if(brinSupported)
+	{
+		//Object user indices
+		//Is this really used?
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
 
 	//Changeset indices
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
