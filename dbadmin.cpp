@@ -78,21 +78,31 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
-	string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags JSONB, geom GEOMETRY(Point, 4326));";
+	//PostgreSQL 9.3 and earlier does not support JSONB
+	string sql = "SELECT current_setting('server_version_num');";
+	pqxx::result r = work->exec(sql);
+	int ver = r[0][0].as<int>();
+	int majorVer = ver / 10000;
+	int minorVer = (ver / 100) % 100;
+	string j = "JSONB";
+	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+		j = "JSON";
+
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags JSONB, geom GEOMETRY(Point, 4326));";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags JSONB, members JSONB);";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags JSONB, members JSONB, memberroles JSONB);";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags JSONB, geom GEOMETRY(Point, 4326));";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags JSONB, members JSONB);";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags JSONB, members JSONB, memberroles JSONB);";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"nodeids")+" (id BIGINT);";
@@ -121,7 +131,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags JSONB, open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags "+j+", open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 
 	return ok;
