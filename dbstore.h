@@ -6,10 +6,10 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
 
-void EncodeTags(const TagMap &tagmap, string &out);
+void EncodeTags(const TagMap &tagmap, std::string &out);
 
 bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &tablePrefix, 
+	const std::string &tablePrefix, 
 	class OsmData osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,

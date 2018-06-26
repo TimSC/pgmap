@@ -1,5 +1,6 @@
 #include "dbids.h"
 #include "dbcommon.h"
+using namespace std;
 
 bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, 

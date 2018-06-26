@@ -13,7 +13,7 @@ class PgMapError
 {
 public:
 	PgMapError();
-	PgMapError(const string &connection);
+	PgMapError(const std::string &connection);
 	PgMapError(const PgMapError &obj);
 	virtual ~PgMapError();
 
@@ -52,7 +52,7 @@ class PgMapQuery
 private:
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
-	shared_ptr<pqxx::connection> dbconn;
+	std::shared_ptr<pqxx::connection> dbconn;
 	bool mapQueryActive;
 	int mapQueryPhase;
 	std::shared_ptr<class DataStreamRetainIds> retainNodeIds;
@@ -60,7 +60,7 @@ private:
 	std::vector<double> mapQueryBbox;
 	std::string mapQueryWkt;
 	std::shared_ptr<class PgWork> sharedWork;
-	set<int64_t> extraNodes;
+	std::set<int64_t> extraNodes;
 	std::shared_ptr<class DataStreamRetainIds> retainWayIds;
 	std::shared_ptr<class DataStreamRetainMemIds> retainWayMemIds;
 	std::shared_ptr<class DataStreamRetainIds> retainRelationIds;
@@ -69,9 +69,9 @@ private:
 	IDataStreamHandler nullEncoder;
 
 public:
-	PgMapQuery(const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn,
-		shared_ptr<pqxx::connection> &db,
+	PgMapQuery(const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
+		std::shared_ptr<pqxx::connection> &db,
 		std::shared_ptr<class PgWork> sharedWorkIn);
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
@@ -85,7 +85,7 @@ public:
 class PgTransaction
 {
 private:
-	shared_ptr<pqxx::connection> dbconn;
+	std::shared_ptr<pqxx::connection> dbconn;
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
 	std::string connectionString;
@@ -93,9 +93,9 @@ private:
 	std::shared_ptr<class PgWork> sharedWork;
 
 public:
-	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
-		const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn,
+	PgTransaction(std::shared_ptr<pqxx::connection> dbconnIn,
+		const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
 		std::shared_ptr<class PgWork> sharedWorkIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
@@ -129,8 +129,8 @@ public:
 		class OsmChange &out);
 	void Dump(bool order, std::shared_ptr<IDataStreamHandler> enc);
 
-	int64_t GetAllocatedId(const string &type);
-	int64_t PeekNextAllocatedId(const string &type);
+	int64_t GetAllocatedId(const std::string &type);
+	int64_t PeekNextAllocatedId(const std::string &type);
 
 	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,
@@ -166,7 +166,7 @@ public:
 class PgAdmin
 {
 private:
-	shared_ptr<pqxx::connection> dbconn;
+	std::shared_ptr<pqxx::connection> dbconn;
 	std::string tableStaticPrefix;
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
@@ -175,12 +175,12 @@ private:
 	std::string shareMode;
 
 public:
-	PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
-		const string &tableStaticPrefixIn, 
-		const string &tableModPrefixIn,
-		const string &tableTestPrefixIn,
+	PgAdmin(std::shared_ptr<pqxx::connection> dbconnIn,
+		const std::string &tableStaticPrefixIn, 
+		const std::string &tableModPrefixIn,
+		const std::string &tableTestPrefixIn,
 		std::shared_ptr<class PgWork> sharedWorkIn,
-		const string &shareModeIn);
+		const std::string &shareModeIn);
 	virtual ~PgAdmin();
 
 	bool CreateMapTables(int verbose, class PgMapError &errStr);
@@ -202,7 +202,7 @@ public:
 class PgMap
 {
 private:
-	shared_ptr<pqxx::connection> dbconn;
+	std::shared_ptr<pqxx::connection> dbconn;
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
 	std::string tableModPrefix;
@@ -211,10 +211,10 @@ private:
 	std::shared_ptr<class PgWork> sharedWork;
 
 public:
-	PgMap(const string &connection, const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn,
-		const string &tableModPrefixIn,
-		const string &tableTestPrefixIn);
+	PgMap(const std::string &connection, const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
+		const std::string &tableModPrefixIn,
+		const std::string &tableTestPrefixIn);
 	virtual ~PgMap();
 	PgMap& operator=(const PgMap&) {return *this;};
 

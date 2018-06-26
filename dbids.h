@@ -5,26 +5,26 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
 
-bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	const std::string &objType, 
 	const std::string &field,
 	std::string errStr,
 	int64_t &val);
 
 bool GetMaxFieldInTable(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &tableName,
-	const string &field,
-	string &errStr,
+	const std::string &tableName,
+	const std::string &field,
+	std::string &errStr,
 	int64_t &val);
 
 bool ClearNextIdValuesById(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &tablePrefix,
-	const string &key);
+	const std::string &tablePrefix,
+	const std::string &key);
 
 bool SetNextIdValue(pqxx::connection &c,
 	pqxx::transaction_base *work, 
-	const string &tablePrefix,
-	const string &objType,
+	const std::string &tablePrefix,
+	const std::string &objType,
 	int64_t value);
 
 bool GetNextId(pqxx::connection &c, pqxx::transaction_base *work, 
@@ -35,31 +35,31 @@ bool GetNextId(pqxx::connection &c, pqxx::transaction_base *work,
 
 bool GetAllocatedIdFromDb(pqxx::connection &c,
 	pqxx::transaction_base *work, 
-	const string &tablePrefix,
-	const string &objType,
+	const std::string &tablePrefix,
+	const std::string &objType,
 	bool increment,
-	string &errStr,
+	std::string &errStr,
 	int64_t &val);
 
 bool ResetChangesetUidCounts(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &parentPrefix, const string &tablePrefix, 
-	string &errStr);
+	const std::string &parentPrefix, const std::string &tablePrefix, 
+	std::string &errStr);
 
 bool GetNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &tablePrefix,
-	map<string, int64_t> &nextIdMap,
-	string &errStr);
+	const std::string &tablePrefix,
+	std::map<std::string, int64_t> &nextIdMap,
+	std::string &errStr);
 
 bool UpdateNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &tablePrefix,
-	const map<string, int64_t> &nextIdMap,
-	const map<string, int64_t> &nextIdMapOriginal,
-	string &errStr);
+	const std::string &tablePrefix,
+	const std::map<std::string, int64_t> &nextIdMap,
+	const std::map<std::string, int64_t> &nextIdMapOriginal,
+	std::string &errStr);
 
 bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &objType,
-	const string &tableActivePrefix, 
-	const string &tableStaticPrefix,
+	const std::string &objType,
+	const std::string &tableActivePrefix, 
+	const std::string &tableStaticPrefix,
 	std::string &errStr);
 
 #endif //_DB_IDS_H

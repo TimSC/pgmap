@@ -240,7 +240,7 @@ class PgMapError
 {
 public:
 	PgMapError();
-	PgMapError(const string &connection);
+	PgMapError(const std::string &connection);
 	PgMapError(const PgMapError &obj);
 	virtual ~PgMapError();
 
@@ -286,9 +286,9 @@ public:
 class PgMapQuery
 {
 public:
-	PgMapQuery(const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn,
-		shared_ptr<pqxx::connection> &db,
+	PgMapQuery(const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
+		std::shared_ptr<pqxx::connection> &db,
 		std::shared_ptr<class PgWork> sharedWorkIn);
 	virtual ~PgMapQuery();
 
@@ -303,9 +303,9 @@ public:
 class PgTransaction
 {
 public:
-	PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
-		const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn,
+	PgTransaction(std::shared_ptr<pqxx::connection> dbconnIn,
+		const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
 		std::shared_ptr<class PgWork> sharedWorkIn,
 		const std::string &shareMode);
 	virtual ~PgTransaction();
@@ -339,8 +339,8 @@ public:
 		class OsmChange &out);
 	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc);
 
-	int64_t GetAllocatedId(const string &type);
-	int64_t PeekNextAllocatedId(const string &type);
+	int64_t GetAllocatedId(const std::string &type);
+	int64_t PeekNextAllocatedId(const std::string &type);
 
 	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,
@@ -378,10 +378,10 @@ public:
 class PgMap
 {
 public:
-	PgMap(const string &connection, const string &tableStaticPrefixIn, 
-		const string &tableActivePrefixIn,
-		const string &tableModPrefixIn,
-		const string &tableTestPrefixIn);
+	PgMap(const std::string &connection, const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
+		const std::string &tableModPrefixIn,
+		const std::string &tableTestPrefixIn);
 	virtual ~PgMap();
 	PgMap& operator=(const PgMap&) {return *this;};
 

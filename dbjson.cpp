@@ -1,6 +1,7 @@
 #include <rapidjson/writer.h> //rapidjson-dev
 #include <rapidjson/stringbuffer.h>
 #include "dbjson.h"
+using namespace std;
 
 void EncodeTags(const TagMap &tagmap, string &out)
 {
