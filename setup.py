@@ -1,12 +1,42 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """
 setup.py file for SWIG pgmap
 """
-
-# -*- coding: utf-8 -*-
 from __future__ import print_function
+import re
+import subprocess
+from setuptools import setup, Extension
 from distutils.core import setup, Extension
+from distutils.spawn import find_executable
+from distutils.version import LooseVersion
+import setuptools.command.build_ext
+
+class Build_Ext_find_swig3(setuptools.command.build_ext.build_ext):
+	def find_swig(self):
+		return get_swig_executable()
+
+def get_swig_executable():
+	# stolen from https://github.com/FEniCS/ffc/blob/master/setup.py
+	"Get SWIG executable"
+
+	# Find SWIG executable
+	swig_executable = None
+	swig_minimum_version = "3.0.2"
+	for executable in ["swig", "swig3.0"]:
+		swig_executable = find_executable(executable)
+		if swig_executable is not None:
+			# Check that SWIG version is ok
+			output = subprocess.check_output([swig_executable, "-version"]).decode('utf-8')
+			swig_version = re.findall(r"SWIG Version ([0-9.]+)", output)[0]
+			if LooseVersion(swig_version) >= LooseVersion(swig_minimum_version):
+				break
+			swig_executable = None
+	if swig_executable is None:
+		raise OSError("Unable to find SWIG version %s or higher." % swig_minimum_version)
+	print("Found SWIG: %s (version %s)" % (swig_executable, swig_version))
+	return swig_executable
 
 pgmap_module = Extension('_pgmap',
 				define_macros = [('PYTHON_AWARE', '1')],
@@ -22,9 +52,12 @@ pgmap_module = Extension('_pgmap',
 
 setup (name = 'pgmap',
 	version = '0.1',
-	author      = "Tim Sheerman-Chase",
+	author	  = "Tim Sheerman-Chase",
 	description = """pgmap swig module""",
 	ext_modules = [pgmap_module],
 	py_modules = ["pgmap"],
+    cmdclass = {
+        "build_ext": Build_Ext_find_swig3,
+		},
 	)
 
