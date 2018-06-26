@@ -65,3 +65,12 @@ bool DbCheckIndexExists(pqxx::connection &c, pqxx::transaction_base *work,
 	return r.size() > 0;
 }
 
+void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut)
+{
+	string sql = "SELECT current_setting('server_version_num');";
+	pqxx::result r = work->exec(sql);
+	int ver = r[0][0].as<int>();
+	majorVerOut = ver / 10000;
+	minorVerOut = (ver / 100) % 100;
+}
+

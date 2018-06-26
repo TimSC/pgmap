@@ -73,21 +73,12 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;	
 }
 
-void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut)
-{
-	//PostgreSQL 9.3 and earlier does not support JSONB
-	string sql = "SELECT current_setting('server_version_num');";
-	pqxx::result r = work->exec(sql);
-	int ver = r[0][0].as<int>();
-	majorVerOut = ver / 10000;
-	minorVerOut = (ver / 100) % 100;
-}
-
 bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
 {
+	//PostgreSQL 9.3 and earlier does not support JSONB
 	int majorVer=0, minorVer=0;
 	DbGetVersion(c, work, majorVer, minorVer);
 	string j = "JSONB";

@@ -17,6 +17,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
 
+	int majorVer=0, minorVer=0;
+	DbGetVersion(c, work, majorVer, minorVer);
+	string ocdn = " ON CONFLICT DO NOTHING";
+	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+		ocdn = "";
+
 	for(size_t i=0; i<objPtrs.size(); i++)
 	{
 		const class OsmObject *osmObject = objPtrs[i];
@@ -158,7 +164,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				ss << ",$10";
 			else if (relationObject != nullptr)
 				ss << ",$10,$11";
-			ss << ") ON CONFLICT DO NOTHING;";
+			ss << ") " << ocdn << ";";
 
 			try
 			{
@@ -322,14 +328,21 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					return false;
 				}
 
+
 				stringstream ssi;
-				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
 
 				if(verbose >= 1)
 					cout << ssi.str() << endl;
 				c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
-				work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
-
+				try
+				{
+					work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+				}
+				catch(pqxx::unique_violation &err)
+				{
+					//Catch exception if database does not support OCDN
+				}
 			}
 			else
 			{
@@ -429,7 +442,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				ss << ",$9";
 			else if(relationObject != nullptr)
 				ss << ",$9,$10";
-			ss << ") ON CONFLICT DO NOTHING;";
+			ss << ") "<< ocdn << ";";
 
 			try
 			{	
@@ -478,12 +491,19 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			}
 
 			stringstream ssi;
-			ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") +" (id) VALUES ($1) ON CONFLICT DO NOTHING;";
+			ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") +" (id) VALUES ($1) "<< ocdn << ";";
 
 			if(verbose >= 1)
 				cout << ssi.str() << endl;
-			c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
-			work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+			c.prepare(tablePrefix+"insert"+typeStr+"ids2", ssi.str());
+			try
+			{
+				work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
+			}
+			catch(pqxx::unique_violation &err)
+			{
+				//Catch exception if database does not support OCDN
+			}
 		}
 
 		if(wayObject != nullptr)
