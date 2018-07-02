@@ -19,9 +19,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 	int majorVer=0, minorVer=0;
 	DbGetVersion(c, work, majorVer, minorVer);
+	bool ocdnSupported = true;
 	string ocdn = " ON CONFLICT DO NOTHING";
 	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+	{
 		ocdn = "";
+		ocdnSupported = false;
+	}
 
 	for(size_t i=0; i<objPtrs.size(); i++)
 	{
@@ -331,17 +335,31 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 				stringstream ssi;
 				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
-
 				if(verbose >= 1)
 					cout << ssi.str() << endl;
 				c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
-				try
+
+				if(ocdnSupported)
 				{
 					work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
 				}
-				catch(pqxx::unique_violation &err)
+				else
 				{
-					//Catch exception if database does not support OCDN
+					//For support of older postgreSQL
+					//Check if id already exists in table
+					stringstream ssi2;
+					ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
+					c.prepare(tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
+					pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
+					
+					if(r.size() == 0)
+						throw runtime_error("No data returned from db unexpectedly");
+					const pqxx::result::tuple row = r[0];
+					int64_t count = row[0].as<int64_t>();
+
+					//Insert id value if not already in table
+					if(count == 0)
+						work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
 				}
 			}
 			else
@@ -496,13 +514,27 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			if(verbose >= 1)
 				cout << ssi.str() << endl;
 			c.prepare(tablePrefix+"insert"+typeStr+"ids2", ssi.str());
-			try
+			if(ocdnSupported)
 			{
 				work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
 			}
-			catch(pqxx::unique_violation &err)
+			else
 			{
-				//Catch exception if database does not support OCDN
+				//For support of older postgreSQL
+				//Check if id already exists in table
+				stringstream ssi2;
+				ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
+				c.prepare(tablePrefix+"insert"+typeStr+"idexists2", ssi2.str());
+				pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists2")(objId).exec();
+			
+				if(r.size() == 0)
+					throw runtime_error("No data returned from db unexpectedly");
+				const pqxx::result::tuple row = r[0];
+				int64_t count = row[0].as<int64_t>();
+
+				//Insert id value if not already in table
+				if(count == 0)
+					work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
 			}
 		}
 
