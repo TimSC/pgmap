@@ -6,9 +6,11 @@ C++ SWIG module for accessing microcosm's postgis OSM map GIS schema. It also pr
 Installation
 ------------
 
-To use this library using Python 2 (note: python 3 support is planned):
+### Installing with Python 2
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip swig3.0 libboost-filesystem-dev libboost-program-options-dev
+To use this library using Python 2:
+
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev
 
 	sudo pip install --upgrade pip
 
@@ -38,10 +40,50 @@ If you have not already, install the python module and build the tools:
 
 The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
 
+### Installing with Python 3
+
+To use this library using Python 3:
+
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev
+
+	sudo pip3 install --upgrade pip
+
+If you have not already, create a virtual environment:
+
+	sudo pip3 install virtualenv
+
+	cd <src>
+
+	virtualenv --python=/usr/bin/python3 pgmapenv3
+
+	source pgmapenv3/bin/activate	
+
+Go to the <src>/pycrocosm/pgmap folder or clone a new copy:
+
+	git clone https://github.com/TimSC/pgmap.git --recursive
+
+	cd pgmap
+
+If you have not already, install the python module and build the tools:
+
+	python3 setup.py install
+
+	make
+
+	cp config.cfg.template config.cfg
+
+The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
+
 Install and configure postgis
 -----------------------------
 
+On Linux Mint 18.* and Ubuntu Xenial:
+
     sudo apt install postgis postgresql postgresql-9.5-postgis-2.2
+
+On Linux Mint 19.* and Ubuntu Bionic:
+
+    sudo apt install postgis postgresql postgresql-10-postgis*
 
 Postgresql can run faster if shared_buffers is increased in /etc/postgresql/9.5/main/postgresql.conf to about a quarter of total memory. (Having a large amount of memory wouldn't hurt either.) This is known to improve dump performance since the query has to interate over an index.
 
@@ -73,7 +115,7 @@ Disconnect using ctrl-D (repeatedly) to get back to your normal user. Check you 
 
     psql -h 127.0.0.1 -d db_map -U pycrocosm --password
 
-If necessary, enable log in by password by changing pg_hba.conf as administrator (as described in https://stackoverflow.com/a/4328789/4288232 ). When connecting, use 127.0.0.1 rather than localhost, if the database is on the same machine (postgresql treats them differently).
+If necessary, enable log in by password by changing pg_hba.conf as administrator (as described in https://stackoverflow.com/a/4328789/4288232 ). When connecting, use 127.0.0.1 rather than localhost, if the database is on the same machine (postgresql treats them differently). The exact path to pg_hga.conf depends on the version of postgresql you installed.
 
 	locate pg_hba.conf
 
