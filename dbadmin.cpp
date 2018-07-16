@@ -87,9 +87,8 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 	string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	//sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
+	//ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
@@ -563,6 +562,42 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	return true;
+}
+
+bool DbCreateOverpassIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	bool ok = true;
+	string sql;
+	int majorVer=0, minorVer=0;
+	DbGetVersion(c, work, majorVer, minorVer);
+	string ine = "IF NOT EXISTS ";
+	bool jsonbSupported = true;
+	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+	{
+		ine = "";
+		jsonbSupported = false;
+	}
+
+	//GIN indicies can only be created on JSONB type fields
+	if(jsonbSupported)
+	{
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_tagind")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" USING GIN (tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_tagind")+" ON "+c.quote_name(tablePrefix+"oldways")+" USING GIN (tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_tagind")+" ON "+c.quote_name(tablePrefix+"oldrelations")+" USING GIN (tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"newnodes_tagind")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIN (tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"newways_tagind")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIN (tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"newrelations_tagind")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIN (tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	}
 }
 
 size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work, 

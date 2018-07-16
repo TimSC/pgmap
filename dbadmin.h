@@ -52,6 +52,13 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &diffPath, 
 	std::string &errStr);
 
+bool DbCreateOverpassIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
+// *** Integrity check functions ***
+
 void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,

@@ -1765,6 +1765,25 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 	return true;
 }
 
+bool PgAdmin::CreateOverpassIndices(int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbCreateOverpassIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateOverpassIndices(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateOverpassIndices(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
 bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
