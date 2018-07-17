@@ -110,7 +110,7 @@ int main(int argc, char **argv)
 
 		if(inputStr == "4")
 		{
-			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin(); //No transaction
 			bool ok = admin->CreateMapIndices(verbose, errStr);
 
 			if(ok)
@@ -221,18 +221,16 @@ int main(int argc, char **argv)
 
 		if(inputStr == "9")
 		{
-			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin(); //No transaction
 			bool ok = admin->CreateOverpassIndices(verbose, errStr);
 
 			if(ok)
 			{
-				admin->Commit();
 				cout << "All done!" << endl;
 			}
 			else
 			{
 				cout << errStr.errStr << endl;
-				admin->Abort();
 			}
 			continue;
 		}
