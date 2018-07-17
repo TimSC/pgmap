@@ -4,6 +4,7 @@
 #include "dbstore.h"
 #include "dbdecode.h"
 #include "dbquery.h"
+#include "dbmeta.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include <map>
@@ -122,10 +123,20 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"meta")+" (key TEXT, value TEXT);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "DELETE FROM "+c.quote_name(tablePrefix+"meta")+" WHERE key = 'schema_version';";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	try
+	{
+		int schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
+	}
+	catch(std::runtime_error &err)
+	{
+		sql = "DELETE FROM "+c.quote_name(tablePrefix+"meta")+" WHERE key = 'schema_version';";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
+	}
 
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags "+j+", open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
@@ -581,23 +592,43 @@ bool DbCreateOverpassIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		jsonbSupported = false;
 	}
 
+	//Update from v11 to v12
+	int schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
+	if(schemaVersion == 11)
+	{
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN geom GEOMETRY(GEOMETRY, 4326);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose);
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN geom GEOMETRY(GEOMETRY, 4326);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose);
+
+		DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
+	}
+
 	//GIN indicies can only be created on JSONB type fields
 	if(jsonbSupported)
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_tagind")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" USING GIN (tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_tagind")+" ON "+c.quote_name(tablePrefix+"oldways")+" USING GIN (tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_tagind")+" ON "+c.quote_name(tablePrefix+"oldrelations")+" USING GIN (tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
 		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"newnodes_tagind")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIN (tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"newways_tagind")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIN (tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"newrelations_tagind")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIN (tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		//SELECT * FROM planet_static_livenodes WHERE tags ? 'amenity' AND ST_Within(geom, ST_MakeEnvelope(-1.0989761, 50.7758758, -1.0570908, 50.7985574, 4326));
 	}
+
+	sql = "UPDATE "+c.quote_name(tablePrefix+"liveways")+" SET geom=sq.geom FROM (SELECT "+c.quote_name(tablePrefix+"liveways")+".id, ST_Envelope(ST_Collect("+c.quote_name(tablePrefix+"livenodes")+".geom)) AS geom FROM "+c.quote_name(tablePrefix+"liveways")+" JOIN "+c.quote_name(tablePrefix+"way_mems")+" ON "+c.quote_name(tablePrefix+"liveways")+".id = "+c.quote_name(tablePrefix+"way_mems")+".id AND "+c.quote_name(tablePrefix+"liveways")+".version = "+c.quote_name(tablePrefix+"way_mems")+".version JOIN "+c.quote_name(tablePrefix+"livenodes")+" ON "+c.quote_name(tablePrefix+"way_mems")+".member = "+c.quote_name(tablePrefix+"livenodes")+".id GROUP BY "+c.quote_name(tablePrefix+"liveways")+".id) AS sq WHERE "+c.quote_name(tablePrefix+"liveways")+".id=sq.id;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	if(!DbCheckIndexExists(c, work, tablePrefix+"liveways_gix"))
+	{
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_gix")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIST (geom);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liveways")+"(geom);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	return true;
 }
 
 size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work, 

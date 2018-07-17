@@ -12,8 +12,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	std::string &errStr,
 	int verbose)
 {
-	char trueStr[] = "true";
-	char falseStr[] = "true";
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
 
@@ -602,6 +600,14 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					return false;
 				}
 			}
+		}
+
+		//Determine if storing this object changes the bbox of self or parent objects
+		if(nodeObject != nullptr)
+		{
+			//std::shared_ptr<class OsmData> parentObjs(new class OsmData());
+			//GetWaysForNodes(affectedNodeIds, parentObjs);
+
 		}
 	}
 
