@@ -601,14 +601,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				}
 			}
 		}
-
-		//Determine if storing this object changes the bbox of self or parent objects
-		if(nodeObject != nullptr)
-		{
-			//std::shared_ptr<class OsmData> parentObjs(new class OsmData());
-			//GetWaysForNodes(affectedNodeIds, parentObjs);
-
-		}
 	}
 
 	return true;

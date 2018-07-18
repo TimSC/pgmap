@@ -41,7 +41,7 @@ def get_swig_executable():
 pgmap_module = Extension('_pgmap',
 				define_macros = [('PYTHON_AWARE', '1')],
 				sources=['pgmap.i', 'util.cpp', 'dbquery.cpp', 'dbids.cpp', 'dbadmin.cpp', 'dbcommon.cpp', 'dbreplicate.cpp', 'dbdecode.cpp', 
-					'dbstore.cpp', 'dbdump.cpp', 'dbfilters.cpp', 'dbchangeset.cpp', 'dbjson.cpp', 'dbmeta.cpp', 'pgmap.cpp', 'cppo5m/o5m.cpp', 
+					'dbstore.cpp', 'dbdump.cpp', 'dbfilters.cpp', 'dbchangeset.cpp', 'dbjson.cpp', 'dbmeta.cpp', 'dbshapecache.cpp', 'pgmap.cpp', 'cppo5m/o5m.cpp', 
 					'cppo5m/varint.cpp', 'cppo5m/OsmData.cpp', 'cppo5m/osmxml.cpp', 'cppo5m/iso8601lib/iso8601.c',
 					'cppGzip/EncodeGzip.cpp', 'cppGzip/DecodeGzip.cpp'],
 				swig_opts=['-c++', '-DPYTHON_AWARE', '-DSWIGWORDSIZE64'],

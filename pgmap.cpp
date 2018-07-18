@@ -8,6 +8,7 @@
 #include "dbdump.h"
 #include "dbfilters.h"
 #include "dbchangeset.h"
+#include "dbshapecache.h"
 #include "dbmeta.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
@@ -577,44 +578,10 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	if(type == "node")
-	{
-		std::set<int64_t>::const_iterator it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveNodesById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
-				it, 1000, out);
-		it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveNodesById(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, 
-				it, 1000, out);
-	}
-	else if(type == "way")
-	{
-		std::set<int64_t>::const_iterator it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveWaysById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
-				it, 1000, out);
-		it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveWaysById(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, 
-				it, 1000, out);
-	}
-	else if(type == "relation")
-	{
-		std::set<int64_t>::const_iterator it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveRelationsById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix,
-				objectIds, 
-				it, 1000, out);
-		it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveRelationsById(*dbconn, work.get(), this->tableActivePrefix, "",
-				objectIds, 
-				it, 1000, out);
-	}
-	else
-		throw invalid_argument("Known object type");
-
+	DbGetObjectsById(*dbconn, work.get(), type, objectIds, 
+		this->tableActivePrefix, 
+		this->tableStaticPrefix, 
+		out);
 }
 
 void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId, std::shared_ptr<IDataStreamHandler> out)
@@ -630,54 +597,10 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 
 	//Get main object
 	std::shared_ptr<class OsmData> outData(new class OsmData());
-	std::set<int64_t> objectIds;
-	objectIds.insert(objectId);
-	this->GetObjectsById(type, objectIds, outData);
+	::DbGetFullObjectById(*dbconn, work.get(), type, objectId, 
+		this->tableActivePrefix, this->tableStaticPrefix,
+		outData);
 
-	//Get members of main object
-	if(type == "way")
-	{
-		if (outData->ways.size() != 1)
-			throw runtime_error("Unexpected number of objects in intermediate result");
-		class OsmWay &mainWay = outData->ways[0];
-
-		std::set<int64_t> memberNodes;
-		for(int64_t i=0; i<mainWay.refs.size(); i++)
-			memberNodes.insert(mainWay.refs[i]);
-		this->GetObjectsById("node", memberNodes, outData);
- 	}
-	else if(type == "relation")
-	{
-		if (outData->relations.size() != 1)
-			throw runtime_error("Unexpected number of objects in intermediate result");
-		class OsmRelation &mainRelation = outData->relations[0];
-
-		std::set<int64_t> memberNodes, memberWays, memberRelations;
-		for(int64_t i=0; i<mainRelation.refIds.size(); i++)
-		{
-			if(mainRelation.refTypeStrs[i]=="node")
-				memberNodes.insert(mainRelation.refIds[i]);
-			else if(mainRelation.refTypeStrs[i]=="way")
-				memberWays.insert(mainRelation.refIds[i]);
-			else if(mainRelation.refTypeStrs[i]=="relation")
-				memberRelations.insert(mainRelation.refIds[i]);
-		}
-
-		std::shared_ptr<class OsmData> memberWayObjs(new class OsmData());
-		this->GetObjectsById("node", memberNodes, outData);
-		this->GetObjectsById("way", memberWays, memberWayObjs);
-		this->GetObjectsById("relation", memberRelations, outData);
-		memberWayObjs->StreamTo(*outData.get());
-
-		std::set<int64_t> memberNodes2;
-		for(int64_t i=0; i<memberWayObjs->ways.size(); i++)
-			for(int64_t j=0; j<memberWayObjs->ways[i].refs.size(); j++)
-				memberNodes2.insert(memberWayObjs->ways[i].refs[j]);
-		this->GetObjectsById("node", memberNodes2, outData);
-	}
-	else
-		throw invalid_argument("Known object type");
-	
 	outData->StreamTo(*out.get());
 }
 
@@ -760,14 +683,44 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	}
 
 	string tablePrefix = this->tableActivePrefix;
+	string backingTablePrefix = this->tableStaticPrefix;
 	if(saveToStaticTables)
+	{
 		tablePrefix = this->tableStaticPrefix;
+		backingTablePrefix = "";
+	}
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
 	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
+	if(!ok) return false;
+
+	//For nodes find all parent ways and relations
+	std::shared_ptr<class OsmData> parentObjs(new class OsmData());
+	std::set<int64_t> objectIds;
+	for(size_t i=0; i<data.nodes.size(); i++)
+		objectIds.insert(data.nodes[i].objId);
+	this->GetWaysForNodes(objectIds, parentObjs);
+
+	//For ways find all parent relations
+	//TODO
+
+	//For relations find all parent relations
+	//TODO
+
+	//Refresh shapes for affected ways
+	objectIds.clear();
+	for(size_t i=0; i<parentObjs->nodes.size(); i++)
+		objectIds.insert(parentObjs->nodes[i].objId);
+	ok = DbRefreshWayShapes(*dbconn, work.get(), 
+		tablePrefix, backingTablePrefix, objectIds, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return false;
+
+	//Refresh shapes for affected relations
+	//TODO
 
 	return ok;
 }

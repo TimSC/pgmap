@@ -45,6 +45,20 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
+// Query objects outside of a map bbox query
+
+void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &type, const std::set<int64_t> &objectIds, 
+	const std::string &activeTablePrefix, 
+	const std::string &staticTablePrefix, 
+	std::shared_ptr<IDataStreamHandler> out);
+
+void DbGetFullObjectById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &type, int64_t objectId, 
+	const std::string &activeTablePrefix, 
+	const std::string &staticTablePrefix, 
+	std::shared_ptr<class OsmData> out);
+
 // Query old versions
 
 void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 

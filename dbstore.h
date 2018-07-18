@@ -3,6 +3,7 @@
 
 #include <pqxx/pqxx>
 #include <string>
+#include <set>
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
 

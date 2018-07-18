@@ -274,6 +274,51 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 	RelationResultsToEncoder(cursor, empty, enc);
 }
 
+void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &type, const std::set<int64_t> &objectIds, 
+	const std::string &activeTablePrefix, 
+	const std::string &staticTablePrefix, 
+	std::shared_ptr<IDataStreamHandler> out)
+{
+	if(type == "node")
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveNodesById(c, work, staticTablePrefix, activeTablePrefix, objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveNodesById(c, work, activeTablePrefix, "", objectIds, 
+				it, 1000, out);
+	}
+	else if(type == "way")
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveWaysById(c, work, staticTablePrefix, activeTablePrefix, objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveWaysById(c, work, activeTablePrefix, "", objectIds, 
+				it, 1000, out);
+	}
+	else if(type == "relation")
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveRelationsById(c, work, staticTablePrefix, activeTablePrefix,
+				objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveRelationsById(c, work, activeTablePrefix, "",
+				objectIds, 
+				it, 1000, out);
+	}
+	else
+		throw invalid_argument("Known object type");
+}
+
 void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, const std::string &liveOrOld,
 	const std::set<std::pair<int64_t, int64_t> > &objIdVers, std::set<std::pair<int64_t, int64_t> >::const_iterator &it, 
@@ -435,4 +480,77 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 			}
 		}
 	}
+}
+
+void DbGetFullObjectById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &type, int64_t objectId, 
+	const std::string &activeTablePrefix, 
+	const std::string &staticTablePrefix, 
+	std::shared_ptr<class OsmData> outData)
+{
+	std::set<int64_t> objectIds;
+	objectIds.insert(objectId);
+	DbGetObjectsById(c, work, type, objectIds, 
+		activeTablePrefix,
+		staticTablePrefix,
+		outData);
+
+	//Get members of main object
+	if(type == "way")
+	{
+		if (outData->ways.size() != 1)
+			throw runtime_error("Unexpected number of objects in intermediate result");
+		class OsmWay &mainWay = outData->ways[0];
+
+		std::set<int64_t> memberNodes;
+		for(int64_t i=0; i<mainWay.refs.size(); i++)
+			memberNodes.insert(mainWay.refs[i]);
+		DbGetObjectsById(c, work, "node", memberNodes, 
+			activeTablePrefix,
+			staticTablePrefix,
+			outData);
+ 	}
+	else if(type == "relation")
+	{
+		if (outData->relations.size() != 1)
+			throw runtime_error("Unexpected number of objects in intermediate result");
+		class OsmRelation &mainRelation = outData->relations[0];
+
+		std::set<int64_t> memberNodes, memberWays, memberRelations;
+		for(int64_t i=0; i<mainRelation.refIds.size(); i++)
+		{
+			if(mainRelation.refTypeStrs[i]=="node")
+				memberNodes.insert(mainRelation.refIds[i]);
+			else if(mainRelation.refTypeStrs[i]=="way")
+				memberWays.insert(mainRelation.refIds[i]);
+			else if(mainRelation.refTypeStrs[i]=="relation")
+				memberRelations.insert(mainRelation.refIds[i]);
+		}
+
+		std::shared_ptr<class OsmData> memberWayObjs(new class OsmData());
+		DbGetObjectsById(c, work, "node", memberNodes, 
+			activeTablePrefix,
+			staticTablePrefix,
+			outData);
+		DbGetObjectsById(c, work, "way", memberWays, 
+			activeTablePrefix,
+			staticTablePrefix,
+			memberWayObjs);
+		DbGetObjectsById(c, work, "relation", memberRelations, 
+			activeTablePrefix,
+			staticTablePrefix,
+			outData);
+		memberWayObjs->StreamTo(*outData.get());
+
+		std::set<int64_t> memberNodes2;
+		for(int64_t i=0; i<memberWayObjs->ways.size(); i++)
+			for(int64_t j=0; j<memberWayObjs->ways[i].refs.size(); j++)
+				memberNodes2.insert(memberWayObjs->ways[i].refs[j]);
+		DbGetObjectsById(c, work, "node", memberNodes2, 
+			activeTablePrefix,
+			staticTablePrefix,
+			outData);
+	}
+	else
+		throw invalid_argument("Known object type");
 }
