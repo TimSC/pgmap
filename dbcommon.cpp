@@ -74,3 +74,25 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 	minorVerOut = (ver / 100) % 100;
 }
 
+void IndexObjects(class OsmData &osmData,
+	std::map<int64_t, class OsmNode *> &nodesOut,
+	std::map<int64_t, class OsmWay *> &waysOut,
+	std::map<int64_t, class OsmRelation *> &relationsOut)
+{
+	for(size_t i=0; i<osmData.nodes.size(); i++)
+	{
+		class OsmNode *node = &osmData.nodes[i];
+		nodesOut[node->objId] = node;
+	}
+	for(size_t i=0; i<osmData.ways.size(); i++)
+	{
+		class OsmWay *way = &osmData.ways[i];
+		waysOut[way->objId] = way;
+	}
+	for(size_t i=0; i<osmData.relations.size(); i++)
+	{
+		class OsmRelation *relation = &osmData.relations[i];
+		relationsOut[relation->objId] = relation;
+	}
+}
+

@@ -4,6 +4,7 @@
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include <string>
 #include <vector>
+#include "cppo5m/OsmData.h"
 
 ///Tolerate NULL values when we copy row from live to old table
 template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxx::result::field &field)
@@ -26,6 +27,11 @@ bool DbCheckIndexExists(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &indexName);
 
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut);
+
+void IndexObjects(class OsmData &osmData,
+	std::map<int64_t, class OsmNode *> &nodesOut,
+	std::map<int64_t, class OsmWay *> &waysOut,
+	std::map<int64_t, class OsmRelation *> &relationsOut);
 
 #endif //_DB_COMMON_H
 

@@ -597,7 +597,9 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 
 	//Get main object
 	std::shared_ptr<class OsmData> outData(new class OsmData());
-	::DbGetFullObjectById(*dbconn, work.get(), type, objectId, 
+	std::set<int64_t> objectIds;
+	objectIds.insert(objectId);
+	::DbGetFullObjectById(*dbconn, work.get(), type, objectIds, 
 		this->tableActivePrefix, this->tableStaticPrefix,
 		outData);
 
