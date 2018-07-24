@@ -726,3 +726,36 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+bool UpdateObjectShape(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tablePrefix,
+	const std::string &typeStr,
+	const std::vector<int64_t> &ids,
+	const std::vector<std::vector<double> > &bboxes,	
+	std::string &errStr)
+{
+	if(ids.size() != bboxes.size())
+		throw invalid_argument("Number of ids and bboxes must match");
+
+	stringstream ss;
+	ss << "UPDATE "<< c.quote_name(tablePrefix+"live"+typeStr+"s") << " SET geom=ST_MakeEnvelope($1, $2, $3, $4, 4326)";
+	ss << " WHERE id = $5;";
+	string preparedName = tablePrefix+"update"+typeStr+"geom";
+	c.prepare(preparedName, ss.str());
+
+	for(size_t i=0; i<ids.size(); i++)
+	{
+		pqxx::prepare::invocation invoc = work->prepared(preparedName);
+
+		const std::vector<double> &bbox = bboxes[i];
+		invoc(bbox[0]);
+		invoc(bbox[1]);
+		invoc(bbox[2]);
+		invoc(bbox[3]);
+		invoc(ids[i]);
+
+		invoc.exec();
+	}
+
+	return true;
+}
+

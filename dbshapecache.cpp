@@ -1,3 +1,5 @@
+#include "dbshapecache.h"
+#include <iostream>
 #include "dbstore.h"
 #include "dbquery.h"
 #include "dbcommon.h"
@@ -25,8 +27,7 @@ bool DbRefreshWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 		//Identify missing ways
 		std::set<int64_t> missingIds;
-		it = objIds.begin();
-		while(it != objIds.end())
+		for(it = objIds.begin(); it != objIds.end(); it++)
 			if(existingIds.find(*it) == existingIds.end())
 				missingIds.insert(*it);
 
@@ -59,6 +60,7 @@ bool DbRefreshWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	//Calculate bounding boxes
 	vector<vector<double> > bboxes;
+	vector<int64_t> updateIds;
 	for(size_t i=0; i<fullObjs->ways.size(); i++)
 	{
 		class OsmWay &way = fullObjs->ways[i];
@@ -79,11 +81,35 @@ bool DbRefreshWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		}
 		vector<double> bbox = {left, bottom, right, top};
 		bboxes.push_back(bbox);
+		updateIds.push_back(way.objId);
 	}
 
 	//Store updated way bbox in database
-	//TODO
+	ok = UpdateObjectShape(c, work, 
+		tablePrefix, "way",
+		updateIds, bboxes, errStr);
 
 	return ok;
+}
+
+bool DbGetObjectCachedBbox(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tablePrefix, const std::string &typeStr, int64_t id, std::vector<double> &bboxOut)
+{
+	bboxOut.clear();
+	string getGeom = "SELECT ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom) FROM "+ c.quote_name(tablePrefix+"live"+typeStr+"s") + " WHERE (id=$1);";
+
+	c.prepare(tablePrefix+"get"+typeStr+"geom", getGeom);
+	pqxx::result r = work->prepared(tablePrefix+"get"+typeStr+"geom")(id).exec();
+	if(r.size() == 0) return false;
+
+	const pqxx::result::tuple row = r[0];
+	if(!row[0].is_null())
+	{
+		bboxOut.push_back(row[0].as<double>());
+		bboxOut.push_back(row[1].as<double>());
+		bboxOut.push_back(row[2].as<double>());
+		bboxOut.push_back(row[3].as<double>());
+	}
+	return true;
 }
 

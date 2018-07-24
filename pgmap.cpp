@@ -695,34 +695,46 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
+	//Check schema version
+	int schemaVersion = std::stoi(DbGetMetaValue(*dbconn, work.get(), "schema_version", tablePrefix, nativeErrStr));
+
+	//Store objects in database
 	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return false;
 
-	//For nodes find all parent ways and relations
-	std::shared_ptr<class OsmData> parentObjs(new class OsmData());
-	std::set<int64_t> objectIds;
-	for(size_t i=0; i<data.nodes.size(); i++)
-		objectIds.insert(data.nodes[i].objId);
-	this->GetWaysForNodes(objectIds, parentObjs);
+	if(schemaVersion >= 12)
+	{
+		//For nodes find all parent ways and relations
+		std::shared_ptr<class OsmData> parentObjs(new class OsmData());
+		std::set<int64_t> objectIds;
+		for(size_t i=0; i<data.nodes.size(); i++)
+		{
+			int64_t nid = data.nodes[i].objId;
+			if (nid < 0)
+				nid = createdNodeIds[nid];
+			objectIds.insert(nid);
+		}
+		this->GetWaysForNodes(objectIds, parentObjs);
 
-	//For ways find all parent relations
-	//TODO
+		//For ways find all parent relations
+		//TODO
 
-	//For relations find all parent relations
-	//TODO
+		//For relations find all parent relations
+		//TODO
 
-	//Refresh shapes for affected ways
-	objectIds.clear();
-	for(size_t i=0; i<parentObjs->nodes.size(); i++)
-		objectIds.insert(parentObjs->nodes[i].objId);
-	ok = DbRefreshWayShapes(*dbconn, work.get(), 
-		tablePrefix, backingTablePrefix, objectIds, nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return false;
+		//Refresh shapes for affected ways
+		objectIds.clear();
+		for(size_t i=0; i<parentObjs->ways.size(); i++)
+			objectIds.insert(parentObjs->ways[i].objId);
+		ok = DbRefreshWayShapes(*dbconn, work.get(), 
+			tablePrefix, backingTablePrefix, objectIds, nativeErrStr);
+		errStr.errStr = nativeErrStr;
+		if(!ok) return false;
 
-	//Refresh shapes for affected relations
-	//TODO
+		//Refresh shapes for affected relations
+		//TODO
+	}
 
 	return ok;
 }
@@ -1482,6 +1494,22 @@ bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox,
 	output->StreamTo(*enc.get());
 
 	return true;
+}
+
+bool PgTransaction::GetObjectCachedBbox(const std::string &typeStr, int64_t id, std::vector<double> &bboxOut)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool found = DbGetObjectCachedBbox(*dbconn, work.get(),
+		this->tableActivePrefix, typeStr, id, bboxOut);
+	if(!found)
+		found = DbGetObjectCachedBbox(*dbconn, work.get(),
+			this->tableStaticPrefix, typeStr, id, bboxOut);
+	return found;
 }
 
 void PgTransaction::Commit()

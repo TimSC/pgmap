@@ -368,6 +368,8 @@ public:
 	bool GetHistoricMapQuery(const std::vector<double> &bbox, 
 		int64_t existsAtTimestamp,
 		std::shared_ptr<IDataStreamHandler> &enc);
+	bool GetObjectCachedBbox(const std::string &typeStr, int64_t id, 
+		std::vector<double> &bboxOut);
 
 	void Commit();
 	void Abort();
