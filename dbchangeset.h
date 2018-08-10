@@ -29,7 +29,7 @@ int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
-	size_t limit,
+	size_t limit, //0 means no limit
 	int64_t user_uid, //0 means don't filter
 	int64_t openedBeforeTimestamp, //-1 means don't filter
 	int64_t closedAfterTimestamp, //-1 means don't filter

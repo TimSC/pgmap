@@ -1411,21 +1411,48 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 		throw runtime_error("Transaction has been deleted");
 
 	//Find changesets in static that have not been closed in active tables
-	//TODO
-
-	//Close changesets in active table
-	bool ok = CloseChangesetsOlderThanInDb(*dbconn, work.get(),
-		this->tableActivePrefix,
-		whereBeforeTimestamp,
-		closedTimestamp,
-		rowsAffected,
+	std::vector<class PgChangeset> openStaticChangesets;
+	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
+		this->tableStaticPrefix, this->tableActivePrefix,
+		0, //Get all
+		0, //Any user 
+		whereBeforeTimestamp, 
+		-1,
+		true, //That are open
+		false,
+		openStaticChangesets,
 		errStrNative);
-
 	if(!ok)
 	{
 		errStr.errStr = errStrNative;
 		return false;
 	}
+
+	//Migrate open static changesets to active table
+	for(size_t i=0; i<openStaticChangesets.size(); i++)
+	{
+		size_t rowsAffected = 0;
+		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
+			this->tableStaticPrefix,
+			this->tableActivePrefix,
+			openStaticChangesets[i].objId,
+			rowsAffected,
+			errStrNative);
+
+		if(!ok)
+		{
+			errStr.errStr = errStrNative;
+			return false;
+		}
+	}
+
+	//Close changesets in active table
+	ok = CloseChangesetsOlderThanInDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		whereBeforeTimestamp,
+		closedTimestamp,
+		rowsAffected,
+		errStrNative);
 
 	errStr.errStr = errStrNative;
 	return ok;

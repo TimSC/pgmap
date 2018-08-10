@@ -284,7 +284,10 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	if(closedAfterTimestamp != -1)
 		sql << " AND "<<changesetTable<<".close_timestamp>" << closedAfterTimestamp;
 
-	sql << " ORDER BY open_timestamp DESC NULLS LAST LIMIT "<<limit<<";";
+	sql << " ORDER BY open_timestamp DESC NULLS LAST";
+	if(limit > 0)
+		sql << " LIMIT "<<limit;
+	sql << ";";
 
 	pqxx::result r = work->exec(sql.str());
 
