@@ -1185,6 +1185,8 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 
 bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	int64_t user_uid,
+	bool is_open_only,
+	bool is_closed_only,
 	class PgMapError &errStr)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
@@ -1199,6 +1201,8 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		this->tableActivePrefix, "",
 		targetNum,
 		user_uid,
+		is_open_only,
+		is_closed_only,
 		changesetsOut,
 		errStrNative);
 	if(!ok)
@@ -1215,6 +1219,8 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 			this->tableActivePrefix,
 			targetNum - changesetsOut.size(),
 			user_uid,
+			is_open_only,
+			is_closed_only,
 			changesetsStatic,
 			errStrNative);
 		if(!ok)
@@ -1376,6 +1382,75 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 			errStrNative);
 	}
 
+	errStr.errStr = errStrNative;
+	return ok;
+}
+
+bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
+	int64_t closedTimestamp,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
+
+	size_t rowsAffected = 0;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = CloseChangesetsOlderThanInDb(*dbconn, work.get(),
+		this->tableActivePrefix,
+		whereBeforeTimestamp,
+		closedTimestamp,
+		rowsAffected,
+		errStrNative);
+
+	if(!ok)
+	{
+		errStr.errStr = errStrNative;
+		return false;
+	}
+
+	//Find changesets in static that have not been closed in active tables
+	//TODO
+
+/*
+	if(rowsAffected == 0)
+	{
+		//Close a changeset in the static tables by copying to active table
+		//and setting the is_open flag to false.
+		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
+			this->tableStaticPrefix,
+			this->tableActivePrefix,
+			changesetId,
+			rowsAffected,
+			errStrNative);
+
+		if(!ok)
+		{
+			errStr.errStr = errStrNative;
+			return false;
+		}
+		if(rowsAffected == 0)
+		{
+			errStr.errStr = "No changeset found in active or static table";
+			return false;
+		}
+
+		ok = CloseChangesetInDb(*dbconn, work.get(),
+			this->tableActivePrefix,
+			changesetId,
+			closedTimestamp,
+			rowsAffected,
+			errStrNative);
+	}
+*/
 	errStr.errStr = errStrNative;
 	return ok;
 }

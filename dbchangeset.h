@@ -31,6 +31,8 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &excludePrefix,
 	size_t limit,
 	int64_t user_uid,
+	bool is_open_only,
+	bool is_closed_only,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr);
 
@@ -50,6 +52,14 @@ bool CloseChangesetInDb(pqxx::connection &c,
 	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t changesetId,
+	int64_t closedTimestamp,
+	size_t &rowsAffectedOut,
+	std::string &errStr);
+
+bool CloseChangesetsOlderThanInDb(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t whereBeforeTimestamp,
 	int64_t closedTimestamp,
 	size_t &rowsAffectedOut,
 	std::string &errStr);

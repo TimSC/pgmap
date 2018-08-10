@@ -251,6 +251,8 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &excludePrefix,
 	size_t limit,
 	int64_t user_uid,
+	bool is_open_only,
+	bool is_closed_only,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr)
 {
@@ -271,6 +273,10 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 		sql << " AND " << excludeTable << ".id IS NULL";
 	if(user_uid != 0)
 		sql << " AND " << changesetTable << ".uid=" << user_uid;
+	if(is_open_only)
+		sql << " AND "<<changesetTable<<".is_open=TRUE";
+	if(is_closed_only)
+		sql << " AND "<<changesetTable<<".is_open=FALSE";
 
 	sql << " ORDER BY open_timestamp DESC NULLS LAST LIMIT "<<limit<<";";
 
@@ -417,6 +423,23 @@ bool CloseChangesetInDb(pqxx::connection &c,
 {
 	stringstream ss;
 	ss << "UPDATE "<< c.quote_name(tablePrefix+"changesets")<<" SET is_open=false, close_timestamp="<<closedTimestamp<<" WHERE id = "<<changesetId<<";";
+
+	bool ok = DbExec(work, ss.str(), errStr, &rowsAffectedOut);
+
+	return ok;
+}
+
+bool CloseChangesetsOlderThanInDb(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t whereBeforeTimestamp,
+	int64_t closedTimestamp,
+	size_t &rowsAffectedOut,
+	std::string &errStr)
+{
+	stringstream ss;
+	ss << "UPDATE "<< c.quote_name(tablePrefix+"changesets")<<" SET is_open=false, close_timestamp="<<closedTimestamp
+		<<" WHERE is_open=true AND open_timestamp<"<< whereBeforeTimestamp << ";";
 
 	bool ok = DbExec(work, ss.str(), errStr, &rowsAffectedOut);
 

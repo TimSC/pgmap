@@ -140,12 +140,17 @@ public:
 		class PgMapError &errStr);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		int64_t user_uid,
+		bool is_open_only,
+		bool is_closed_only,
 		class PgMapError &errStr);
 	int64_t CreateChangeset(const class PgChangeset &changeset,
 		class PgMapError &errStr);
 	bool UpdateChangeset(const class PgChangeset &changeset,
 		class PgMapError &errStr);
 	bool CloseChangeset(int64_t changesetId,
+		int64_t closedTimestamp,
+		class PgMapError &errStr);
+	bool CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
 
