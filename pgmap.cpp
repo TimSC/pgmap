@@ -1184,7 +1184,9 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 }
 
 bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
-	int64_t user_uid,
+	int64_t user_uid, //0 means don't filter
+	int64_t openedBeforeTimestamp, //-1 means don't filter
+	int64_t closedAfterTimestamp, //-1 means don't filter
 	bool is_open_only,
 	bool is_closed_only,
 	class PgMapError &errStr)
@@ -1200,7 +1202,9 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
 		targetNum,
-		user_uid,
+		user_uid, 
+		openedBeforeTimestamp, 
+		closedAfterTimestamp,
 		is_open_only,
 		is_closed_only,
 		changesetsOut,
@@ -1219,6 +1223,8 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 			this->tableActivePrefix,
 			targetNum - changesetsOut.size(),
 			user_uid,
+			openedBeforeTimestamp, 
+			closedAfterTimestamp,
 			is_open_only,
 			is_closed_only,
 			changesetsStatic,
@@ -1404,6 +1410,10 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
+	//Find changesets in static that have not been closed in active tables
+	//TODO
+
+	//Close changesets in active table
 	bool ok = CloseChangesetsOlderThanInDb(*dbconn, work.get(),
 		this->tableActivePrefix,
 		whereBeforeTimestamp,
@@ -1417,40 +1427,6 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 		return false;
 	}
 
-	//Find changesets in static that have not been closed in active tables
-	//TODO
-
-/*
-	if(rowsAffected == 0)
-	{
-		//Close a changeset in the static tables by copying to active table
-		//and setting the is_open flag to false.
-		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
-			this->tableStaticPrefix,
-			this->tableActivePrefix,
-			changesetId,
-			rowsAffected,
-			errStrNative);
-
-		if(!ok)
-		{
-			errStr.errStr = errStrNative;
-			return false;
-		}
-		if(rowsAffected == 0)
-		{
-			errStr.errStr = "No changeset found in active or static table";
-			return false;
-		}
-
-		ok = CloseChangesetInDb(*dbconn, work.get(),
-			this->tableActivePrefix,
-			changesetId,
-			closedTimestamp,
-			rowsAffected,
-			errStrNative);
-	}
-*/
 	errStr.errStr = errStrNative;
 	return ok;
 }

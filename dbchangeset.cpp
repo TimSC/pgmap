@@ -251,6 +251,8 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &excludePrefix,
 	size_t limit,
 	int64_t user_uid,
+	int64_t openedBeforeTimestamp,
+	int64_t closedAfterTimestamp,
 	bool is_open_only,
 	bool is_closed_only,
 	std::vector<class PgChangeset> &changesetOut,
@@ -267,7 +269,7 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << " FROM " << changesetTable;
 	if(excludeTable.size() > 0)
 		sql << " LEFT JOIN " << excludeTable << " ON " << changesetTable <<".id = " << excludeTable << ".id";
-	if(excludeTable.size() > 0 || user_uid != 0)
+	if(excludeTable.size() > 0 || user_uid != 0 || is_open_only || is_closed_only || openedBeforeTimestamp != -1)
 		sql << " WHERE TRUE"; 
 	if(excludeTable.size() > 0)
 		sql << " AND " << excludeTable << ".id IS NULL";
@@ -277,6 +279,10 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 		sql << " AND "<<changesetTable<<".is_open=TRUE";
 	if(is_closed_only)
 		sql << " AND "<<changesetTable<<".is_open=FALSE";
+	if(openedBeforeTimestamp != -1)
+		sql << " AND "<<changesetTable<<".open_timestamp<" << openedBeforeTimestamp;
+	if(closedAfterTimestamp != -1)
+		sql << " AND "<<changesetTable<<".close_timestamp>" << closedAfterTimestamp;
 
 	sql << " ORDER BY open_timestamp DESC NULLS LAST LIMIT "<<limit<<";";
 

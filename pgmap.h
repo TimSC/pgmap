@@ -139,7 +139,9 @@ public:
 		std::shared_ptr<class IOsmChangeBlock> output,
 		class PgMapError &errStr);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
-		int64_t user_uid,
+		int64_t user_uid, //0 means don't filter
+		int64_t openedBeforeTimestamp, //-1 means don't filter
+		int64_t closedAfterTimestamp, //-1 means don't filter
 		bool is_open_only,
 		bool is_closed_only,
 		class PgMapError &errStr);
