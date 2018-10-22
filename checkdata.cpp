@@ -146,10 +146,6 @@ void DataChecker::StoreRelation(int64_t objId, const class MetaData &metaData, c
 
 int main(int argc, char **argv)
 {
-	cout << "Reading settings from config.cfg" << endl;
-	std::map<string, string> config;
-	ReadSettingsFile("config.cfg", config);
-
 	shared_ptr<class IDataStreamHandler> dataChecker(new class DataChecker());
 	if(argc > 1)
 		LoadOsmFromFile(argv[1], dataChecker);	
