@@ -88,6 +88,8 @@ public:
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles) {};
 
+
+
 };
 
 %shared_ptr(IOsmChangeBlock)
@@ -100,22 +102,40 @@ public:
 	virtual void StoreOsmData(const std::string &action, const class OsmData &osmData, bool ifunused) {};
 };
 
+%shared_ptr(O5mEncodeBase)
+
+class O5mEncodeBase : public IDataStreamHandler
+{
+public:
+	O5mEncodeBase();
+	virtual ~O5mEncodeBase();
+};
+
 %shared_ptr(PyO5mEncode)
 
-class PyO5mEncode : public IDataStreamHandler
+class PyO5mEncode : public O5mEncodeBase
 {
 public:
 	PyO5mEncode(PyObject* obj);
 	virtual ~PyO5mEncode();
 };
 
+%shared_ptr(OsmXmlEncodeBase)
+
+class OsmXmlEncodeBase : public IDataStreamHandler
+{
+public:
+	OsmXmlEncodeBase();
+	virtual ~OsmXmlEncodeBase();
+};
+
 %shared_ptr(PyOsmXmlEncode)
 
-class PyOsmXmlEncode : public IDataStreamHandler
+class PyOsmXmlEncode : public OsmXmlEncodeBase
 {
 public:
 	PyOsmXmlEncode(PyObject* obj, const TagMap &customAttribs);
-	virtual ~PyOsmXmlEncode();	
+	virtual ~PyOsmXmlEncode();
 
 	void SetOutput(PyObject* obj);
 };
