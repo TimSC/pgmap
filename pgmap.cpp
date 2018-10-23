@@ -48,6 +48,11 @@ bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &pr
 		sql += ","+prefix+ "livenodes";
 		sql += ","+prefix+ "liveways";
 		sql += ","+prefix+ "liverelations";
+
+		sql += ","+prefix+ "nodeids";
+		sql += ","+prefix+ "wayids";
+		sql += ","+prefix+ "relationids";
+
 		sql += ","+prefix+ "way_mems";
 		sql += ","+prefix+ "relation_mems_n";
 		sql += ","+prefix+ "relation_mems_w";

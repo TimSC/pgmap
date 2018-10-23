@@ -332,7 +332,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					return false;
 				}
 
-
+				//Update existing id lists (nodeids, wayids, relationids)
 				stringstream ssi;
 				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
 				if(verbose >= 1)
