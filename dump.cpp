@@ -17,8 +17,7 @@ int main(int argc, char **argv)
 	std::map<string, string> config;
 	ReadSettingsFile("config.cfg", config);
 	
-	string cstr = GeneratePgConnectionString(config);
-	
+	string cstr = GeneratePgConnectionString(config);	
 	class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 
 	if (pgMap.Ready()) {

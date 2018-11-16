@@ -33,7 +33,7 @@ applydiffs: applydiffs.cpp $(common)
 osm2csv: osm2csv.cpp dbjson.o util.o $(osmdata) 
 	g++ $^ $(cppflags) $(libs) -o $@
 
-checkdata: checkdata.cpp dbjson.o util.o $(osmdata) 
+checkdata: checkdata.cpp dbjson.o util.o $(osmdata) $(common) 
 	g++ $^ $(cppflags) $(libs) -o $@
 
 swigpy2: pgmap.i $(common)

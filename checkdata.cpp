@@ -4,8 +4,10 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include "dbjson.h"
 #include "util.h"
+#include "pgmap.h"
 using namespace std;
 
 class DataChecker : public IDataStreamHandler
@@ -148,7 +150,27 @@ int main(int argc, char **argv)
 {
 	shared_ptr<class IDataStreamHandler> dataChecker(new class DataChecker());
 	if(argc > 1)
-		LoadOsmFromFile(argv[1], dataChecker);	
+	{
+		string argv1 = argv[1];
+		if (argv1!="db")
+			LoadOsmFromFile(argv[1], dataChecker);	
+		else
+		{
+			cout << "Reading settings from config.cfg" << endl;
+			std::map<string, string> config;
+			ReadSettingsFile("config.cfg", config);
+
+			string cstr = GeneratePgConnectionString(config);
+			class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+
+			std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
+			transaction->Dump(false, dataChecker);
+		}
+	}
+	else
+	{
+		cout << "Please specify filename as program argument or use 'db' to scan database" << endl;
+	}
 
 	cout << "All done!" << endl;
 }
