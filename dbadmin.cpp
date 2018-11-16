@@ -315,11 +315,11 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	//Timestamp indicies
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_ts2")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_ts")+" ON "+c.quote_name(tablePrefix+"liveways")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_ts2")+" ON "+c.quote_name(tablePrefix+"oldways")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_ts2")+" ON "+c.quote_name(tablePrefix+"oldrelations")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_ts")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (timestamp);";
@@ -333,11 +333,11 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		//Object user indices
 		//Is this really used?
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_uid2")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" USING BRIN(uid);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_uid")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING BRIN(uid);";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_uid2")+" ON "+c.quote_name(tablePrefix+"oldways")+" USING BRIN(uid);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_uid")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING BRIN(uid);";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_uid2")+" ON "+c.quote_name(tablePrefix+"oldrelations")+" USING BRIN(uid);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_uid")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING BRIN(uid);";
@@ -349,11 +349,11 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	//Changeset indices
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldnodes_cs2")+" ON "+c.quote_name(tablePrefix+"oldnodes")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_cs")+" ON "+c.quote_name(tablePrefix+"liveways")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldways_cs2")+" ON "+c.quote_name(tablePrefix+"oldways")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_cs")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (changeset);";
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"oldrelations_cs2")+" ON "+c.quote_name(tablePrefix+"oldrelations")+" (changeset);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_cs")+" ON "+c.quote_name(tablePrefix+"livenodes")+" (changeset);";
