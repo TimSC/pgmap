@@ -357,7 +357,8 @@ public:
 	bool ResetActiveTables(class PgMapError &errStr);
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
 		class OsmChange &out);
-	void Dump(bool onlyLiveData, std::shared_ptr<IDataStreamHandler> enc);
+	void Dump(bool onlyLiveData, bool nodes, bool ways, bool relations, 
+		std::shared_ptr<IDataStreamHandler> enc);
 
 	int64_t GetAllocatedId(const std::string &type);
 	int64_t PeekNextAllocatedId(const std::string &type);

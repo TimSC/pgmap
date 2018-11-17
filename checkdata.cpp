@@ -14,9 +14,17 @@ class DataChecker : public IDataStreamHandler
 {
 private:
 	map<int64_t, vector<int64_t> > nodeIdVers, wayIdVers, relationIdVers;
-	map<int64_t, vector<int64_t> > nodeMemForWays;
+	std::shared_ptr<class PgTransaction> transaction;
+
+	void NodesExists(const std::set<int64_t> &objectIds,
+		std::set<int64_t> &exists, std::set<int64_t> &notExists);
+	void WaysExists(const std::set<int64_t> &objectIds,
+		std::set<int64_t> &exists, std::set<int64_t> &notExists);
+	void RelationsExists(const std::set<int64_t> &objectIds,
+		std::set<int64_t> &exists, std::set<int64_t> &notExists);
+
 public:
-	DataChecker();
+	DataChecker(std::shared_ptr<class PgTransaction> transactionIn);
 	virtual ~DataChecker();
 
 	virtual void Sync() {};
@@ -35,7 +43,8 @@ public:
 
 };
 
-DataChecker::DataChecker()
+DataChecker::DataChecker(std::shared_ptr<class PgTransaction> transactionIn):
+	transaction(transactionIn)
 {
 
 }
@@ -57,17 +66,6 @@ void DataChecker::Finish()
 		if(it->second.size() > 1)
 			cout << "Way " << it->first << " occurs " << it->second.size() << " times" << endl;
 	}
-	for(map<int64_t, vector<int64_t> >::iterator it = nodeMemForWays.begin(); it != nodeMemForWays.end(); it++)
-	{
-		map<int64_t, vector<int64_t> >::iterator it2 = nodeIdVers.find(it->first);
-		if(it2 == nodeIdVers.end())
-		{
-			cout << "Node " << it->first << " does not exist, but referenced by ways: ";
-			for(size_t i=0; i<it->second.size(); i++)
-				cout << it->second[i] << ", ";
-			cout << endl;
-		}
-	}
 	for(map<int64_t, vector<int64_t> >::iterator it = relationIdVers.begin(); it != relationIdVers.end(); it++)
 	{
 		if(it->second.size() > 1)
@@ -83,15 +81,18 @@ void DataChecker::StoreBounds(double x1, double y1, double x2, double y2)
 void DataChecker::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
-	map<int64_t, vector<int64_t> >::iterator it = nodeIdVers.find(objId);
-	if(it == nodeIdVers.end())
+	if(!transaction)
 	{
-		vector<int64_t> vers;
-		vers.push_back(metaData.version);
-		nodeIdVers[objId] = vers;
+		map<int64_t, vector<int64_t> >::iterator it = nodeIdVers.find(objId);
+		if(it == nodeIdVers.end())
+		{
+			vector<int64_t> vers;
+			vers.push_back(metaData.version);
+			nodeIdVers[objId] = vers;
+		}
+		else
+			it->second.push_back(metaData.version);
 	}
-	else
-		it->second.push_back(metaData.version);
 
 	if(lat < -90 or lat > 90)
 		cout << "Node " << objId << " lat out of range " << lat << endl;
@@ -102,30 +103,28 @@ void DataChecker::StoreNode(int64_t objId, const class MetaData &metaData,
 void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
-	map<int64_t, vector<int64_t> >::iterator it = wayIdVers.find(objId);
-	if(it == wayIdVers.end())
+	if(!transaction)
 	{
-		vector<int64_t> vers;
-		vers.push_back(metaData.version);
-		wayIdVers[objId] = vers;
-	}
-	else
-	{
-		it->second.push_back(metaData.version);
-	}
-
-	for(size_t i=0; i<refs.size(); i++)
-	{
-		int64_t nid = refs[i];
-		map<int64_t, vector<int64_t> >::iterator it2 = nodeMemForWays.find(nid);
-		if(it2 == nodeMemForWays.end())
+		map<int64_t, vector<int64_t> >::iterator it = wayIdVers.find(objId);
+		if(it == wayIdVers.end())
 		{
-			vector<int64_t> objIds;
-			objIds.push_back(objId);
-			nodeMemForWays[nid] = objIds;
+			vector<int64_t> vers;
+			vers.push_back(metaData.version);
+			wayIdVers[objId] = vers;
 		}
 		else
-			it2->second.push_back(objId);
+		{
+			it->second.push_back(metaData.version);
+		}
+	}
+
+	std::set<int64_t> nodeIds(refs.begin(), refs.end()), nodeExists, nodeNotExists;
+	this->NodesExists(nodeIds, nodeExists, nodeNotExists);
+	
+	for(auto it=nodeNotExists.begin(); it!=nodeNotExists.end(); it++)
+	{
+		cout << "Node " << (*it) << " does not exist, but referenced by way: ";
+		cout << objId << endl;
 	}
 }
 
@@ -133,27 +132,163 @@ void DataChecker::StoreRelation(int64_t objId, const class MetaData &metaData, c
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
-	map<int64_t, vector<int64_t> >::iterator it = relationIdVers.find(objId);
-	if(it == relationIdVers.end())
+	if(!transaction)
 	{
-		vector<int64_t> vers;
-		vers.push_back(metaData.version);
-		relationIdVers[objId] = vers;
+		map<int64_t, vector<int64_t> >::iterator it = relationIdVers.find(objId);
+		if(it == relationIdVers.end())
+		{
+			vector<int64_t> vers;
+			vers.push_back(metaData.version);
+			relationIdVers[objId] = vers;
+		}
+		else
+			it->second.push_back(metaData.version);
+	}
+
+	if(refTypeStrs.size() != refTypeStrs.size() or refTypeStrs.size() != refRoles.size())
+		throw runtime_error("Relation refs have inconsistent lengths");
+
+	std::set<int64_t> refNodeIds, refWayIds, refRelationIds, refExists, refNotExists;
+	for(size_t i=0; i<refTypeStrs.size(); i++)
+	{
+		if(refTypeStrs[i] == "node")
+			refNodeIds.insert(refIds[i]);
+		else if(refTypeStrs[i] == "way")
+			refWayIds.insert(refIds[i]);
+		else if(refTypeStrs[i] == "relation")
+			refRelationIds.insert(refIds[i]);
+	}
+
+	this->NodesExists(refNodeIds, refExists, refNotExists);	
+	for(auto it=refNotExists.begin(); it!=refNotExists.end(); it++)
+		cout << "Node " << (*it) << " does not exist, but referenced by relation: " << objId << endl;
+
+	refExists.clear();
+	refNotExists.clear();
+	this->WaysExists(refWayIds, refExists, refNotExists);	
+	for(auto it=refNotExists.begin(); it!=refNotExists.end(); it++)
+		cout << "Way " << (*it) << " does not exist, but referenced by relation: " << objId << endl;
+
+	refExists.clear();
+	refNotExists.clear();
+	this->RelationsExists(refRelationIds, refExists, refNotExists);	
+	for(auto it=refNotExists.begin(); it!=refNotExists.end(); it++)
+		cout << "Relation " << (*it) << " does not exist, but referenced by relation: " << objId << endl;
+
+}
+
+void DataChecker::NodesExists(const std::set<int64_t> &objectIds,
+	std::set<int64_t> &exists, std::set<int64_t> &notExists)
+{
+	if(objectIds.size()==0) return;
+
+	if(!transaction)
+	{
+		for(auto it=objectIds.begin(); it!=objectIds.end(); it++)
+		{
+			if(nodeIdVers.find(*it) != nodeIdVers.end())
+				exists.insert(*it);
+			else
+				notExists.insert(*it);
+		}
 	}
 	else
-		it->second.push_back(metaData.version);
+	{
+		shared_ptr<class OsmData> osmData(new class OsmData());
+		transaction->GetObjectsById("node", objectIds, osmData);
+		std::set<int64_t> inDatabase;
+		for(size_t i=0; i<osmData->nodes.size(); i++)
+			inDatabase.insert(osmData->nodes[i].objId);
 
-	//TODO check relation members exist
+		for(auto it=objectIds.begin(); it!=objectIds.end(); it++)
+		{
+			if(inDatabase.find(*it) != inDatabase.end())
+				exists.insert(*it);
+			else
+				notExists.insert(*it);
+		}
+	}
+}
+
+void DataChecker::WaysExists(const std::set<int64_t> &objectIds,
+	std::set<int64_t> &exists, std::set<int64_t> &notExists)
+{
+	if(objectIds.size()==0) return;
+
+	if(!transaction)
+	{
+		for(auto it=objectIds.begin(); it!=objectIds.end(); it++)
+		{
+			if(wayIdVers.find(*it) != wayIdVers.end())
+				exists.insert(*it);
+			else
+				notExists.insert(*it);
+		}
+	}
+	else
+	{
+		shared_ptr<class OsmData> osmData(new class OsmData());
+		transaction->GetObjectsById("way", objectIds, osmData);
+		std::set<int64_t> inDatabase;
+		for(size_t i=0; i<osmData->ways.size(); i++)
+			inDatabase.insert(osmData->ways[i].objId);
+
+		for(auto it=objectIds.begin(); it!=objectIds.end(); it++)
+		{
+			if(inDatabase.find(*it) != inDatabase.end())
+				exists.insert(*it);
+			else
+				notExists.insert(*it);
+		}
+	}
+}
+
+void DataChecker::RelationsExists(const std::set<int64_t> &objectIds,
+	std::set<int64_t> &exists, std::set<int64_t> &notExists)
+{
+	if(objectIds.size()==0) return;
+
+	if(!transaction)
+	{
+		for(auto it=objectIds.begin(); it!=objectIds.end(); it++)
+		{
+			if(relationIdVers.find(*it) != relationIdVers.end())
+				exists.insert(*it);
+			else
+				notExists.insert(*it);
+		}
+	}
+	else
+	{
+		shared_ptr<class OsmData> osmData(new class OsmData());
+		transaction->GetObjectsById("relation", objectIds, osmData);
+		std::set<int64_t> inDatabase;
+		for(size_t i=0; i<osmData->relations.size(); i++)
+			inDatabase.insert(osmData->relations[i].objId);
+
+		for(auto it=objectIds.begin(); it!=objectIds.end(); it++)
+		{
+			if(inDatabase.find(*it) != inDatabase.end())
+				exists.insert(*it);
+			else
+				notExists.insert(*it);
+		}
+	}
 }
 
 int main(int argc, char **argv)
 {
-	shared_ptr<class IDataStreamHandler> dataChecker(new class DataChecker());
+	std::shared_ptr<class PgTransaction> transaction;
+
 	if(argc > 1)
 	{
 		string argv1 = argv[1];
 		if (argv1!="db")
-			LoadOsmFromFile(argv[1], dataChecker);	
+		{
+			shared_ptr<class IDataStreamHandler> dataChecker(new class DataChecker(transaction));
+
+			LoadOsmFromFile(argv[1], dataChecker);
+		}
 		else
 		{
 			cout << "Reading settings from config.cfg" << endl;
@@ -161,10 +296,13 @@ int main(int argc, char **argv)
 			ReadSettingsFile("config.cfg", config);
 
 			string cstr = GeneratePgConnectionString(config);
-			class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+			class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], 
+				config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 
-			std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
-			transaction->Dump(false, dataChecker);
+			transaction = pgMap.GetTransaction("ACCESS SHARE");
+			shared_ptr<class IDataStreamHandler> dataChecker(new class DataChecker(transaction));
+
+			transaction->Dump(false, false, true, true, dataChecker);
 		}
 	}
 	else

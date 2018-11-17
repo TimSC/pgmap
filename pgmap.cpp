@@ -1044,7 +1044,8 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 /**
 * Dump live objects. Only current nodes are dumped, not old (non-visible) nodes.
 */
-void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
+void PgTransaction::Dump(bool order, bool nodes, bool ways, bool relations, 
+	std::shared_ptr<IDataStreamHandler> enc)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1054,21 +1055,30 @@ void PgTransaction::Dump(bool order, std::shared_ptr<IDataStreamHandler> enc)
 		throw runtime_error("Transaction has been deleted");
 	enc->StoreIsDiff(false);
 
-	DumpNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+	if(nodes)
+	{
+		DumpNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpNodes(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+		DumpNodes(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
 
-	enc->Reset();
+		enc->Reset();
+	}
 
-	DumpWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+	if(ways)
+	{
+		DumpWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-	DumpWays(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+		DumpWays(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
 
-	enc->Reset();
-		
-	DumpRelations(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+		enc->Reset();
+	}
 
-	DumpRelations(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+	if(relations)
+	{	
+		DumpRelations(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+
+		DumpRelations(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+	}
 
 	enc->Finish();
 }

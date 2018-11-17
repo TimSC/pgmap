@@ -39,7 +39,7 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &
 	if(order)
 		sql << " ORDER BY " << liveNodeTable << ".id";
 	sql << ";";
-	cout << sql.str() << endl;
+	//cout << sql.str() << endl;
 
 	pqxx::icursorstream cursor( *work, sql.str(), "nodecursor", 1000 );	
 

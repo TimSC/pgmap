@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 	bool order = true;
 
 	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
-	transaction->Dump(order, enc);
+	transaction->Dump(order, true, true, true, enc);
 
 	delete gzipEnc;
 	outfi.close();
