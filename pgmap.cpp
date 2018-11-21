@@ -643,7 +643,7 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 	if(type == "way")
 	{
 		if (outData->ways.size() != 1)
-			throw runtime_error("Unexpected number of objects in intermediate result");
+			return; //Unexpected number of objects in intermediate result
 		class OsmWay &mainWay = outData->ways[0];
 
 		std::set<int64_t> memberNodes;
@@ -654,7 +654,7 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 	else if(type == "relation")
 	{
 		if (outData->relations.size() != 1)
-			throw runtime_error("Unexpected number of objects in intermediate result");
+			return; //Unexpected number of objects in intermediate result
 		class OsmRelation &mainRelation = outData->relations[0];
 
 		std::set<int64_t> memberNodes, memberWays, memberRelations;
