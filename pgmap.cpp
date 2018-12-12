@@ -1858,6 +1858,21 @@ bool PgAdmin::RefreshMaxChangesetUid(int verbose, class PgMapError &errStr)
 	return true;
 }
 
+bool PgAdmin::GenerateUsernameTable(int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbGenerateUsernameTable(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
+		this->tableModPrefix, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+
+	return true;
+}
+
 bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

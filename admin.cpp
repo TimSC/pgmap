@@ -57,7 +57,8 @@ int main(int argc, char **argv)
 		cout << "5. Apply diffs" << endl;
 		cout << "6. Refresh max IDs" << endl;
 		cout << "7. Import changetset metadata" << endl;
-		cout << "8. Refresh max changeset IDs and UIDs" << endl << endl;
+		cout << "8. Refresh max changeset IDs and UIDs" << endl;
+		cout << "9. Build username table" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
 		cout << "b. Reset test tables" << endl;
 		cout << "c. Check nodes exist for ways" << endl;
@@ -204,6 +205,24 @@ int main(int argc, char **argv)
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
 			bool ok = admin->RefreshMaxChangesetUid(verbose, errStr);
+
+			if(ok)
+			{
+				admin->Commit();
+				cout << "All done!" << endl;
+			}
+			else
+			{
+				cout << errStr.errStr << endl;
+				admin->Abort();
+			}
+			continue;
+		}
+
+		if(inputStr == "9")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("EXCLUSIVE");
+			bool ok = admin->GenerateUsernameTable(verbose, errStr);
 
 			if(ok)
 			{

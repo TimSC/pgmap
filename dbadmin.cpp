@@ -7,6 +7,7 @@
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include <map>
+#include <set>
 #include <boost/filesystem.hpp>
 #include <fstream>
 using namespace std;
@@ -130,7 +131,8 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags "+j+", open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
-
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"usernames")+" (uid INTEGER, timestamp BIGINT, username TEXT);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	return ok;
 }
 
@@ -175,6 +177,8 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"meta")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"changesets")+";";
+	ok = DbExec(work, sql, errStr, nullptr, verbose);
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"usernames")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 	return ok;	
 
@@ -380,6 +384,12 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"changesets")+"(geom);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); 
 	}
+
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"usernames")==0)
+	{
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"usernames")+" ADD PRIMARY KEY (uid);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	}
 	return ok;
 }
 
@@ -490,6 +500,102 @@ bool DbRefreshMaxChangesetUid(pqxx::connection &c, pqxx::transaction_base *work,
 		tableStaticPrefix, tableTestPrefix, 
 		errStr);
 	if(!ok) return false;
+	return true;
+}
+
+bool ExtractUsernamesFromTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tableName, 
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	stringstream sql;
+	sql << "SELECT uid, username FROM " << tableName << ";";
+
+	int step = 100;
+	pqxx::icursorstream cursor( *work, sql.str(), "buildusernames", step );	
+
+	string insertsql = "INSERT INTO "+c.quote_name(tablePrefix+"usernames")+" (uid, username) VALUES ($1, $2);";
+	c.prepare(tablePrefix+"insertusername", insertsql);
+
+	string updatesql = "UPDATE "+ c.quote_name(tablePrefix+"usernames")+" SET username=$2";
+	updatesql += " WHERE uid = $1;";
+	c.prepare(tablePrefix+"updateusername", updatesql);
+
+	set<int> foundUids;
+
+	while(true)
+	{
+		pqxx::result rows;
+		cursor.get(rows);
+		if ( rows.empty() )
+			break;
+
+		int uidCol = rows.column_number("uid");
+		int usernameCol = rows.column_number("username");
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) 
+		{
+			if (c[uidCol].is_null() or c[usernameCol].is_null())
+				continue;
+			
+			int64_t uid = c[uidCol].as<int64_t>();
+			if(foundUids.find(uid) != foundUids.end()) continue; //Skip repeatedly inserting the same data
+			string username = c[usernameCol].as<string>();
+			foundUids.insert(uid);
+
+			pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updateusername");
+			invoc(uid);
+			invoc(username);
+			pqxx::result result = invoc.exec();
+			int rowsAffected = result.affected_rows();
+
+			if(rowsAffected == 0)
+			{
+				pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertusername");
+				invoc(uid);
+				invoc(username);
+				invoc.exec();
+			}
+		}
+	}
+
+	return true;
+}
+
+bool ExtractUsernamesFromTableSet(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	string oNodeTable = c.quote_name(tablePrefix + "oldnodes");
+	string oWayTable = c.quote_name(tablePrefix + "oldways");
+	string oRelationTable = c.quote_name(tablePrefix + "oldrelations");
+	string lNodeTable = c.quote_name(tablePrefix + "livenodes");
+	string lWayTable = c.quote_name(tablePrefix + "liveways");
+	string lRelationTable = c.quote_name(tablePrefix + "liverelations");
+
+	ExtractUsernamesFromTable(c, work, verbose, oNodeTable, tablePrefix, errStr);
+	ExtractUsernamesFromTable(c, work, verbose, oWayTable, tablePrefix, errStr);
+	ExtractUsernamesFromTable(c, work, verbose, oRelationTable, tablePrefix, errStr);
+	ExtractUsernamesFromTable(c, work, verbose, lNodeTable, tablePrefix, errStr);
+	ExtractUsernamesFromTable(c, work, verbose, lWayTable, tablePrefix, errStr);
+	ExtractUsernamesFromTable(c, work, verbose, lRelationTable, tablePrefix, errStr);
+
+	return true;
+}
+
+bool DbGenerateUsernameTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tableStaticPrefix, 
+	const std::string &tableModPrefix, 
+	const std::string &tableTestPrefix, 
+	std::string &errStr)
+{
+	ExtractUsernamesFromTableSet(c, work, verbose, tableStaticPrefix, errStr);
+	ExtractUsernamesFromTableSet(c, work, verbose, tableModPrefix, errStr);
+	ExtractUsernamesFromTableSet(c, work, verbose, tableTestPrefix, errStr);
+
 	return true;
 }
 
