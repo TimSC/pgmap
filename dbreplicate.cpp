@@ -3,7 +3,8 @@
 #include <set>
 using namespace std;
 
-void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames,
+	const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	class OsmChange &out)
@@ -26,7 +27,7 @@ void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, co
 	std::shared_ptr<class OsmData> data = make_shared<class OsmData>();
 	int count = 1;
 	while(count > 0)
-		count = NodeResultsToEncoder(cursor, data);
+		count = NodeResultsToEncoder(cursor, usernames, data);
 
 	for(size_t i=0; i < data->nodes.size(); i++)
 	{
@@ -35,7 +36,8 @@ void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, co
 	}
 }
 
-void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames,
+	const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	class OsmChange &out)
@@ -58,7 +60,7 @@ void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, con
 	std::shared_ptr<class OsmData> data = make_shared<class OsmData>();
 	int count = 1;
 	while (count > 0)
-		count = WayResultsToEncoder(cursor, data);
+		count = WayResultsToEncoder(cursor, usernames, data);
 
 	for(size_t i=0; i < data->ways.size(); i++)
 	{
@@ -67,7 +69,8 @@ void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, con
 	}
 }
 
-void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames,
+	const string &tablePrefix, 
 	bool selectOld,
 	int64_t timestampStart, int64_t timestampEnd,
 	class OsmChange &out)
@@ -89,7 +92,7 @@ void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work
 
 	std::shared_ptr<class OsmData> data = make_shared<class OsmData>();
 	set<int64_t> empty;
-	RelationResultsToEncoder(cursor, empty, data);
+	RelationResultsToEncoder(cursor, usernames, empty, data);
 
 	for(size_t i=0; i < data->relations.size(); i++)
 	{

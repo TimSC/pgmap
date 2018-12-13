@@ -59,13 +59,16 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pq
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
 }
 
-int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, std::shared_ptr<IDataStreamHandler> enc)
+int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, class DbUsernameLookup &usernames, 
+	std::shared_ptr<IDataStreamHandler> enc)
 {
 	pqxx::icursorstream *c = cursor.get();
-	return NodeResultsToEncoder(*c, enc);
+	return NodeResultsToEncoder(*c, usernames, enc);
 }
 
-void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const std::set<int64_t> &nodeIds, std::shared_ptr<IDataStreamHandler> enc)
 {
@@ -107,11 +110,13 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 
 		int records = 1;
 		while (records>0)
-			records = WayResultsToEncoder(cursor, enc);
+			records = WayResultsToEncoder(cursor, usernames, enc);
 	}
 }
 
-void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -148,10 +153,12 @@ void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, const s
 
 	count = 1;
 	while(count > 0)
-		count = NodeResultsToEncoder(cursor, enc);
+		count = NodeResultsToEncoder(cursor, usernames, enc);
 }
 
-void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	char qtype, const set<int64_t> &qids, 
 	set<int64_t>::const_iterator &it, size_t step,
@@ -189,11 +196,13 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 
 	pqxx::icursorstream cursor( *work, sql, "relationscontainingobjects", 1000 );	
 
-	RelationResultsToEncoder(cursor, skipIds, enc);
+	RelationResultsToEncoder(cursor, usernames, skipIds, enc);
 }
 
 //Can this be combined into GetLiveNodesById?
-void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -231,11 +240,13 @@ void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, const st
 	set<int64_t> empty;
 	int records = 1;
 	while(records > 0)
-		records = WayResultsToEncoder(cursor, enc);
+		records = WayResultsToEncoder(cursor, usernames, enc);
 }
 
 //Can this be combined into GetLiveNodesById?
-void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -271,10 +282,12 @@ void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, con
 	pqxx::icursorstream cursor( *work, sql, "relationcursor", 1000 );	
 
 	set<int64_t> empty;
-	RelationResultsToEncoder(cursor, empty, enc);
+	RelationResultsToEncoder(cursor, usernames, empty, enc);
 }
 
-void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::string &objType, const std::string &liveOrOld,
 	const std::set<std::pair<int64_t, int64_t> > &objIdVers, std::set<std::pair<int64_t, int64_t> >::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -305,18 +318,20 @@ void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, cons
 	count = 1;
 	if(objType == "node") 
 		while(count > 0)
-			count = NodeResultsToEncoder(cursor, enc);
+			count = NodeResultsToEncoder(cursor, usernames, enc);
 	if(objType == "way") 
 		while(count > 0)
-			count = WayResultsToEncoder(cursor, enc);
+			count = WayResultsToEncoder(cursor, usernames, enc);
 	if(objType == "relation") 
 	{
 		std::set<int64_t> skipIds;
-		RelationResultsToEncoder(cursor, skipIds, enc);
+		RelationResultsToEncoder(cursor, usernames, skipIds, enc);
 	}
 }
 
-void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::string &objType, const std::string &liveOrOld,
 	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
@@ -347,18 +362,20 @@ void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work, 
 	count = 1;
 	if(objType == "node") 
 		while(count > 0)
-			count = NodeResultsToEncoder(cursor, enc);
+			count = NodeResultsToEncoder(cursor, usernames, enc);
 	if(objType == "way") 
 		while(count > 0)
-			count = WayResultsToEncoder(cursor, enc);
+			count = WayResultsToEncoder(cursor, usernames, enc);
 	if(objType == "relation") 
 	{
 		std::set<int64_t> skipIds;
-		RelationResultsToEncoder(cursor, skipIds, enc);
+		RelationResultsToEncoder(cursor, usernames, skipIds, enc);
 	}
 }
 
-void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	int64_t existsAtTimestamp,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -382,10 +399,12 @@ void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, cons
 
 	int ret = 1;
 	while(ret > 0)
-		ret = NodeResultsToEncoder(cursor, enc);
+		ret = NodeResultsToEncoder(cursor, usernames, enc);
 }
 
-void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut)
 {
 	string wayMemTable = c.quote_name(tablePrefix + "way_mems");

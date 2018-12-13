@@ -67,7 +67,8 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 
 // *******************************************************
 
-bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
@@ -93,11 +94,12 @@ bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work
 
 	int count = 1;
 	while(count > 0)
-		count = NodeResultsToEncoder(cur, enc);
+		count = NodeResultsToEncoder(cur, usernames, enc);
 	return true;
 }
 
-bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
@@ -127,11 +129,12 @@ bool GetOldNewWayByChangeset(pqxx::connection &c, pqxx::transaction_base *work, 
 
 	int records = 1;
 	while (records>0)
-		records = WayResultsToEncoder(cursor, enc);
+		records = WayResultsToEncoder(cursor, usernames, enc);
 	return true;
 }
 
-bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
 	int64_t changesetId,
@@ -161,58 +164,62 @@ bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::transaction_base *w
 	pqxx::icursorstream cursor( *work, sql.str(), "relationsbychangeset", 1000 );	
 
 	set<int64_t> emptySkipIds;
-	RelationResultsToEncoder(cursor, emptySkipIds, enc);
+	RelationResultsToEncoder(cursor, usernames, emptySkipIds, enc);
 	return true;
 }
 
 // **********************************************
 
-bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	bool ok = GetOldNewNodesByChangeset(c, work, tablePrefix, 
+	bool ok = GetOldNewNodesByChangeset(c, work, usernames, tablePrefix, 
 		excludeTablePrefix,
 		"old", changesetId,
  		enc);
 	if(!ok) return false;
 
-	return GetOldNewNodesByChangeset(c, work, tablePrefix, 
+	return GetOldNewNodesByChangeset(c, work, usernames, tablePrefix, 
 		excludeTablePrefix,
 		"live", changesetId,
 		enc);
 }
 
-bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	bool ok = GetOldNewWayByChangeset(c, work, tablePrefix, 
+	bool ok = GetOldNewWayByChangeset(c, work, usernames, tablePrefix, 
 		excludeTablePrefix,
 		"old", changesetId,
  		enc);
 	if(!ok) return false;
 
-	return GetOldNewWayByChangeset(c, work, tablePrefix, 
+	return GetOldNewWayByChangeset(c, work, usernames, tablePrefix, 
 		excludeTablePrefix,
 		"live", changesetId,
 		enc);
 }
 
-bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	bool ok = GetOldNewRelationByChangeset(c, work, tablePrefix, 
+	bool ok = GetOldNewRelationByChangeset(c, work, usernames, tablePrefix, 
 		excludeTablePrefix,
 		"old", changesetId,
  		enc);
 	if(!ok) return false;
 
-	return GetOldNewRelationByChangeset(c, work, tablePrefix, 
+	return GetOldNewRelationByChangeset(c, work, usernames, tablePrefix, 
 		excludeTablePrefix,
 		"live", changesetId,
 		enc);

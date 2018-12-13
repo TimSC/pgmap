@@ -4,6 +4,7 @@
 #include "dbstore.h"
 #include "dbdecode.h"
 #include "dbquery.h"
+#include "dbusername.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include <map>
@@ -52,7 +53,8 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = ClearTable(c, work, tableActivePrefix + "relation_mems_w", errStr);     if(!ok) return false;
 	ok = ClearTable(c, work, tableActivePrefix + "relation_mems_r", errStr);     if(!ok) return false;
 	ok = ClearTable(c, work, tableActivePrefix + "nextids", errStr);             if(!ok) return false;
-	ok = ClearTable(c, work, tableActivePrefix + "changesets", errStr);             if(!ok) return false;
+	ok = ClearTable(c, work, tableActivePrefix + "changesets", errStr);          if(!ok) return false;
+	ok = ClearTable(c, work, tableActivePrefix + "username", errStr);            if(!ok) return false;
 
 	map<string, int64_t> nextIdMap;
 	ok = GetNextObjectIds(c, work, 
@@ -741,9 +743,11 @@ size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work,
 	//Query member nodes in database
 	std::set<int64_t>::const_iterator it = nodeIds.begin();
 	std::shared_ptr<class OsmData> data(new class OsmData());
+	class DbUsernameLookup dbUsernameLookup;
 	while(it != nodeIds.end())
 	{
-		GetLiveNodesById(c, work, nodeStaticPrefix, 
+		GetLiveNodesById(c, work, dbUsernameLookup,
+			nodeStaticPrefix, 
 			nodeActivePrefix, 
 			nodeIds, it, 
 			1000, data);
@@ -752,7 +756,8 @@ size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work,
 	it = nodeIds.begin();
 	while(it != nodeIds.end())
 	{
-		GetLiveNodesById(c, work, nodeActivePrefix, 
+		GetLiveNodesById(c, work, dbUsernameLookup,
+			nodeActivePrefix, 
 			"", 
 			nodeIds, it, 
 			1000, data);

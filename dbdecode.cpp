@@ -67,7 +67,8 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 	}
 }
 
-int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc)
+int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
+	std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -106,7 +107,8 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 		double lon = atof(c[lonCol].c_str());
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		
+		metaData.username = usernames.Find(metaData.uid);
+	
 		DecodeTags(c, tagsCol, tagHandler);
 		count ++;
 
@@ -123,7 +125,8 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStrea
 	return count;
 }
 
-int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc)
+int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
+	std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -161,7 +164,8 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 		int64_t objId = c[idCol].as<int64_t>();
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		
+		metaData.username = usernames.Find(metaData.uid);
+
 		DecodeTags(c, tagsCol, tagHandler);
 
 		DecodeWayMembers(c, membersCol, wayMemHandler);
@@ -180,7 +184,8 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStream
 	return count;
 }
 
-void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc)
+void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
+	const set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
 	class MetaData metaData;
@@ -224,6 +229,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, const set<int64_t> &s
 				continue;
 
 			DecodeMetadata(c, metaDataCols, metaData);
+			metaData.username = usernames.Find(metaData.uid);
 			
 			DecodeTags(c, tagsCol, tagHandler);
 

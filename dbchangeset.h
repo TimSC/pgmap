@@ -5,17 +5,20 @@
 #include <string>
 #include "pgmap.h"
 
-bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
+bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc);
 
-bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
+bool GetAllWaysByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc);
 
-bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
+bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
 	int64_t changesetId,
 	std::shared_ptr<IDataStreamHandler> enc);

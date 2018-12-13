@@ -9,7 +9,7 @@ all: dump extract admin applydiffs osm2csv swigpy2 checkdata
 	g++ $(cppflags) -fPIC -c -o $@ $<
 
 common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
-	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o pgmap.o \
+	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o dbusername.o pgmap.o \
 	cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
 	cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
 
@@ -46,4 +46,7 @@ swigpy3: pgmap.i $(common)
 
 quickinit: quickinit.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
+
+clean:
+	rm *.o admin dump extract applydiffs osm2csv checkdata quickinit
 

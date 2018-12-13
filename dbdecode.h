@@ -7,6 +7,7 @@
 #include "util.h"
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
+#include "dbusername.h"
 
 struct MetaDataCols
 {
@@ -25,8 +26,9 @@ void DecodeWayMembers(const pqxx::result::const_iterator &c, int membersCol, Jso
 void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int memberRolesCols, 
 	JsonToRelMembers &handler, JsonToRelMemberRoles &roles);
 
-int NodeResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc);
-int WayResultsToEncoder(pqxx::icursorstream &cursor, std::shared_ptr<IDataStreamHandler> enc);
-void RelationResultsToEncoder(pqxx::icursorstream &cursor, const std::set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc);
+int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, std::shared_ptr<IDataStreamHandler> enc);
+int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, std::shared_ptr<IDataStreamHandler> enc);
+void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
+	const std::set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc);
 
 #endif //_DB_DECODE_H

@@ -150,8 +150,10 @@ PgWork& PgWork::operator=(const PgWork &obj)
 PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn, 
 		const string &tableActivePrefixIn,
 		shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<class PgWork> sharedWorkIn):
-	sharedWork(sharedWorkIn)
+		std::shared_ptr<class PgWork> sharedWorkIn,
+		class DbUsernameLookup &dbUsernameLookupIn):
+	sharedWork(sharedWorkIn),
+	dbUsernameLookup(dbUsernameLookupIn)
 {
 	mapQueryActive = false;
 	dbconn = db;
@@ -250,7 +252,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 2)
 	{
-		int ret = LiveNodesInBboxContinue(cursor, retainNodeIds);
+		int ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup, retainNodeIds);
 		if(ret > 0)
 			return 0;
 		if(ret < 0)
@@ -270,10 +272,12 @@ int PgMapQuery::Continue()
 		if(this->mapQueryBbox.size() == 4)
 		{
 			//Get nodes in bbox (active db)
-			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryBbox, 0, "");
+			cursor = LiveNodesInBboxStart(*dbconn, work.get(), 
+				this->tableActivePrefix, this->mapQueryBbox, 0, "");
 		}
 		else
-			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableActivePrefix, this->mapQueryWkt, 4326, "");
+			cursor = LiveNodesInWktStart(*dbconn, work.get(), 
+				this->tableActivePrefix, this->mapQueryWkt, 4326, "");
 
 		this->mapQueryPhase ++;
 		if(verbose >= 1)
@@ -283,7 +287,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 4)
 	{
-		int ret = LiveNodesInBboxContinue(cursor, retainNodeIds);
+		int ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup, retainNodeIds);
 		if(ret > 0)
 			return 0;
 		if(ret < 0)
@@ -302,9 +306,11 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way objects in memory until we have finished encoding nodes
-		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
+		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
 
-		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
+		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
 		cout << "Found " << this->retainWayIds->wayIds.size() << " ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
@@ -327,7 +333,8 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
+			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -344,7 +351,8 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(*dbconn, work.get(), this->tableActivePrefix, "", this->extraNodes, 
+			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "", this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -364,7 +372,8 @@ int PgMapQuery::Continue()
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, 
+			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, this->tableActivePrefix, 
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -381,7 +390,8 @@ int PgMapQuery::Continue()
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(*dbconn, work.get(), this->tableActivePrefix, "",
+			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "",
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -400,7 +410,8 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, 
 				this->tableActivePrefix, 
 				'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -417,7 +428,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != retainNodeIds->nodeIds.end())
 		{
-			GetLiveRelationsForObjects(*dbconn, work.get(),
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
 				this->tableActivePrefix, "",
 				'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -435,7 +446,8 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, 
 				this->tableActivePrefix, 
 				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -453,7 +465,7 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveRelationsForObjects(*dbconn, work.get(),
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
 				this->tableActivePrefix, "",
 				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
 			return 0;
@@ -474,7 +486,8 @@ int PgMapQuery::Continue()
 	{
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
+			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, 
 				this->tableActivePrefix, 
 				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
 				retainRelationIds->relationIds, retainRelationIds);
@@ -494,6 +507,7 @@ int PgMapQuery::Continue()
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
 			GetLiveRelationsForObjects(*dbconn, work.get(),
+				this->dbUsernameLookup,
 				this->tableActivePrefix, "",
 				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
 				retainRelationIds->relationIds, retainRelationIds);
@@ -567,11 +581,13 @@ shared_ptr<class PgMapQuery> PgTransaction::GetQueryMgr()
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
-	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, this->dbconn, this->sharedWork));
+	shared_ptr<class PgMapQuery> out(new class PgMapQuery(tableStaticPrefix, tableActivePrefix, 
+		this->dbconn, this->sharedWork, this->dbUsernameLookup));
 	return out;
 }
 
-void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, std::shared_ptr<IDataStreamHandler> out)
+void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> out)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -586,34 +602,40 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveNodesById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
+			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveNodesById(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, 
+			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "", objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "way")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveWaysById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
+			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveWaysById(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, 
+			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "", objectIds, 
 				it, 1000, out);
 	}
 	else if(type == "relation")
 	{
 		std::set<int64_t>::const_iterator it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveRelationsById(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix,
+			GetLiveRelationsById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, this->tableActivePrefix,
 				objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
 		while(it != objectIds.end())
-			GetLiveRelationsById(*dbconn, work.get(), this->tableActivePrefix, "",
+			GetLiveRelationsById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "",
 				objectIds, 
 				it, 1000, out);
 	}
@@ -622,7 +644,8 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 
 }
 
-void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId, std::shared_ptr<IDataStreamHandler> out)
+void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId, 
+	std::shared_ptr<IDataStreamHandler> out)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -701,19 +724,23 @@ void PgTransaction::GetObjectsByIdVer(const std::string &type, const std::set<st
 	//Query all tables that might contain object of this id and version
 	std::set<std::pair<int64_t, int64_t> >::const_iterator it = objectIdVers.begin();
 	while(it != objectIdVers.end())
-		DbGetObjectsByIdVer(*dbconn, work.get(), this->tableStaticPrefix, type, "old", objectIdVers, 
+		DbGetObjectsByIdVer(*dbconn, work.get(), this->dbUsernameLookup, 
+			this->tableStaticPrefix, type, "old", objectIdVers, 
 			it, 1000, out);
 	it = objectIdVers.begin();
 	while(it != objectIdVers.end())
-		DbGetObjectsByIdVer(*dbconn, work.get(), this->tableStaticPrefix, type, "live", objectIdVers, 
+		DbGetObjectsByIdVer(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableStaticPrefix, type, "live", objectIdVers, 
 			it, 1000, out);
 	it = objectIdVers.begin();
 	while(it != objectIdVers.end())
-		DbGetObjectsByIdVer(*dbconn, work.get(), this->tableActivePrefix, type, "old", objectIdVers, 
+		DbGetObjectsByIdVer(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, type, "old", objectIdVers, 
 			it, 1000, out);
 	it = objectIdVers.begin();
 	while(it != objectIdVers.end())
-		DbGetObjectsByIdVer(*dbconn, work.get(), this->tableActivePrefix, type, "live", objectIdVers, 
+		DbGetObjectsByIdVer(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, type, "live", objectIdVers, 
 			it, 1000, out);
 }
 
@@ -732,19 +759,23 @@ void PgTransaction::GetObjectsHistoryById(const std::string &type, const std::se
 	//Query all tables that might contain object of this id and version
 	std::set<int64_t>::const_iterator it = objectIds.begin();
 	while(it != objectIds.end())
-		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableStaticPrefix, type, "old", objectIds, 
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableStaticPrefix, type, "old", objectIds, 
 			it, 1000, out);
 	it = objectIds.begin();
 	while(it != objectIds.end())
-		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableStaticPrefix, type, "live", objectIds, 
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableStaticPrefix, type, "live", objectIds, 
 			it, 1000, out);
 	it = objectIds.begin();
 	while(it != objectIds.end())
-		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableActivePrefix, type, "old", objectIds, 
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, type, "old", objectIds, 
 			it, 1000, out);
 	it = objectIds.begin();
 	while(it != objectIds.end())
-		DbGetObjectsHistoryById(*dbconn, work.get(), this->tableActivePrefix, type, "live", objectIds, 
+		DbGetObjectsHistoryById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, type, "live", objectIds, 
 			it, 1000, out);
 }
 
@@ -784,9 +815,11 @@ void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
+	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
 
-	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->tableActivePrefix, "", objectIds, out);
+	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, "", objectIds, out);
 }
 
 void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
@@ -802,14 +835,16 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 	std::set<int64_t>::const_iterator it = objectIds.begin();
 	while(it != objectIds.end())
 	{
-		GetLiveRelationsForObjects(*dbconn, work.get(), this->tableStaticPrefix, 
+		GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableStaticPrefix, 
 			this->tableActivePrefix, 
 			type[0], objectIds, it, 1000, empty, out);
 	}
 	it = objectIds.begin();
 	while(it != objectIds.end())
 	{
-		GetLiveRelationsForObjects(*dbconn, work.get(), this->tableActivePrefix, "", 
+		GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, "", 
 			type[0], objectIds, it, 1000, empty, out);
 	}
 }
@@ -1016,29 +1051,41 @@ void PgTransaction::GetReplicateDiff(int64_t timestampStart, int64_t timestampEn
 		throw runtime_error("Transaction has been deleted");
 	std::shared_ptr<class OsmData> osmData(new class OsmData);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->dbUsernameLookup, 
+		this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, out);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffNodes(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, out);
+	GetReplicateDiffNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
+	GetReplicateDiffWays(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
+	GetReplicateDiffWays(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, out);
+	GetReplicateDiffWays(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffWays(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, out);
+	GetReplicateDiffWays(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, true, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, false, timestampStart, timestampEnd, out);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, false, timestampStart, timestampEnd, out);
 
-	GetReplicateDiffRelations(*dbconn, work.get(), this->tableActivePrefix, true, timestampStart, timestampEnd, out);
+	GetReplicateDiffRelations(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, true, timestampStart, timestampEnd, out);
 }
 
 /**
@@ -1057,27 +1104,27 @@ void PgTransaction::Dump(bool order, bool nodes, bool ways, bool relations,
 
 	if(nodes)
 	{
-		DumpNodes(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+		DumpNodes(*dbconn, work.get(), this->dbUsernameLookup, this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-		DumpNodes(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+		DumpNodes(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, "", order, enc);
 
 		enc->Reset();
 	}
 
 	if(ways)
 	{
-		DumpWays(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+		DumpWays(*dbconn, work.get(), this->dbUsernameLookup, this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-		DumpWays(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+		DumpWays(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, "", order, enc);
 
 		enc->Reset();
 	}
 
 	if(relations)
 	{	
-		DumpRelations(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, order, enc);
+		DumpRelations(*dbconn, work.get(), this->dbUsernameLookup, this->tableStaticPrefix, this->tableActivePrefix, order, enc);
 
-		DumpRelations(*dbconn, work.get(), this->tableActivePrefix, "", order, enc);
+		DumpRelations(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, "", order, enc);
 	}
 
 	enc->Finish();
@@ -1163,24 +1210,30 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 	std::shared_ptr<class OsmData> data(new class OsmData());
-	GetAllNodesByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
+	GetAllNodesByChangeset(*dbconn, work.get(), this->dbUsernameLookup, 
+		this->tableStaticPrefix,
 		"", changesetId,
 		data);
-	GetAllNodesByChangeset(*dbconn, work.get(), this->tableActivePrefix,
-		"", changesetId,
-		data);
-
-	GetAllWaysByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
-		"", changesetId,
-		data);
-	GetAllWaysByChangeset(*dbconn, work.get(), this->tableActivePrefix,
+	GetAllNodesByChangeset(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix,
 		"", changesetId,
 		data);
 
-	GetAllRelationsByChangeset(*dbconn, work.get(), this->tableStaticPrefix,
+	GetAllWaysByChangeset(*dbconn, work.get(), this->dbUsernameLookup,	
+		this->tableStaticPrefix,
 		"", changesetId,
 		data);
-	GetAllRelationsByChangeset(*dbconn, work.get(), this->tableActivePrefix,
+	GetAllWaysByChangeset(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix,
+		"", changesetId,
+		data);
+
+	GetAllRelationsByChangeset(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix,
+		"", changesetId,
+		data);
+	GetAllRelationsByChangeset(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix,
 		"", changesetId,
 		data);
 
@@ -1542,24 +1595,28 @@ bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox,
 
 	int ret = 1;
 	while (ret>0)
-		ret = LiveNodesInBboxContinue(cursor, nodesInBbox);
+		ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup, nodesInBbox);
 	
 	//Get old nodes from static tables
-	QueryOldNodesInBbox(*dbconn, work.get(), this->tableStaticPrefix, 
+	QueryOldNodesInBbox(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, 
 		bbox, 
 		existsAtTimestamp,
 		nodesInBbox);
 
 	//Get live nodes from active tables
-	cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableActivePrefix, 
+	cursor = LiveNodesInBboxStart(*dbconn, work.get(),
+		this->tableActivePrefix, 
 		bbox, existsAtTimestamp, "");
 
 	ret = 1;
 	while (ret>0)
-		ret = LiveNodesInBboxContinue(cursor, nodesInBbox);
+		ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup,
+			nodesInBbox);
 	
 	//Get old nodes from active tables
-	QueryOldNodesInBbox(*dbconn, work.get(), this->tableActivePrefix, 
+	QueryOldNodesInBbox(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, 
 		bbox, 
 		existsAtTimestamp,
 		nodesInBbox);
@@ -1602,9 +1659,11 @@ bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox,
 
 	//Find ID and version list of all possible way parents for initial nodes
 	std::set<std::pair<int64_t, int64_t> > parentWayIdVers;
-	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->tableStaticPrefix, 
+	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, 
 		nodeIds, parentWayIdVers);
-	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->tableActivePrefix, 
+	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, 
 		nodeIds, parentWayIdVers);
 
 	//Find latest versions of ways that contain nodes of interest and exist at the query timestamp

@@ -8,6 +8,7 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/osmxml.h"
 #include "cppo5m/OsmData.h"
+#include "dbusername.h"
 
 class PgMapError
 {
@@ -67,12 +68,14 @@ private:
 	std::shared_ptr<pqxx::icursorstream> cursor;
 	std::set<int64_t>::const_iterator setIterator;
 	IDataStreamHandler nullEncoder;
+	class DbUsernameLookup &dbUsernameLookup;
 
 public:
 	PgMapQuery(const std::string &tableStaticPrefixIn, 
 		const std::string &tableActivePrefixIn,
 		std::shared_ptr<pqxx::connection> &db,
-		std::shared_ptr<class PgWork> sharedWorkIn);
+		std::shared_ptr<class PgWork> sharedWorkIn,
+		class DbUsernameLookup &dbUsernameLookupIn);
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
@@ -91,6 +94,7 @@ private:
 	std::string connectionString;
 	std::string shareMode;
 	std::shared_ptr<class PgWork> sharedWork;
+	class DbUsernameLookup dbUsernameLookup;
 
 public:
 	PgTransaction(std::shared_ptr<pqxx::connection> dbconnIn,

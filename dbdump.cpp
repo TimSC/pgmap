@@ -5,7 +5,8 @@
 * Dump live nodes but skip node IDs that are in the excludeTablePrefix table. Only current
 * nodes are dumped, not old (non-visible) nodes.
 */
-void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -45,10 +46,11 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, const string &
 
 	int count = 1;
 	while(count > 0)
-		count = NodeResultsToEncoder(cursor, enc);
+		count = NodeResultsToEncoder(cursor, usernames, enc);
 }
 
-void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -77,10 +79,11 @@ void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, const string &t
 
 	int count = 1;
 	while (count > 0)
-		count = WayResultsToEncoder(cursor, enc);
+		count = WayResultsToEncoder(cursor, usernames, enc);
 }
 
-void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
@@ -108,6 +111,6 @@ void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, const stri
 	pqxx::icursorstream cursor( *work, sql.str(), "relationcursor", 1000 );	
 
 	set<int64_t> empty;
-	RelationResultsToEncoder(cursor, empty, enc);
+	RelationResultsToEncoder(cursor, usernames, empty, enc);
 }
 
