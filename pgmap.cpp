@@ -60,6 +60,7 @@ bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &pr
 		sql += ","+prefix+ "nextids";
 		sql += ","+prefix+ "changesets";
 		sql += ","+prefix+ "meta";
+		sql += ","+prefix+ "usernames";
 		sql += " IN "+accessMode+" MODE;";
 
 		work->exec(sql);
@@ -552,7 +553,8 @@ PgTransaction::PgTransaction(shared_ptr<pqxx::connection> dbconnIn,
 	const string &tableActivePrefixIn,
 	std::shared_ptr<class PgWork> sharedWorkIn,
 	const std::string &shareMode):
-	sharedWork(sharedWorkIn)
+	sharedWork(sharedWorkIn),
+	dbUsernameLookup(*dbconnIn.get(), sharedWork->work.get(), tableStaticPrefixIn, tableActivePrefixIn)
 {
 	dbconn = dbconnIn;
 	tableStaticPrefix = tableStaticPrefixIn;

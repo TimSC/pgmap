@@ -65,6 +65,19 @@ bool DbCheckIndexExists(pqxx::connection &c, pqxx::transaction_base *work,
 	return r.size() > 0;
 }
 
+bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tableName)
+{
+	// https://stackoverflow.com/a/24089729/4288232
+	string sql = "SELECT EXISTS (SELECT 1";
+	sql += " FROM   information_schema.tables";
+	sql += " WHERE  table_schema = 'public'";
+	sql += " AND    table_name = "+c.quote(tableName)+");";
+
+	pqxx::result r = work->exec(sql);
+	return r.size() > 0;
+}
+
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut)
 {
 	string sql = "SELECT current_setting('server_version_num');";

@@ -25,6 +25,9 @@ size_t DbCountPrimaryKeyCols(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbCheckIndexExists(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &indexName);
 
+bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tableName);
+
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut);
 
 #endif //_DB_COMMON_H
