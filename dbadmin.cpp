@@ -516,14 +516,7 @@ bool ExtractUsernamesFromTable(pqxx::connection &c, pqxx::transaction_base *work
 
 	int step = 100;
 	pqxx::icursorstream cursor( *work, sql.str(), "buildusernames", step );	
-
-	string insertsql = "INSERT INTO "+c.quote_name(tablePrefix+"usernames")+" (uid, username) VALUES ($1, $2);";
-	c.prepare(tablePrefix+"insertusername", insertsql);
-
-	string updatesql = "UPDATE "+ c.quote_name(tablePrefix+"usernames")+" SET username=$2";
-	updatesql += " WHERE uid = $1;";
-	c.prepare(tablePrefix+"updateusername", updatesql);
-
+	DbUpsertUsernamePrepare(c, work, tablePrefix);
 	set<int> foundUids;
 
 	while(true)
@@ -536,29 +529,18 @@ bool ExtractUsernamesFromTable(pqxx::connection &c, pqxx::transaction_base *work
 		int uidCol = rows.column_number("uid");
 		int usernameCol = rows.column_number("username");
 
-		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) 
+		for (pqxx::result::const_iterator ci = rows.begin(); ci != rows.end(); ++ci) 
 		{
-			if (c[uidCol].is_null() or c[usernameCol].is_null())
+			if (ci[uidCol].is_null() or ci[usernameCol].is_null())
 				continue;
 			
-			int64_t uid = c[uidCol].as<int64_t>();
+			int64_t uid = ci[uidCol].as<int64_t>();
 			if(foundUids.find(uid) != foundUids.end()) continue; //Skip repeatedly inserting the same data
-			string username = c[usernameCol].as<string>();
+			string username = ci[usernameCol].as<string>();
 			foundUids.insert(uid);
 
-			pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updateusername");
-			invoc(uid);
-			invoc(username);
-			pqxx::result result = invoc.exec();
-			int rowsAffected = result.affected_rows();
-
-			if(rowsAffected == 0)
-			{
-				pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertusername");
-				invoc(uid);
-				invoc(username);
-				invoc.exec();
-			}
+			DbUpsertUsername(c, work, tablePrefix, 
+				uid, username);
 		}
 	}
 

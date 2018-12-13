@@ -9,6 +9,7 @@
 #include "dbfilters.h"
 #include "dbchangeset.h"
 #include "dbmeta.h"
+#include "dbcommon.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
@@ -1575,6 +1576,31 @@ bool PgTransaction::SetMetaValue(const std::string &key,
 		errStrNative);
 	errStr.errStr = errStrNative;
 	return ret;
+}
+
+bool PgTransaction::UpdateUsername(int uid, const std::string &username,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	string tableName = this->tableActivePrefix+"usernames";
+	if(!DbCheckTableExists(*dbconn, work.get(), tableName))
+	{
+		errStr.errStr = "Username table does not exist";
+		return false;
+	}
+
+	DbUpsertUsernamePrepare(*dbconn, work.get(), this->tableActivePrefix);
+
+	DbUpsertUsername(*dbconn, work.get(), this->tableActivePrefix, 
+		uid, username);
+
+	return true;
 }
 
 bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox, 
