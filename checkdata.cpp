@@ -118,6 +118,11 @@ void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData,
 		}
 	}
 
+	//Check for too few nodes
+	if (refs.size() < 2)
+		cout << "Too few nodes in way: " << objId <<endl;
+
+	//Check for missing nodes
 	std::set<int64_t> nodeIds(refs.begin(), refs.end()), nodeExists, nodeNotExists;
 	this->NodesExists(nodeIds, nodeExists, nodeNotExists);
 	
@@ -145,9 +150,14 @@ void DataChecker::StoreRelation(int64_t objId, const class MetaData &metaData, c
 			it->second.push_back(metaData.version);
 	}
 
-	if(refTypeStrs.size() != refTypeStrs.size() or refTypeStrs.size() != refRoles.size())
+	if(refTypeStrs.size() != refIds.size() or refTypeStrs.size() != refRoles.size())
 		throw runtime_error("Relation refs have inconsistent lengths");
 
+	//Check for too few nodes
+	if (refTypeStrs.size() == 0)
+		cout << "Too few members in relation: " << objId <<endl;
+
+	//Check for missing members
 	std::set<int64_t> refNodeIds, refWayIds, refRelationIds, refExists, refNotExists;
 	for(size_t i=0; i<refTypeStrs.size(); i++)
 	{
