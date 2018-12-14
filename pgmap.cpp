@@ -1188,6 +1188,7 @@ int PgTransaction::GetChangeset(int64_t objId,
 		throw runtime_error("Transaction has been deleted");
 	int ret = GetChangesetFromDb(*dbconn, work.get(),
 		this->tableActivePrefix,
+		this->dbUsernameLookup, 
 		objId,
 		changesetOut,
 		errStrNative);
@@ -1196,6 +1197,7 @@ int PgTransaction::GetChangeset(int64_t objId,
 	{
 		ret = GetChangesetFromDb(*dbconn, work.get(),
 			this->tableStaticPrefix,
+			this->dbUsernameLookup, 
 			objId,
 			changesetOut,
 			errStrNative);
@@ -1272,6 +1274,7 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		throw runtime_error("Transaction has been deleted");
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
+		this->dbUsernameLookup, 
 		targetNum,
 		user_uid, 
 		openedBeforeTimestamp, 
@@ -1292,6 +1295,7 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		ok = GetChangesetsFromDb(*dbconn, work.get(),
 			this->tableStaticPrefix,
 			this->tableActivePrefix,
+			this->dbUsernameLookup, 
 			targetNum - changesetsOut.size(),
 			user_uid,
 			openedBeforeTimestamp, 
@@ -1380,6 +1384,7 @@ bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
 	bool ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
 		this->tableStaticPrefix,
 		this->tableActivePrefix,
+		this->dbUsernameLookup, 
 		changeset.objId,
 		rowsAffected2,
 		errStrNative);
@@ -1436,6 +1441,7 @@ bool PgTransaction::CloseChangeset(int64_t changesetId,
 		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
 			this->tableStaticPrefix,
 			this->tableActivePrefix,
+			this->dbUsernameLookup, 
 			changesetId,
 			rowsAffected,
 			errStrNative);
@@ -1485,6 +1491,7 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 	std::vector<class PgChangeset> openStaticChangesets;
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableStaticPrefix, this->tableActivePrefix,
+		this->dbUsernameLookup, 
 		0, //Get all
 		0, //Any user 
 		whereBeforeTimestamp, 
@@ -1506,6 +1513,7 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 		ok = CopyChangesetToActiveInDb(*dbconn, work.get(),
 			this->tableStaticPrefix,
 			this->tableActivePrefix,
+			this->dbUsernameLookup, 
 			openStaticChangesets[i].objId,
 			rowsAffected,
 			errStrNative);
@@ -1587,13 +1595,6 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
-
-	string tableName = this->tableActivePrefix+"usernames";
-	if(!DbCheckTableExists(*dbconn, work.get(), tableName))
-	{
-		errStr.errStr = "Username table does not exist";
-		return false;
-	}
 
 	DbUpsertUsernamePrepare(*dbconn, work.get(), this->tableActivePrefix);
 

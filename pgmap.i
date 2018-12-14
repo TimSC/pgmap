@@ -393,7 +393,7 @@ public:
 	bool SetMetaValue(const std::string &key, 
 		const std::string &value, 
 		class PgMapError &errStr);
-	bool PgTransaction::UpdateUsername(int uid, const std::string &username,
+	bool UpdateUsername(int uid, const std::string &username,
 		class PgMapError &errStr);
 
 	bool GetHistoricMapQuery(const std::vector<double> &bbox, 

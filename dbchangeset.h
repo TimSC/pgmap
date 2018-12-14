@@ -25,6 +25,7 @@ bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *wor
 
 int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
+	class DbUsernameLookup &usernames,
 	int64_t objId,
 	class PgChangeset &changesetOut,
 	std::string &errStr);
@@ -32,6 +33,7 @@ int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
+	class DbUsernameLookup &usernames,
 	size_t limit, //0 means no limit
 	int64_t user_uid, //0 means don't filter
 	int64_t openedBeforeTimestamp, //-1 means don't filter
@@ -73,6 +75,7 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	pqxx::transaction_base *work, 
 	const std::string &staticPrefix,
 	const std::string &activePrefix,
+	class DbUsernameLookup &usernames,
 	int64_t changesetId,
 	size_t &rowsAffected,
 	std::string &errStrNative);

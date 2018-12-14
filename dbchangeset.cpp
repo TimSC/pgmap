@@ -8,7 +8,8 @@ extern "C" {
 }
 using namespace std;
 
-void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &changesets)
+void DecodeRowsToChangesets(pqxx::result &rows, class DbUsernameLookup &usernames, 
+	std::vector<class PgChangeset> &changesets)
 {
 	int idCol = rows.column_number("id");
 	int usernameCol = rows.column_number("username");
@@ -31,14 +32,19 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 
 		class PgChangeset changeset;
 		changeset.objId = row[idCol].as<int64_t>();
-		if(!row[uidCol].is_null())
-			changeset.uid = row[uidCol].as<int64_t>();
 		if(!row[openTimestampCol].is_null())
 			changeset.open_timestamp = row[openTimestampCol].as<int64_t>();
 		if(!row[closeTimestampCol].is_null())
 			changeset.close_timestamp = row[closeTimestampCol].as<int64_t>();
 		if(!row[usernameCol].is_null())
 			changeset.username = row[usernameCol].as<string>();
+		if(!row[uidCol].is_null())
+		{
+			changeset.uid = row[uidCol].as<int64_t>();
+			string un = usernames.Find(changeset.uid);
+			if(un.length() > 0)
+				changeset.username = un;
+		}
 		changeset.is_open = row[isOpenCol].as<bool>();
 
 		if (!row[tagsCol].is_null())
@@ -67,7 +73,8 @@ void DecodeRowsToChangesets(pqxx::result &rows, std::vector<class PgChangeset> &
 
 // *******************************************************
 
-bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+bool GetOldNewNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	const string &tableLiveOld,
@@ -229,6 +236,7 @@ bool GetAllRelationsByChangeset(pqxx::connection &c, pqxx::transaction_base *wor
 
 int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
+	class DbUsernameLookup &usernames,
 	int64_t objId,
 	class PgChangeset &changesetOut,
 	std::string &errStr)
@@ -247,7 +255,7 @@ int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	std::vector<class PgChangeset> changesets;
-	DecodeRowsToChangesets(r, changesets);
+	DecodeRowsToChangesets(r, usernames, changesets);
 	changesetOut = changesets[0];
 
 	return 1;
@@ -256,6 +264,7 @@ int GetChangesetFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
+	class DbUsernameLookup &usernames,
 	size_t limit,
 	int64_t user_uid,
 	int64_t openedBeforeTimestamp,
@@ -298,7 +307,7 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 
 	pqxx::result r = work->exec(sql.str());
 
-	DecodeRowsToChangesets(r, changesetOut);
+	DecodeRowsToChangesets(r, usernames, changesetOut);
 	return true;
 }
 
@@ -466,6 +475,7 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	pqxx::transaction_base *work, 
 	const std::string &staticPrefix,
 	const std::string &activePrefix,
+	class DbUsernameLookup &usernames,
 	int64_t changesetId,
 	size_t &rowsAffected,
 	std::string &errStrNative)
@@ -473,6 +483,7 @@ bool CopyChangesetToActiveInDb(pqxx::connection &c,
 	class PgChangeset changeset;
 	int ret = GetChangesetFromDb(c, work, 
 		staticPrefix,
+		usernames,
 		changesetId,
 		changeset,
 		errStrNative);
