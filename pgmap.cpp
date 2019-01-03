@@ -1250,9 +1250,9 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 	if(!created.IsEmpty())
 		output->StoreOsmData("create", created, false);
 	if(!modified.IsEmpty())
-		output->StoreOsmData("modified", modified, false);
+		output->StoreOsmData("modify", modified, false);
 	if(!deleted.IsEmpty())	
-		output->StoreOsmData("deleted", deleted, false);
+		output->StoreOsmData("delete", deleted, false);
 	return 1;
 }
 
