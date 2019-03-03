@@ -247,5 +247,10 @@ std::string EscapeQuotes(std::string str);
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
 void LoadOsmFromFile(const std::string &filename, std::shared_ptr<class IDataStreamHandler> csvStore);
 
+double long2tilex(double lon, int z);
+double lat2tiley(double lat, int z);
+double tilex2long(int x, int z);
+double tiley2lat(int y, int z);
+
 #endif //_UTIL_H
 

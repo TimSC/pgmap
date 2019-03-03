@@ -24,6 +24,9 @@ dump: dump.cpp $(common)
 extract: extract.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
+downloadtiles: downloadtiles.cpp $(common)
+	g++ $^ $(cppflags) $(libs) -o $@
+
 admin: admin.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
