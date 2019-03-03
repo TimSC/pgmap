@@ -77,6 +77,7 @@ int main(int argc, char **argv)
 		("preset", po::value<string>(), "preset area name")
 		("zoom", po::value<int>()->default_value(12), "zoom (e.g. 12)")
 		("extension", po::value<string>()->default_value(".osm.gz"), "output file extension")
+		("out", po::value<string>()->default_value("."), "path to output")
 	;
 
 	po::variables_map vm;
@@ -86,6 +87,13 @@ int main(int argc, char **argv)
 	if (vm.count("help")) {
 		cout << desc << "\n";
 		return 1;
+	}
+
+	string outPath = vm["out"].as<string>();
+	if(not fs::exists(outPath))
+	{
+		cout << "Output path does not exist\n";
+		return -1;
 	}
 
 	int zoom = vm["zoom"].as<int>();
@@ -150,7 +158,7 @@ int main(int argc, char **argv)
 
 	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
 
-	fs::path pth(to_string(zoom));
+	fs::path pth = fs::path(outPath) / to_string(zoom);
 	if(not fs::exists(pth))
 		create_directory(pth);
 
