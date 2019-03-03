@@ -74,6 +74,7 @@ int main(int argc, char **argv)
 	desc.add_options()
 		("help", "produce help message")
 		("bbox", po::value<string>(), "bbox shape (e.g -1.078,50.788,-1.074,50.790)")
+		("tiles", po::value<string>(), "tile range")
 		("preset", po::value<string>(), "preset area name")
 		("zoom", po::value<int>()->default_value(12), "zoom (e.g. 12)")
 		("extension", po::value<string>()->default_value(".osm.gz"), "output file extension")
@@ -100,9 +101,9 @@ int main(int argc, char **argv)
 	int minx = 0, maxx = 0, miny = 0, maxy = 0;
 	bool tile_range_specified = false;
 
-	vector<double> bbox;
 	if (vm.count("bbox"))
 	{
+		vector<double> bbox;
 		vector<string> bboxvals = split(vm["bbox"].as<string>(), ',');
 		for(size_t i=0; i < bboxvals.size(); i++)
 		{
@@ -132,6 +133,27 @@ int main(int argc, char **argv)
 			maxy = maxx;
 			tile_range_specified = true;			
 		}
+	}
+
+	if (vm.count("tiles"))
+	{
+		vector<double> tileBbox;
+		vector<string> tileRange = split(vm["tiles"].as<string>(), ',');
+		for(size_t i=0; i < tileRange.size(); i++)
+		{
+			tileBbox.push_back(atoi(tileRange[i].c_str()));
+		}
+		if(tileBbox.size() != 4)
+		{
+			cerr << "Tile range must have 4 numbers" << endl;
+			exit(-1);
+		}
+
+		minx = tileBbox[0];
+		maxx = tileBbox[2];
+		miny = tileBbox[1];
+		maxy = tileBbox[3];
+		tile_range_specified = true;
 	}
 
 	if(not tile_range_specified)
