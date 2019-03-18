@@ -3,9 +3,18 @@ using namespace std;
 
 void DecodeMetadata(const pqxx::result::const_iterator &c, const MetaDataCols &metaDataCols, class MetaData &metaData)
 {
-	metaData.version = c[metaDataCols.versionCol].as<uint64_t>();
-	metaData.timestamp = c[metaDataCols.timestampCol].as<int64_t>();
-	metaData.changeset = c[metaDataCols.changesetCol].as<int64_t>();
+	if (c[metaDataCols.versionCol].is_null())
+		metaData.version = 0;
+	else
+		metaData.version = c[metaDataCols.versionCol].as<uint64_t>();
+	if (c[metaDataCols.timestampCol].is_null())
+		metaData.timestamp = 0;
+	else
+		metaData.timestamp = c[metaDataCols.timestampCol].as<int64_t>();
+	if (c[metaDataCols.changesetCol].is_null())
+		metaData.changeset = 0;
+	else
+		metaData.changeset = c[metaDataCols.changesetCol].as<int64_t>();
 	if (c[metaDataCols.uidCol].is_null())
 		metaData.uid = 0;
 	else
