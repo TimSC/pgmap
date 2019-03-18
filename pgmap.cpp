@@ -2054,7 +2054,7 @@ std::shared_ptr<class PgTransaction> PgMap::GetTransaction(const std::string &sh
 	dbconn->cancel_query();
 	if(this->sharedWork)
 		this->sharedWork->work.reset();
-	this->sharedWork.reset(new class PgWork(new pqxx::work(*dbconn)));
+	this->sharedWork.reset(new class PgWork(new pqxx::transaction<pqxx::repeatable_read>(*dbconn)));
 	shared_ptr<class PgTransaction> out(new class PgTransaction(dbconn, tableStaticPrefix, tableActivePrefix, this->sharedWork, shareMode));
 	return out;
 }
@@ -2074,7 +2074,7 @@ std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
 	dbconn->cancel_query();
 	if(this->sharedWork)
 		this->sharedWork->work.reset();
-	this->sharedWork.reset(new class PgWork(new pqxx::work(*dbconn)));
+	this->sharedWork.reset(new class PgWork(new pqxx::transaction<pqxx::repeatable_read>(*dbconn)));
 	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, this->sharedWork, shareMode));
 	return out;
 }
