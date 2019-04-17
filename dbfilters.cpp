@@ -115,3 +115,78 @@ void DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &
 	}
 }
 
+// ****************************************************
+
+FilterObjectsUnique::FilterObjectsUnique(std::shared_ptr<IDataStreamHandler> enc): enc(enc)
+{
+
+}
+
+FilterObjectsUnique::~FilterObjectsUnique()
+{
+
+}
+
+void FilterObjectsUnique::Sync()
+{
+	enc->Sync();
+}
+
+void FilterObjectsUnique::Reset()
+{
+	enc->Reset();
+}
+
+void FilterObjectsUnique::Finish()
+{
+	enc->Finish();
+}
+
+void FilterObjectsUnique::StoreIsDiff(bool isDiff)
+{
+	enc->StoreIsDiff(isDiff);
+}
+
+void FilterObjectsUnique::StoreBounds(double x1, double y1, double x2, double y2)
+{
+	enc->StoreBounds(x1, y1, x2, y2);
+}
+
+void FilterObjectsUnique::StoreNode(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, double lat, double lon)
+{
+	auto it = this->nodeIds.find(objId);
+	if(it == this->nodeIds.end())
+	{
+		enc->StoreNode(objId, metaData, 
+			tags, lat, lon);
+		this->nodeIds.insert(objId);
+	}
+}
+
+void FilterObjectsUnique::StoreWay(int64_t objId, const class MetaData &metaData, 
+	const TagMap &tags, const std::vector<int64_t> &refs)
+{
+	auto it = this->wayIds.find(objId);
+	if(it == this->wayIds.end())
+	{
+		enc->StoreWay(objId, metaData, 
+			tags, refs);
+		this->wayIds.insert(objId);
+	}
+}
+
+void FilterObjectsUnique::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
+	const std::vector<std::string> &refRoles)
+{
+	auto it = this->relationIds.find(objId);
+	if(it == this->relationIds.end())
+	{
+		enc->StoreRelation(objId, metaData, tags, 
+			refTypeStrs, refIds, 
+			refRoles);
+		this->relationIds.insert(objId);
+	}
+}
+

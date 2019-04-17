@@ -1,5 +1,6 @@
 #include "dbquery.h"
 #include "dbdecode.h"
+#include "dbfilters.h"
 using namespace std;
 
 // ************* Basic query methods ***************
@@ -92,7 +93,7 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 			count ++;
 		}
 
-		string sql = "SELECT DISTINCT "+wayTable+".*";
+		string sql = "SELECT "+wayTable+".*";
 		if(excludeTable.size() > 0)
 			sql += ", "+excludeTable+".id";
 
@@ -109,8 +110,9 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 		pqxx::icursorstream cursor( *work, sql, "wayscontainingnodes", 1000 );	
 
 		int records = 1;
+		std::shared_ptr<FilterObjectsUnique> encUnique = make_shared<FilterObjectsUnique>(enc);
 		while (records>0)
-			records = WayResultsToEncoder(cursor, usernames, enc);
+			records = WayResultsToEncoder(cursor, usernames, encUnique);
 	}
 }
 
@@ -181,7 +183,7 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 		count ++;
 	}
 
-	string sql = "SELECT DISTINCT "+relTable+".*";
+	string sql = "SELECT "+relTable+".*";
 	if(excludeTable.size() > 0)
 		sql += ", "+excludeTable+".id";
 
@@ -196,7 +198,8 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 
 	pqxx::icursorstream cursor( *work, sql, "relationscontainingobjects", 1000 );	
 
-	RelationResultsToEncoder(cursor, usernames, skipIds, enc);
+	std::shared_ptr<FilterObjectsUnique> encUnique = make_shared<FilterObjectsUnique>(enc);
+	RelationResultsToEncoder(cursor, usernames, skipIds, encUnique);
 }
 
 //Can this be combined into GetLiveNodesById?
