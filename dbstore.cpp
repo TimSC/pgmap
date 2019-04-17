@@ -46,6 +46,74 @@ template<typename T> std::string IntArrayToString(std::vector<T> arr)
 	return out;
 }
 
+bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &usernames, 
+	const class OsmWay &way,
+	int64_t timestamp,
+	std::string &errStr)
+{
+	//Get member node objects
+	std::set<int64_t> memNodeIds = way.GetRefIds();
+
+	std::shared_ptr<class OsmData> memNodes(new class OsmData());
+	DbGetObjectsById(c, work,
+		staticTablePrefix, activeTablePrefix, 
+		usernames, "node", memNodeIds, memNodes);
+
+	std::vector<int64_t> memNodeIds2;
+	std::vector<int32_t> memNodeVers2;
+	for(size_t j=0; j<memNodes->nodes.size(); j++)
+	{
+		cout << memNodes->nodes[j].objId << "," << memNodes->nodes[j].metaData.version << endl;
+		memNodeIds2.push_back(memNodes->nodes[j].objId);
+		memNodeVers2.push_back(memNodes->nodes[j].metaData.version);
+	}
+	std::vector<double> bbox;
+	bool ok = GetBboxForNodes(memNodes->nodes, bbox);
+	if(!ok)
+	{
+		errStr = "Way has invalid bbox (not enough nodes?)";
+		return false;
+	}
+
+	stringstream ss;
+	ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, end_timestamp, nids, nvers, bbox) VALUES ";
+	ss << "(DEFAULT,$1,$2,$3,$4,$5,ST_MakeEnvelope($6,$7,$8,$9,4326));";
+
+	try
+	{
+		c.prepare(activeTablePrefix+"insertwayshape", ss.str());
+
+		pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"insertwayshape");
+		invoc(way.objId);
+		invoc(way.metaData.version);
+		invoc(timestamp);
+
+		invoc(IntArrayToString(memNodeIds2));
+		invoc(IntArrayToString(memNodeVers2));
+
+		invoc(bbox[0]);
+		invoc(bbox[1]);
+		invoc(bbox[2]);
+		invoc(bbox[3]);
+
+		invoc.exec();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
 bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
@@ -73,74 +141,36 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		usernames, "way", wayIds, changedWays);
 
 	//Insert old way shape into log
+	std::set<int64_t> doneWayIds;
 	for(size_t i=0; i<affectedWays->ways.size(); i++)
 	{
 		const class OsmWay &way = affectedWays->ways[i];
+		auto it = doneWayIds.find(way.objId);
+		if(it != doneWayIds.end()) continue;
+
 		cout << "way " << way.objId << " affected" << endl;
 
-		//Get member node objects
-		std::set<int64_t> memNodeIds = way.GetRefIds();
-
-		std::shared_ptr<class OsmData> memNodes(new class OsmData());
-		DbGetObjectsById(c, work,
-			staticTablePrefix, activeTablePrefix, 
-			usernames, "node", memNodeIds, memNodes);
-
-		std::vector<int64_t> memNodeIds2;
-		std::vector<int32_t> memNodeVers2;
-		for(size_t j=0; j<memNodes->nodes.size(); j++)
-		{
-			cout << memNodes->nodes[j].objId << "," << memNodes->nodes[j].metaData.version << endl;
-			memNodeIds2.push_back(memNodes->nodes[j].objId);
-			memNodeVers2.push_back(memNodes->nodes[j].metaData.version);
-		}
-		std::vector<double> bbox;
-		bool ok = GetBboxForNodes(memNodes->nodes, bbox);
-		if(!ok)
-		{
-			errStr = "Way has invalid bbox (not enough nodes?)";
-			return false;
-		}
-
-		stringstream ss;
-		ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, end_timestamp, nids, nvers, bbox) VALUES ";
-		ss << "(DEFAULT,$1,$2,$3,$4,$5,ST_MakeEnvelope($6,$7,$8,$9,4326));";
-
-		try
-		{
-			c.prepare(activeTablePrefix+"insertwayshape", ss.str());
-
-			pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"insertwayshape");
-			invoc(way.objId);
-			invoc(way.metaData.version);
-			invoc(timestamp);
-
-			invoc(IntArrayToString(memNodeIds2));
-			invoc(IntArrayToString(memNodeVers2));
-
-			invoc(bbox[0]);
-			invoc(bbox[1]);
-			invoc(bbox[2]);
-			invoc(bbox[3]);
-
-			invoc.exec();
-		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-
+		bool ok = DbStoreWayInTable(c, work, 
+			staticTablePrefix,
+			activeTablePrefix, usernames,
+			way, timestamp, errStr);
+		if (!ok) return false;
+		doneWayIds.insert(way.objId);
 	}
 	for(size_t i=0; i<changedWays->ways.size(); i++)
 	{
 		const class OsmWay &way = changedWays->ways[i];
+		auto it = doneWayIds.find(way.objId);
+		if(it != doneWayIds.end()) continue;
+
 		cout << "way " << way.objId << " changed" << endl;
+
+		bool ok = DbStoreWayInTable(c, work, 
+			staticTablePrefix,
+			activeTablePrefix, usernames,
+			way, timestamp, errStr);
+		if (!ok) return false;
+		doneWayIds.insert(way.objId);
 	}
 
 	return true;
