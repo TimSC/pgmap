@@ -115,6 +115,9 @@ public:
 	void GetObjectsHistoryById(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);
 
+	bool LogWayShapes(const class OsmData &data, 
+		int64_t timestamp,
+		class PgMapError &errStr);
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,

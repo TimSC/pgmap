@@ -455,3 +455,56 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 		}
 	}
 }
+
+void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tableStaticPrefix, 
+	const std::string &tableActivePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,  
+	const std::string &type, const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> out)
+{
+	if(type == "node")
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveNodesById(c, work, dbUsernameLookup,
+				tableStaticPrefix, tableActivePrefix, objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveNodesById(c, work, dbUsernameLookup,
+				tableActivePrefix, "", objectIds, 
+				it, 1000, out);
+	}
+	else if(type == "way")
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveWaysById(c, work, dbUsernameLookup,
+				tableStaticPrefix, tableActivePrefix, objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveWaysById(c, work, dbUsernameLookup,
+				tableActivePrefix, "", objectIds, 
+				it, 1000, out);
+	}
+	else if(type == "relation")
+	{
+		std::set<int64_t>::const_iterator it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveRelationsById(c, work, dbUsernameLookup,
+				tableStaticPrefix, tableActivePrefix,
+				objectIds, 
+				it, 1000, out);
+		it = objectIds.begin();
+		while(it != objectIds.end())
+			GetLiveRelationsById(c, work, dbUsernameLookup,
+				tableActivePrefix, "",
+				objectIds, 
+				it, 1000, out);
+	}
+	else
+		throw invalid_argument("Unknown object type");
+}
+

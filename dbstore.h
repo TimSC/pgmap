@@ -8,9 +8,18 @@
 
 void EncodeTags(const TagMap &tagmap, std::string &out);
 
-bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
+///Log the old way shapes that are impacted by new nodes, or have new way versions
+bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &usernames, 
+	int64_t timestamp,
+	const class OsmData &osmData,
+	std::string &errStr);
+
+bool DbStoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
-	class OsmData osmData, 
+	class OsmData osmData,
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,

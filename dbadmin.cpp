@@ -87,50 +87,52 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	string j = "JSONB";
 	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
 		j = "JSON";
+	bool ok = true;
 
-	string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
-	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"nodeids")+" (id BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayids")+" (id BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relationids")+" (id BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"way_mems")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_n")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_w")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_r")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"nextids")+" (id VARCHAR(16), maxid BIGINT, PRIMARY KEY(id));";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags "+j+", open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"usernames")+" (uid INTEGER, timestamp BIGINT, username TEXT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
+	//Create schema version 11 if no meta table is defined
 	if (not DbCheckTableExists(c, work, tablePrefix+"meta"))
 	{
+		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldrelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"livenodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liveways")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+");";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"liverelations")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, version INTEGER, tags "+j+", members "+j+", memberroles "+j+");";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"nodeids")+" (id BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayids")+" (id BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relationids")+" (id BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"way_mems")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_n")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_w")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relation_mems_r")+" (id BIGINT, version INTEGER, index INTEGER, member BIGINT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"nextids")+" (id VARCHAR(16), maxid BIGINT, PRIMARY KEY(id));";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags "+j+", open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"usernames")+" (uid INTEGER, timestamp BIGINT, username TEXT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
 		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"meta")+" (key TEXT, value TEXT);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 		sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
@@ -138,7 +140,15 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	int schemaVersion = DbGetSchemaVersion(c, work, tablePrefix);
-	cout << "schemaVersion " << schemaVersion << endl;
+	if (schemaVersion == 11)
+	{
+		//Update to schema ver 12
+		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGINT, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nids BIGINT[], nvers INTEGER[], bbox GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "UPDATE "+c.quote_name(tablePrefix+"meta")+" SET value='12' WHERE key='schema_version';";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
 
 	return ok;
 }
@@ -649,7 +659,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				//Store objects
 				std::map<int64_t, int64_t> createdNodeIds, createdWayIds, createdRelationIds;
 
-				bool ok = ::StoreObjects(c, work, tableModPrefix, block, 
+				bool ok = DbStoreObjects(c, work, tableModPrefix, block, 
 					createdNodeIds, createdWayIds, createdRelationIds, errStr);
 				if(!ok)
 					cout << "Warning: " << errStr << endl;

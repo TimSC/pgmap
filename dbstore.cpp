@@ -2,7 +2,62 @@
 #include "dbids.h"
 #include "dbcommon.h"
 #include "dbjson.h"
+#include "dbquery.h"
 using namespace std;
+
+bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &usernames, 
+	int64_t timestamp,
+	const class OsmData &osmData,
+	std::string &errStr)
+{
+	//Get affected ways by modified nodes
+	std::set<int64_t> nodeIds = osmData.GetNodeIds();
+
+	std::shared_ptr<class OsmData> affectedWays(new class OsmData());
+	GetLiveWaysThatContainNodes(c, work, usernames,
+		staticTablePrefix, activeTablePrefix, nodeIds, affectedWays);
+
+	GetLiveWaysThatContainNodes(c, work, usernames,
+		activeTablePrefix, "", nodeIds, affectedWays);
+
+	// Get pre-edit ways
+	std::set<int64_t> wayIds = osmData.GetWayIds();
+
+	std::shared_ptr<class OsmData> changedWays(new class OsmData());
+	DbGetObjectsById(c, work,
+		staticTablePrefix, activeTablePrefix, 
+		usernames, "way", wayIds, changedWays);
+
+	//Insert old way shape into log
+	for(size_t i=0; i<affectedWays->ways.size(); i++)
+	{
+		const class OsmWay &way = affectedWays->ways[i];
+		cout << "way " << way.objId << " affected" << endl;
+
+		//Get member node objects
+		std::set<int64_t> memNodeIds = way.GetRefIds();
+
+		std::shared_ptr<class OsmData> memNodes(new class OsmData());
+		DbGetObjectsById(c, work,
+			staticTablePrefix, activeTablePrefix, 
+			usernames, "node", memNodeIds, memNodes);
+
+		for(size_t j=0; j<memNodes->nodes.size(); j++)
+		{
+			cout << memNodes->nodes[j].objId << "," << memNodes->nodes[j].metaData.version << endl;
+		}
+	}
+	for(size_t i=0; i<changedWays->ways.size(); i++)
+	{
+		const class OsmWay &way = changedWays->ways[i];
+		cout << "way " << way.objId << " changed" << endl;
+	}
+
+	return true;
+}
 
 bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &typeStr,
@@ -12,8 +67,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	std::string &errStr,
 	int verbose)
 {
-	char trueStr[] = "true";
-	char falseStr[] = "true";
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
 
@@ -608,7 +661,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	return true;
 }
 
-bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbStoreObjects(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	class OsmData osmData, 
 	std::map<int64_t, int64_t> &createdNodeIds, 

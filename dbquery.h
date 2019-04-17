@@ -87,5 +87,14 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 	const std::string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut);
 
+// Active/static aware high-level fetch
+
+void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tableStaticPrefix, 
+	const std::string &tableActivePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,  
+	const std::string &type, const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> out);
+
 #endif //_DB_QUERY_H
 
