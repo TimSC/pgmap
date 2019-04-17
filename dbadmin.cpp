@@ -124,17 +124,22 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"nextids")+" (id VARCHAR(16), maxid BIGINT, PRIMARY KEY(id));";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"meta")+" (key TEXT, value TEXT);";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "DELETE FROM "+c.quote_name(tablePrefix+"meta")+" WHERE key = 'schema_version';";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"changesets")+" (id BIGINT, username TEXT, uid INTEGER, tags "+j+", open_timestamp BIGINT, close_timestamp BIGINT, is_open BOOLEAN, geom GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
-	ok = DbExec(work, sql, errStr, nullptr, verbose);
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"usernames")+" (uid INTEGER, timestamp BIGINT, username TEXT);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	if (not DbCheckTableExists(c, work, tablePrefix+"meta"))
+	{
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"meta")+" (key TEXT, value TEXT);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	int schemaVersion = DbGetSchemaVersion(c, work, tablePrefix);
+	cout << "schemaVersion " << schemaVersion << endl;
+
 	return ok;
 }
 

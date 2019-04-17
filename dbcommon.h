@@ -30,5 +30,7 @@ bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work,
 
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut);
 
+int DbGetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix);
+
 #endif //_DB_COMMON_H
 

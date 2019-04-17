@@ -75,7 +75,7 @@ bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work,
 	sql += " AND    table_name = "+c.quote(tableName)+");";
 
 	pqxx::result r = work->exec(sql);
-	return r.size() > 0;
+	return r[0][0].as<bool>();
 }
 
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut)
@@ -85,5 +85,12 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 	int ver = r[0][0].as<int>();
 	majorVerOut = ver / 10000;
 	minorVerOut = (ver / 100) % 100;
+}
+
+int DbGetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix)
+{
+	string sql = "SELECT value FROM "+c.quote_name(tablePrefix+"meta")+" WHERE key='schema_version';";
+	pqxx::result r = work->exec(sql);
+	return r[0][0].as<int>();
 }
 
