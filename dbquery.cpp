@@ -92,7 +92,7 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 			count ++;
 		}
 
-		string sql = "SELECT "+wayTable+".*";
+		string sql = "SELECT DISTINCT "+wayTable+".*";
 		if(excludeTable.size() > 0)
 			sql += ", "+excludeTable+".id";
 
@@ -181,7 +181,7 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 		count ++;
 	}
 
-	string sql = "SELECT "+relTable+".*";
+	string sql = "SELECT DISTINCT "+relTable+".*";
 	if(excludeTable.size() > 0)
 		sql += ", "+excludeTable+".id";
 
