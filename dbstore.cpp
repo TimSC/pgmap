@@ -64,11 +64,14 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 
 	std::vector<int64_t> memNodeIds2;
 	std::vector<int32_t> memNodeVers2;
+	int64_t maxTimestamp = way.metaData.timestamp;
 	for(size_t j=0; j<memNodes->nodes.size(); j++)
 	{
-		cout << memNodes->nodes[j].objId << "," << memNodes->nodes[j].metaData.version << endl;
-		memNodeIds2.push_back(memNodes->nodes[j].objId);
-		memNodeVers2.push_back(memNodes->nodes[j].metaData.version);
+		const class OsmNode &n = memNodes->nodes[j];
+		memNodeIds2.push_back(n.objId);
+		memNodeVers2.push_back(n.metaData.version);
+		if(n.metaData.timestamp > maxTimestamp)
+			maxTimestamp = n.metaData.timestamp;
 	}
 	std::vector<double> bbox;
 	bool ok = GetBboxForNodes(memNodes->nodes, bbox);
@@ -79,8 +82,8 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	stringstream ss;
-	ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, end_timestamp, nids, nvers, bbox) VALUES ";
-	ss << "(DEFAULT,$1,$2,$3,$4,$5,ST_MakeEnvelope($6,$7,$8,$9,4326));";
+	ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, start_timestamp, end_timestamp, nids, nvers, bbox) VALUES ";
+	ss << "(DEFAULT,$1,$2,$3,$4,$5,$6,ST_MakeEnvelope($7,$8,$9,$10,4326));";
 
 	try
 	{
@@ -89,6 +92,7 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 		pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"insertwayshape");
 		invoc(way.objId);
 		invoc(way.metaData.version);
+		invoc(maxTimestamp);
 		invoc(timestamp);
 
 		invoc(IntArrayToString(memNodeIds2));
