@@ -143,7 +143,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	if (schemaVersion == 11)
 	{
 		//Update to schema ver 12
-		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGINT, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nids BIGINT[], nvers INTEGER[], bbox GEOMETRY(Polygon, 4326), PRIMARY KEY(id));";
+		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nids BIGINT[], nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "UPDATE "+c.quote_name(tablePrefix+"meta")+" SET value='12' WHERE key='schema_version';";
@@ -197,6 +197,9 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"usernames")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayshapes")+";";
+	ok = DbExec(work, sql, errStr, nullptr, verbose);
+
 	return ok;	
 
 }

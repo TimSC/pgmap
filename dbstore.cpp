@@ -5,6 +5,47 @@
 #include "dbquery.h"
 using namespace std;
 
+bool GetBboxForNodes(const std::vector<class OsmNode> &nodes, std::vector<double> &bboxOut)
+{
+	bboxOut.resize(4);
+
+	if(nodes.size() == 0)
+	{
+		bboxOut = {0.0, 0.0, 0.0, 0.0};
+		return false;
+	}
+
+	//bbox is the usual left,bottom,right,top format
+	const class OsmNode &firstNode = nodes[0];
+	bboxOut[0] = firstNode.lat;
+	bboxOut[1] = firstNode.lon;
+	bboxOut[2] = firstNode.lat;
+	bboxOut[3] = firstNode.lon;
+
+	for(size_t i=1; i<nodes.size(); i++)
+	{
+		const class OsmNode &node = nodes[i];
+		if(node.lon < bboxOut[0]) bboxOut[0] = node.lon;
+		if(node.lat < bboxOut[1]) bboxOut[1] = node.lat;
+		if(node.lon > bboxOut[2]) bboxOut[2] = node.lon;
+		if(node.lat > bboxOut[3]) bboxOut[3] = node.lat;
+	}
+
+	return true;
+}
+
+template<typename T> std::string IntArrayToString(std::vector<T> arr)
+{
+	std::string out="{";
+	for(size_t i=0; i<arr.size(); i++)
+	{
+		if(i>0) out += ",";
+		out += std::to_string(arr[i]);
+	}
+	out += "}";
+	return out;
+}
+
 bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
@@ -45,10 +86,56 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 			staticTablePrefix, activeTablePrefix, 
 			usernames, "node", memNodeIds, memNodes);
 
+		std::vector<int64_t> memNodeIds2;
+		std::vector<int32_t> memNodeVers2;
 		for(size_t j=0; j<memNodes->nodes.size(); j++)
 		{
 			cout << memNodes->nodes[j].objId << "," << memNodes->nodes[j].metaData.version << endl;
+			memNodeIds2.push_back(memNodes->nodes[j].objId);
+			memNodeVers2.push_back(memNodes->nodes[j].metaData.version);
 		}
+		std::vector<double> bbox;
+		bool ok = GetBboxForNodes(memNodes->nodes, bbox);
+		if(!ok)
+		{
+			errStr = "Way has invalid bbox (not enough nodes?)";
+			return false;
+		}
+
+		stringstream ss;
+		ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, end_timestamp, nids, nvers, bbox) VALUES ";
+		ss << "(DEFAULT,$1,$2,$3,$4,$5,ST_MakeEnvelope($6,$7,$8,$9,4326));";
+
+		try
+		{
+			c.prepare(activeTablePrefix+"insertwayshape", ss.str());
+
+			pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"insertwayshape");
+			invoc(way.objId);
+			invoc(way.metaData.version);
+			invoc(timestamp);
+
+			invoc(IntArrayToString(memNodeIds2));
+			invoc(IntArrayToString(memNodeVers2));
+
+			invoc(bbox[0]);
+			invoc(bbox[1]);
+			invoc(bbox[2]);
+			invoc(bbox[3]);
+
+			invoc.exec();
+		}
+		catch (const pqxx::sql_error &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+		catch (const std::exception &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+
 	}
 	for(size_t i=0; i<changedWays->ways.size(); i++)
 	{
