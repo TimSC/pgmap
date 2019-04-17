@@ -62,13 +62,11 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 		staticTablePrefix, activeTablePrefix, 
 		usernames, "node", memNodeIds, memNodes);
 
-	std::vector<int64_t> memNodeIds2;
 	std::vector<int32_t> memNodeVers2;
 	int64_t maxTimestamp = way.metaData.timestamp;
 	for(size_t j=0; j<memNodes->nodes.size(); j++)
 	{
 		const class OsmNode &n = memNodes->nodes[j];
-		memNodeIds2.push_back(n.objId);
 		memNodeVers2.push_back(n.metaData.version);
 		if(n.metaData.timestamp > maxTimestamp)
 			maxTimestamp = n.metaData.timestamp;
@@ -82,8 +80,8 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	stringstream ss;
-	ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, start_timestamp, end_timestamp, nids, nvers, bbox) VALUES ";
-	ss << "(DEFAULT,$1,$2,$3,$4,$5,$6,ST_MakeEnvelope($7,$8,$9,$10,4326));";
+	ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, start_timestamp, end_timestamp, nvers, bbox) VALUES ";
+	ss << "(DEFAULT,$1,$2,$3,$4,$5,ST_MakeEnvelope($6,$7,$8,$9,4326));";
 
 	try
 	{
@@ -95,7 +93,6 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 		invoc(maxTimestamp);
 		invoc(timestamp);
 
-		invoc(IntArrayToString(memNodeIds2));
 		invoc(IntArrayToString(memNodeVers2));
 
 		invoc(bbox[0]);

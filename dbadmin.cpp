@@ -143,7 +143,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	if (schemaVersion == 11)
 	{
 		//Update to schema ver 12
-		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nids BIGINT[], nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
+		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "UPDATE "+c.quote_name(tablePrefix+"meta")+" SET value='12' WHERE key='schema_version';";
