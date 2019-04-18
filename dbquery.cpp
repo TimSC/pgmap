@@ -511,3 +511,42 @@ void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 		throw invalid_argument("Unknown object type");
 }
 
+void DbGetWaysForNodes(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tableStaticPrefix, 
+	const std::string &tableActivePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,  
+	const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> out)
+{	
+	GetLiveWaysThatContainNodes(c, work, dbUsernameLookup,
+		tableStaticPrefix, tableActivePrefix, objectIds, out);
+
+	GetLiveWaysThatContainNodes(c, work, dbUsernameLookup,
+		tableActivePrefix, "", objectIds, out);
+}
+
+void DbGetRelationsForObjs(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tableStaticPrefix, 
+	const std::string &tableActivePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,  
+	const std::string &type, const std::set<int64_t> &objectIds, 
+	std::shared_ptr<IDataStreamHandler> out)
+{
+	set<int64_t> empty;
+	std::set<int64_t>::const_iterator it = objectIds.begin();
+	while(it != objectIds.end())
+	{
+		GetLiveRelationsForObjects(c, work, dbUsernameLookup,
+			tableStaticPrefix, 
+			tableActivePrefix, 
+			type[0], objectIds, it, 1000, empty, out);
+	}
+	it = objectIds.begin();
+	while(it != objectIds.end())
+	{
+		GetLiveRelationsForObjects(c, work, dbUsernameLookup,
+			tableActivePrefix, "", 
+			type[0], objectIds, it, 1000, empty, out);
+	}
+}
+

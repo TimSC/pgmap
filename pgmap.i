@@ -207,6 +207,10 @@ public:
 
 	void StreamTo(class IDataStreamHandler &out, bool finishStream = true);
 	void Clear();
+
+	std::set<int64_t> GetNodeIds() const;
+	std::set<int64_t> GetWayIds() const;
+	std::set<int64_t> GetRelationIds() const;
 };
 
 namespace std {
@@ -346,6 +350,12 @@ public:
 		int64_t timestamp,
 		std::set<int64_t> &touchedWayIdsOut,
 		class PgMapError &errStr);
+	bool LogRelationShapes(int64_t timestamp,
+		const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
+		const std::set<int64_t> &touchedRelationIds,
+		class PgMapError &errStr);
+
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,

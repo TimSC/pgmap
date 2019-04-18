@@ -19,10 +19,11 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
-	class DbUsernameLookup &usernames, 
+	class DbUsernameLookup &dbUsernameLookup, 
 	int64_t timestamp,
-	const class OsmData &osmData,
+	const std::set<int64_t> &touchedNodeIds,
 	const std::set<int64_t> &touchedWayIds,
+	const std::set<int64_t> &touchedRelationIds,
 	std::string &errStr);
 
 #endif //_DB_SHAPELOG_H

@@ -776,13 +776,38 @@ bool PgTransaction::LogWayShapes(const class OsmData &data,
 	return ok;
 }
 
-/*bool PgTransaction::LogRelationShapes(const class OsmData &data, 
-		int64_t timestamp,
-		const std::set<int64_t> &touchedWays,
+bool PgTransaction::LogRelationShapes(int64_t timestamp,
+		const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
+		const std::set<int64_t> &touchedRelationIds,
 		class PgMapError &errStr)
 {
-	return true;
-}*/
+	std::string nativeErrStr;
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
+
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbLogRelationShapes(*dbconn, work.get(), 
+		this->tableStaticPrefix, 
+		this->tableActivePrefix, 
+		this->dbUsernameLookup, 
+		timestamp,
+		touchedNodeIds,
+		touchedWayIds,
+		touchedRelationIds,
+		nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
 
 bool PgTransaction::StoreObjects(class OsmData &data, 
 	std::map<int64_t, int64_t> &createdNodeIds, 
@@ -820,11 +845,12 @@ void PgTransaction::GetWaysForNodes(const std::set<int64_t> &objectIds,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
-
-	GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableActivePrefix, "", objectIds, out);
+	DbGetWaysForNodes(*dbconn, work.get(),
+		this->tableStaticPrefix, 
+		this->tableActivePrefix, 
+		this->dbUsernameLookup,  
+		objectIds, 
+		out);
 }
 
 void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
@@ -836,22 +862,12 @@ void PgTransaction::GetRelationsForObjs(const std::string &type, const std::set<
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	set<int64_t> empty;
-	std::set<int64_t>::const_iterator it = objectIds.begin();
-	while(it != objectIds.end())
-	{
-		GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableStaticPrefix, 
-			this->tableActivePrefix, 
-			type[0], objectIds, it, 1000, empty, out);
-	}
-	it = objectIds.begin();
-	while(it != objectIds.end())
-	{
-		GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableActivePrefix, "", 
-			type[0], objectIds, it, 1000, empty, out);
-	}
+	DbGetRelationsForObjs(*dbconn, work.get(),
+		this->tableStaticPrefix, 
+		this->tableActivePrefix, 
+		this->dbUsernameLookup, 
+		type, objectIds, 
+		out);
 }
 
 bool PgTransaction::ResetActiveTables(class PgMapError &errStr)

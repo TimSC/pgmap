@@ -5,22 +5,22 @@
 #include "dbquery.h"
 using namespace std;
 
-bool GetBboxForNodes(const std::vector<class OsmNode> &nodes, std::vector<double> &bboxOut)
+bool CalcBboxForNodes(const std::vector<class OsmNode> &nodes, std::vector<double> &bboxOut)
 {
 	bboxOut.resize(4);
 
 	if(nodes.size() == 0)
 	{
-		bboxOut = {0.0, 0.0, 0.0, 0.0};
+		bboxOut.clear();
 		return false;
 	}
 
 	//bbox is the usual left,bottom,right,top format
 	const class OsmNode &firstNode = nodes[0];
-	bboxOut[0] = firstNode.lat;
-	bboxOut[1] = firstNode.lon;
-	bboxOut[2] = firstNode.lat;
-	bboxOut[3] = firstNode.lon;
+	bboxOut[0] = firstNode.lon;
+	bboxOut[1] = firstNode.lat;
+	bboxOut[2] = firstNode.lon;
+	bboxOut[3] = firstNode.lat;
 
 	for(size_t i=1; i<nodes.size(); i++)
 	{
@@ -46,33 +46,49 @@ template<typename T> std::string IntArrayToString(std::vector<T> arr)
 	return out;
 }
 
-bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbGetNodeIdsBbox(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
-	class DbUsernameLookup &usernames, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const std::set<int64_t> &memNodeIds,
+	int64_t &maxTimestamp,
+	std::vector<int32_t> &memNodeVers,
+	std::vector<double> &bbox)
+{
+	//Get node objects
+	std::shared_ptr<class OsmData> memNodes(new class OsmData());
+	DbGetObjectsById(c, work,
+		staticTablePrefix, activeTablePrefix, 
+		dbUsernameLookup, "node", memNodeIds, memNodes);
+
+	for(size_t j=0; j<memNodes->nodes.size(); j++)
+	{
+		const class OsmNode &n = memNodes->nodes[j];
+		memNodeVers.push_back(n.metaData.version);
+		if(n.metaData.timestamp > maxTimestamp)
+			maxTimestamp = n.metaData.timestamp;
+	}
+	bool ok = CalcBboxForNodes(memNodes->nodes, bbox);
+	return ok;
+}
+
+bool DbStoreWayShapeInTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
 	const class OsmWay &way,
 	int64_t timestamp,
 	std::string &errStr)
 {
-	//Get member node objects
-	std::set<int64_t> memNodeIds = way.GetRefIds();
-
-	std::shared_ptr<class OsmData> memNodes(new class OsmData());
-	DbGetObjectsById(c, work,
-		staticTablePrefix, activeTablePrefix, 
-		usernames, "node", memNodeIds, memNodes);
-
-	std::vector<int32_t> memNodeVers2;
+	//Get way bbox
 	int64_t maxTimestamp = way.metaData.timestamp;
-	for(size_t j=0; j<memNodes->nodes.size(); j++)
-	{
-		const class OsmNode &n = memNodes->nodes[j];
-		memNodeVers2.push_back(n.metaData.version);
-		if(n.metaData.timestamp > maxTimestamp)
-			maxTimestamp = n.metaData.timestamp;
-	}
+	std::vector<int32_t> memNodeVers;
 	std::vector<double> bbox;
-	bool ok = GetBboxForNodes(memNodes->nodes, bbox);
+	bool ok = DbGetNodeIdsBbox(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup, 
+		way.GetRefIds(), maxTimestamp, memNodeVers, bbox);
 	if(!ok)
 	{
 		errStr = "Way has invalid bbox (not enough nodes?)";
@@ -93,7 +109,7 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 		invoc(maxTimestamp);
 		invoc(timestamp);
 
-		invoc(IntArrayToString(memNodeVers2));
+		invoc(IntArrayToString(memNodeVers));
 
 		invoc(bbox[0]);
 		invoc(bbox[1]);
@@ -118,21 +134,22 @@ bool DbStoreWayInTable(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
-	class DbUsernameLookup &usernames, 
+	class DbUsernameLookup &dbUsernameLookup, 
 	int64_t timestamp,
 	const class OsmData &osmData,
 	std::set<int64_t> &touchedWayIdsOut,
 	std::string &errStr)
 {
 	//Get affected ways by modified nodes
-	std::set<int64_t> nodeIds = osmData.GetNodeIds();
+	std::set<int64_t> touchedNodeIds = osmData.GetNodeIds();
 
 	std::shared_ptr<class OsmData> affectedWays(new class OsmData());
-	GetLiveWaysThatContainNodes(c, work, usernames,
-		staticTablePrefix, activeTablePrefix, nodeIds, affectedWays);
-
-	GetLiveWaysThatContainNodes(c, work, usernames,
-		activeTablePrefix, "", nodeIds, affectedWays);
+	DbGetWaysForNodes(c, work,
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup,  
+		touchedNodeIds, 
+		affectedWays);
 
 	// Get pre-edit ways
 	std::set<int64_t> wayIds = osmData.GetWayIds();
@@ -140,7 +157,7 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	std::shared_ptr<class OsmData> changedWays(new class OsmData());
 	DbGetObjectsById(c, work,
 		staticTablePrefix, activeTablePrefix, 
-		usernames, "way", wayIds, changedWays);
+		dbUsernameLookup, "way", wayIds, changedWays);
 
 	//Merge way ID lists
 	touchedWayIdsOut.clear();
@@ -164,9 +181,9 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		const class OsmWay &way = *it->second;
 		cout << "way " << way.objId << " affected" << endl;
 
-		bool ok = DbStoreWayInTable(c, work, 
+		bool ok = DbStoreWayShapeInTable(c, work, 
 			staticTablePrefix,
-			activeTablePrefix, usernames,
+			activeTablePrefix, dbUsernameLookup,
 			way, timestamp, errStr);
 		if (!ok) return false;
 	}
@@ -174,28 +191,196 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+void DbGetNodesIdInRelationRecursive(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const class OsmRelation &relation,
+	std::set<int64_t> &nodeIdsOut)
+{
+	//Get member objects
+	std::set<int64_t> memWayIds, memRelIds;
+	for(size_t i=0; i<relation.refTypeStrs.size(); i++)
+	{
+		if(relation.refTypeStrs[i] == "node")
+			nodeIdsOut.insert(relation.refIds[i]);
+		else if(relation.refTypeStrs[i] == "way")
+			memWayIds.insert(relation.refIds[i]);
+		else if(relation.refTypeStrs[i] == "relation")
+			memRelIds.insert(relation.refIds[i]);
+	}
+
+	//Get node IDs for ways
+	std::shared_ptr<class OsmData> wayObjs(new class OsmData());
+	DbGetObjectsById(c, work,
+		staticTablePrefix, activeTablePrefix, 
+		dbUsernameLookup, "way", memWayIds, wayObjs);
+	for(size_t i=0; i<wayObjs->ways.size(); i++)
+	{
+		const class OsmWay &way = wayObjs->ways[i];
+		std::set<int64_t> wayRefs = way.GetRefIds();
+		nodeIdsOut.insert(wayRefs.begin(), wayRefs.end());
+	}
+
+	//Get node IDs for other relations
+	//TODO
+}
+
+bool DbGetRelationBbox(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const class OsmRelation &relation,
+	int64_t &maxTimestamp,
+	std::vector<double> &bbox)
+{
+	maxTimestamp = relation.metaData.timestamp;
+
+	std::set<int64_t> nodeIds;
+	DbGetNodesIdInRelationRecursive(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup, 
+		relation,
+		nodeIds);
+	if(nodeIds.size()==0) return false;
+
+	std::vector<int32_t> memNodeVers;
+	bool ok = DbGetNodeIdsBbox(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup, 
+		nodeIds, maxTimestamp, memNodeVers, bbox);
+
+	return ok;
+}
+
+bool DbStoreRelationShapeInTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const class OsmRelation &relation,
+	int64_t timestamp,
+	std::string &errStr)
+{
+	//Get member node objects
+	int64_t maxTimestamp = 0;
+	std::vector<double> bbox;
+	bool has_bbox = DbGetRelationBbox(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup, 
+		relation,
+		maxTimestamp,
+		bbox);
+
+	for(size_t i=0; i<bbox.size(); i++)
+	{
+		cout << bbox[i] << ",";
+	}
+	cout << endl;
+
+	try
+	{
+		stringstream ss;
+		std::shared_ptr<pqxx::prepare::invocation> pinvoc;
+		ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"relshapes") + " (rel_id, rel_version, start_timestamp, end_timestamp, bbox) VALUES ";
+		if(has_bbox)
+		{
+			ss << "($1,$2,$3,$4,ST_MakeEnvelope($5,$6,$7,$8,4326));";
+			c.prepare(activeTablePrefix+"insertrelshape1", ss.str());
+			pinvoc = make_shared<pqxx::prepare::invocation>(work->prepared(activeTablePrefix+"insertrelshape1"));
+		}
+		else
+		{
+			ss << "($1,$2,$3,$4,null);";
+			c.prepare(activeTablePrefix+"insertrelshape2", ss.str());
+			pinvoc = make_shared<pqxx::prepare::invocation>(work->prepared(activeTablePrefix+"insertrelshape2"));
+		}
+
+		pqxx::prepare::invocation &invoc = *pinvoc.get();
+		invoc(relation.objId);
+		invoc(relation.metaData.version);
+		invoc(maxTimestamp);
+		invoc(timestamp);
+
+		if(has_bbox)
+		{
+			invoc(bbox[0]);
+			invoc(bbox[1]);
+			invoc(bbox[2]);
+			invoc(bbox[3]);
+		}
+
+		invoc.exec();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+
+	return true;
+
+}
+
 bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
-	class DbUsernameLookup &usernames, 
+	class DbUsernameLookup &dbUsernameLookup, 
 	int64_t timestamp,
-	const class OsmData &osmData,
+	const std::set<int64_t> &touchedNodeIds,
 	const std::set<int64_t> &touchedWayIds,
+	const std::set<int64_t> &touchedRelationIds,
 	std::string &errStr)
 {
-
 	//Get affected relations by modified nodes
-	std::set<int64_t> nodeIds = osmData.GetNodeIds();
-
 	std::shared_ptr<class OsmData> affectedRelations(new class OsmData());
+	DbGetRelationsForObjs(c, work,
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup,  
+		"node", touchedNodeIds, 
+		affectedRelations);
 
 	//Get affected relations by modified ways
+	DbGetRelationsForObjs(c, work,
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup,  
+		"way", touchedWayIds, 
+		affectedRelations);
 
 	//Get pre-edit relations
+	DbGetObjectsById(c, work,
+		staticTablePrefix, activeTablePrefix, 
+		dbUsernameLookup, "relation", touchedRelationIds, affectedRelations);
 
-	//Merge relations ID lists
+	//Get relation parents
+	for(size_t i=0; i<affectedRelations->relations.size(); i++)
+	{
+		class OsmRelation &rel = affectedRelations->relations[i];
+		cout << "rel " << rel.objId << endl;
 
-	//Insert old way shape into log
+		//TODO
+	}
+
+	//Insert old relation shape into log
+	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
+
+		class OsmRelation &rel = affectedRelations->relations[i];
+
+		bool ok = DbStoreRelationShapeInTable(c, work, 
+			staticTablePrefix,
+			activeTablePrefix, dbUsernameLookup,
+			rel, timestamp, errStr);
+		if (!ok) return false;
+	}
 
 
 	return true;
