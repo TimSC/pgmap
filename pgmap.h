@@ -117,7 +117,13 @@ public:
 
 	bool LogWayShapes(const class OsmData &data, 
 		int64_t timestamp,
+		std::set<int64_t> &touchedWayIdsOut,
 		class PgMapError &errStr);
+/*	bool LogRelationShapes(const class OsmData &data, 
+		int64_t timestamp,
+		const std::set<int64_t> &touchedWays,
+		class PgMapError &errStr);*/
+
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,

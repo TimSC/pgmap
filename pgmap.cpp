@@ -747,6 +747,7 @@ void PgTransaction::GetObjectsHistoryById(const std::string &type, const std::se
 
 bool PgTransaction::LogWayShapes(const class OsmData &data, 
 	int64_t timestamp,
+	std::set<int64_t> &touchedWayIdsOut,
 	class PgMapError &errStr)
 {
 	std::string nativeErrStr;
@@ -768,11 +769,20 @@ bool PgTransaction::LogWayShapes(const class OsmData &data,
 		this->dbUsernameLookup, 
 		timestamp,
 		data,
+		touchedWayIdsOut,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
 }
+
+/*bool PgTransaction::LogRelationShapes(const class OsmData &data, 
+		int64_t timestamp,
+		const std::set<int64_t> &touchedWays,
+		class PgMapError &errStr)
+{
+	return true;
+}*/
 
 bool PgTransaction::StoreObjects(class OsmData &data, 
 	std::map<int64_t, int64_t> &createdNodeIds, 

@@ -121,6 +121,7 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	class DbUsernameLookup &usernames, 
 	int64_t timestamp,
 	const class OsmData &osmData,
+	std::set<int64_t> &touchedWayIdsOut,
 	std::string &errStr)
 {
 	//Get affected ways by modified nodes
@@ -141,14 +142,26 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		staticTablePrefix, activeTablePrefix, 
 		usernames, "way", wayIds, changedWays);
 
-	//Insert old way shape into log
-	std::set<int64_t> doneWayIds;
+	//Merge way ID lists
+	touchedWayIdsOut.clear();
+	std::map<int64_t, const class OsmWay*> touchedWayIdsMap;
 	for(size_t i=0; i<affectedWays->ways.size(); i++)
 	{
 		const class OsmWay &way = affectedWays->ways[i];
-		auto it = doneWayIds.find(way.objId);
-		if(it != doneWayIds.end()) continue;
+		touchedWayIdsOut.insert(way.objId);
+		touchedWayIdsMap[way.objId] = &way;
+	}
+	for(size_t i=0; i<changedWays->ways.size(); i++)
+	{
+		const class OsmWay &way = changedWays->ways[i];
+		touchedWayIdsOut.insert(way.objId);
+		touchedWayIdsMap[way.objId] = &way;
+	}
 
+	//Insert old way shape into log
+	for(auto it=touchedWayIdsMap.begin(); it!=touchedWayIdsMap.end(); it++)
+	{
+		const class OsmWay &way = *it->second;
 		cout << "way " << way.objId << " affected" << endl;
 
 		bool ok = DbStoreWayInTable(c, work, 
@@ -156,23 +169,34 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 			activeTablePrefix, usernames,
 			way, timestamp, errStr);
 		if (!ok) return false;
-		doneWayIds.insert(way.objId);
 	}
-	for(size_t i=0; i<changedWays->ways.size(); i++)
-	{
-		const class OsmWay &way = changedWays->ways[i];
-		auto it = doneWayIds.find(way.objId);
-		if(it != doneWayIds.end()) continue;
 
-		cout << "way " << way.objId << " changed" << endl;
+	return true;
+}
 
-		bool ok = DbStoreWayInTable(c, work, 
-			staticTablePrefix,
-			activeTablePrefix, usernames,
-			way, timestamp, errStr);
-		if (!ok) return false;
-		doneWayIds.insert(way.objId);
-	}
+bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &usernames, 
+	int64_t timestamp,
+	const class OsmData &osmData,
+	const std::set<int64_t> &touchedWayIds,
+	std::string &errStr)
+{
+
+	//Get affected relations by modified nodes
+	std::set<int64_t> nodeIds = osmData.GetNodeIds();
+
+	std::shared_ptr<class OsmData> affectedRelations(new class OsmData());
+
+	//Get affected relations by modified ways
+
+	//Get pre-edit relations
+
+	//Merge relations ID lists
+
+	//Insert old way shape into log
+
 
 	return true;
 }
