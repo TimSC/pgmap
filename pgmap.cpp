@@ -10,6 +10,7 @@
 #include "dbchangeset.h"
 #include "dbmeta.h"
 #include "dbcommon.h"
+#include "dbshapelog.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
