@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "dbstore.h"
 #include "dbids.h"
 #include "dbcommon.h"
@@ -179,7 +180,6 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	for(auto it=touchedWayIdsMap.begin(); it!=touchedWayIdsMap.end(); it++)
 	{
 		const class OsmWay &way = *it->second;
-		cout << "way " << way.objId << " affected" << endl;
 
 		bool ok = DbStoreWayShapeInTable(c, work, 
 			staticTablePrefix,
@@ -195,6 +195,8 @@ void DbGetNodesIdInRelationRecursive(pqxx::connection &c, pqxx::transaction_base
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
+	int depth,
+	std::set<int64_t> relIdsDone,
 	const class OsmRelation &relation,
 	std::set<int64_t> &nodeIdsOut)
 {
@@ -221,9 +223,36 @@ void DbGetNodesIdInRelationRecursive(pqxx::connection &c, pqxx::transaction_base
 		std::set<int64_t> wayRefs = way.GetRefIds();
 		nodeIdsOut.insert(wayRefs.begin(), wayRefs.end());
 	}
+	
+	if(depth < 10)
+	{
+		//Prevent searching circular dependencies within relations
+		relIdsDone.insert(relation.objId);
+		std::set<int64_t> relsNotDone;
+		std::set_difference(memRelIds.begin(), memRelIds.end(),
+			relIdsDone.begin(), relIdsDone.end(),
+			std::inserter(relsNotDone, relsNotDone.begin()));
 
-	//Get node IDs for other relations
-	//TODO
+		//Get member relation objects
+		std::shared_ptr<class OsmData> memRelObjs(new class OsmData());
+		DbGetObjectsById(c, work,
+			staticTablePrefix, activeTablePrefix, 
+			dbUsernameLookup, "relation", relsNotDone, memRelObjs);
+
+		//Get node IDs for other relations
+		for(size_t i=0; i<memRelObjs->relations.size(); i++)
+		{
+			const class OsmRelation &memrel = memRelObjs->relations[i];
+
+			DbGetNodesIdInRelationRecursive(c, work, 
+				staticTablePrefix, 
+				activeTablePrefix, 
+				dbUsernameLookup, 
+				depth+1, relIdsDone,
+				memrel,
+				nodeIdsOut);
+		}
+	}
 }
 
 bool DbGetRelationBbox(pqxx::connection &c, pqxx::transaction_base *work, 
@@ -237,10 +266,12 @@ bool DbGetRelationBbox(pqxx::connection &c, pqxx::transaction_base *work,
 	maxTimestamp = relation.metaData.timestamp;
 
 	std::set<int64_t> nodeIds;
+	std::set<int64_t> relIdsDone;
 	DbGetNodesIdInRelationRecursive(c, work, 
 		staticTablePrefix, 
 		activeTablePrefix, 
 		dbUsernameLookup, 
+		0, relIdsDone,
 		relation,
 		nodeIds);
 	if(nodeIds.size()==0) return false;
@@ -273,12 +304,6 @@ bool DbStoreRelationShapeInTable(pqxx::connection &c, pqxx::transaction_base *wo
 		relation,
 		maxTimestamp,
 		bbox);
-
-	for(size_t i=0; i<bbox.size(); i++)
-	{
-		cout << bbox[i] << ",";
-	}
-	cout << endl;
 
 	try
 	{
@@ -361,13 +386,35 @@ bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		staticTablePrefix, activeTablePrefix, 
 		dbUsernameLookup, "relation", touchedRelationIds, affectedRelations);
 
-	//Get relation parents
-	for(size_t i=0; i<affectedRelations->relations.size(); i++)
+	//Get relation parents recursively
+	std::set<int64_t> knownRelIds = affectedRelations->GetRelationIds();
+	std::set<int64_t> activeRelIds = knownRelIds;
+	int searchCount = 0;
+	while(searchCount < 10 and activeRelIds.size()>0)
 	{
-		class OsmRelation &rel = affectedRelations->relations[i];
-		cout << "rel " << rel.objId << endl;
+		std::shared_ptr<class OsmData> parentRelations(new class OsmData());
+		DbGetRelationsForObjs(c, work,
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup,  
+			"relation", activeRelIds, 
+			parentRelations);
 
-		//TODO
+		knownRelIds.insert(activeRelIds.begin(), activeRelIds.end());
+		activeRelIds.clear();
+		for(size_t i=0; i<parentRelations->relations.size(); i++)
+		{
+			const class OsmRelation &parentrel = parentRelations->relations[i];
+			auto it = knownRelIds.find(parentrel.objId);
+			if(it != knownRelIds.end())
+				continue;
+
+			//Found a new parent relation
+			affectedRelations->relations.push_back(parentrel);
+			activeRelIds.insert(parentrel.objId);
+		}
+
+		searchCount ++;
 	}
 
 	//Insert old relation shape into log
@@ -381,7 +428,6 @@ bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 			rel, timestamp, errStr);
 		if (!ok) return false;
 	}
-
 
 	return true;
 }
