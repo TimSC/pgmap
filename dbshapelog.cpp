@@ -78,24 +78,12 @@ bool DbStoreWayShapeInTable(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &activeTablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
 	const class OsmWay &way,
+	int64_t maxTimestamp,
 	int64_t timestamp,
+	const std::vector<int32_t> &memNodeVers,
+	const std::vector<double> &bbox,
 	std::string &errStr)
 {
-	//Get way bbox
-	int64_t maxTimestamp = way.metaData.timestamp;
-	std::vector<int32_t> memNodeVers;
-	std::vector<double> bbox;
-	bool ok = DbGetNodeIdsBbox(c, work, 
-		staticTablePrefix, 
-		activeTablePrefix, 
-		dbUsernameLookup, 
-		way.GetRefIds(), maxTimestamp, memNodeVers, bbox);
-	if(!ok)
-	{
-		errStr = "Way has invalid bbox (not enough nodes?)";
-		return false;
-	}
-
 	stringstream ss;
 	ss << "INSERT INTO "<< c.quote_name(activeTablePrefix+"wayshapes") + " (id, way_id, way_version, start_timestamp, end_timestamp, nvers, bbox) VALUES ";
 	ss << "(DEFAULT,$1,$2,$3,$4,$5,ST_MakeEnvelope($6,$7,$8,$9,4326));";
@@ -176,15 +164,47 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		touchedWayIdsMap[way.objId] = &way;
 	}
 
-	//Insert old way shape into log
-	for(auto it=touchedWayIdsMap.begin(); it!=touchedWayIdsMap.end(); it++)
+	std::vector<int64_t> touchedWayIdsLi(touchedWayIdsOut.begin(), touchedWayIdsOut.end());
+
+	vector<int64_t> wayMaxTimestamps;
+	std::vector<std::vector<int32_t> > wayMemNodeVers;
+	std::vector<std::vector<double> > wayBboxes;
+	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
-		const class OsmWay &way = *it->second;
+		//Get way bbox
+		const class OsmWay &way = *touchedWayIdsMap[touchedWayIdsLi[i]];
+		int64_t maxTimestamp = way.metaData.timestamp;
+		std::vector<int32_t> memNodeVers;
+		std::vector<double> bbox;
+
+		bool ok = DbGetNodeIdsBbox(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup, 
+			way.GetRefIds(), maxTimestamp, memNodeVers, bbox);
+		if(!ok)
+		{
+			errStr = "Way has invalid bbox (not enough nodes?)";
+			return false;
+		}
+
+		wayMaxTimestamps.push_back(maxTimestamp);
+		wayMemNodeVers.push_back(memNodeVers);
+		wayBboxes.push_back(bbox);
+	}
+
+	//Insert old way shape into log
+	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
+	{
+		const class OsmWay &way = *touchedWayIdsMap[touchedWayIdsLi[i]];
+		int64_t maxTimestamp = wayMaxTimestamps[i];
+		const std::vector<int32_t> &memNodeVers = wayMemNodeVers[i];
+		const std::vector<double> &bbox = wayBboxes[i];
 
 		bool ok = DbStoreWayShapeInTable(c, work, 
 			staticTablePrefix,
 			activeTablePrefix, dbUsernameLookup,
-			way, timestamp, errStr);
+			way, maxTimestamp, timestamp, memNodeVers, bbox, errStr);
 		if (!ok) return false;
 	}
 
@@ -291,20 +311,12 @@ bool DbStoreRelationShapeInTable(pqxx::connection &c, pqxx::transaction_base *wo
 	const std::string &activeTablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
 	const class OsmRelation &relation,
+	int64_t start_timestamp,
 	int64_t timestamp,
+	bool has_bbox,
+	const std::vector<double> &bbox,
 	std::string &errStr)
 {
-	//Get member node objects
-	int64_t maxTimestamp = 0;
-	std::vector<double> bbox;
-	bool has_bbox = DbGetRelationBbox(c, work, 
-		staticTablePrefix, 
-		activeTablePrefix, 
-		dbUsernameLookup, 
-		relation,
-		maxTimestamp,
-		bbox);
-
 	try
 	{
 		stringstream ss;
@@ -326,7 +338,7 @@ bool DbStoreRelationShapeInTable(pqxx::connection &c, pqxx::transaction_base *wo
 		pqxx::prepare::invocation &invoc = *pinvoc.get();
 		invoc(relation.objId);
 		invoc(relation.metaData.version);
-		invoc(maxTimestamp);
+		invoc(start_timestamp);
 		invoc(timestamp);
 
 		if(has_bbox)
@@ -417,15 +429,40 @@ bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		searchCount ++;
 	}
 
-	//Insert old relation shape into log
+	std::vector<int64_t> relMaxTimestamps;
+	std::vector<std::vector<double> > relBboxes;
+	std::vector<bool> relHasBbox;	
 	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
 
 		class OsmRelation &rel = affectedRelations->relations[i];
 
+		//Get bbox for relation
+		int64_t maxTimestamp = 0;
+		std::vector<double> bbox;
+		bool has_bbox = DbGetRelationBbox(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup, 
+			rel,
+			maxTimestamp,
+			bbox);
+		relMaxTimestamps.push_back(maxTimestamp);
+		relBboxes.push_back(bbox);
+		relHasBbox.push_back(has_bbox);
+	}
+
+	//Insert old relation shape into log
+	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
+
+		class OsmRelation &rel = affectedRelations->relations[i];
+		int64_t maxTimestamp = relMaxTimestamps[i];
+		const std::vector<double> &bbox = relBboxes[i];
+		bool has_bbox = relHasBbox[i];
+
 		bool ok = DbStoreRelationShapeInTable(c, work, 
 			staticTablePrefix,
 			activeTablePrefix, dbUsernameLookup,
-			rel, timestamp, errStr);
+			rel, maxTimestamp, timestamp, has_bbox, bbox, errStr);
 		if (!ok) return false;
 	}
 

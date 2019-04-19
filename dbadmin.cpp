@@ -136,8 +136,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"meta")+" (key TEXT, value TEXT);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-		sql = "INSERT INTO "+c.quote_name(tablePrefix+"meta")+" (key, value) VALUES ('schema_version', '11');";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
 	}
 
 	int schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
@@ -207,8 +206,10 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayshapes")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relshapes")+";";
+	ok = DbExec(work, sql, errStr, nullptr, verbose);
 
-	return ok;	
+	return ok;
 
 }
 
