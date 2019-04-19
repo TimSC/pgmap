@@ -5,6 +5,7 @@
 #include "dbdecode.h"
 #include "dbquery.h"
 #include "dbusername.h"
+#include "dbmeta.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include <map>
@@ -139,7 +140,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
-	int schemaVersion = DbGetSchemaVersion(c, work, tablePrefix);
+	int schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
 	if (schemaVersion == 11)
 	{
 		//Update to schema ver 12
@@ -149,8 +150,12 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relshapes")+" (id BIGSERIAL PRIMARY KEY, rel_id BIGINT, rel_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, bbox GEOMETRY(Polygon, 4326));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "UPDATE "+c.quote_name(tablePrefix+"meta")+" SET value='12' WHERE key='schema_version';";
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Polygon, 4326), ADD COLUMN bbox_timestamp BIGINT;";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Polygon, 4326), ADD COLUMN bbox_timestamp BIGINT;";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
 	}
 
 	return ok;

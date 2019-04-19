@@ -87,10 +87,3 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 	minorVerOut = (ver / 100) % 100;
 }
 
-int DbGetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix)
-{
-	string sql = "SELECT value FROM "+c.quote_name(tablePrefix+"meta")+" WHERE key='schema_version';";
-	pqxx::result r = work->exec(sql);
-	return r[0][0].as<int>();
-}
-
