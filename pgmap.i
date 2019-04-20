@@ -346,12 +346,21 @@ public:
 	void GetObjectsHistoryById(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);
 
-	bool LogWayShapes(const class OsmData &data, 
+	bool LogWayShapes(const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
 		int64_t timestamp,
 		std::set<int64_t> &touchedWayIdsOut,
 		class PgMapError &errStr);
 	bool LogRelationShapes(int64_t timestamp,
 		const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
+		const std::set<int64_t> &touchedRelationIds,
+		class PgMapError &errStr);
+	bool UpdateWayShapes(const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
+		std::set<int64_t> &touchedWayIdsOut,
+		class PgMapError &errStr);
+	bool UpdateRelationShapes(const std::set<int64_t> &touchedNodeIds,
 		const std::set<int64_t> &touchedWayIds,
 		const std::set<int64_t> &touchedRelationIds,
 		class PgMapError &errStr);

@@ -120,18 +120,58 @@ bool DbStoreWayShapeInTable(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
-bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbUpdateWayBboxInTable(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
-	int64_t timestamp,
-	const class OsmData &osmData,
+	const class OsmWay &way,
+	int64_t maxTimestamp,
+	const std::vector<double> &bbox,
+	std::string &errStr)
+{
+	stringstream ss;
+	ss << "UPDATE "<< c.quote_name(activeTablePrefix+"liveways") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
+	ss << " WHERE id=$6;";
+
+	try
+	{
+		c.prepare(activeTablePrefix+"updatewaybbox", ss.str());
+
+		pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"updatewaybbox");
+		invoc(bbox[0]);
+		invoc(bbox[1]);
+		invoc(bbox[2]);
+		invoc(bbox[3]);
+
+		invoc(maxTimestamp);
+
+		invoc(way.objId);
+		invoc.exec();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
+void DbGetAffectedWays(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
 	std::set<int64_t> &touchedWayIdsOut,
+	std::map<int64_t, class OsmWay> &touchedWayIdsMapOut,
 	std::string &errStr)
 {
 	//Get affected ways by modified nodes
-	std::set<int64_t> touchedNodeIds = osmData.GetNodeIds();
-
 	std::shared_ptr<class OsmData> affectedWays(new class OsmData());
 	DbGetWaysForNodes(c, work,
 		staticTablePrefix, 
@@ -141,28 +181,48 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		affectedWays);
 
 	// Get pre-edit ways
-	std::set<int64_t> wayIds = osmData.GetWayIds();
-
 	std::shared_ptr<class OsmData> changedWays(new class OsmData());
 	DbGetObjectsById(c, work,
 		staticTablePrefix, activeTablePrefix, 
-		dbUsernameLookup, "way", wayIds, changedWays);
+		dbUsernameLookup, "way", touchedWayIds, changedWays);
 
 	//Merge way ID lists
 	touchedWayIdsOut.clear();
-	std::map<int64_t, const class OsmWay*> touchedWayIdsMap;
 	for(size_t i=0; i<affectedWays->ways.size(); i++)
 	{
 		const class OsmWay &way = affectedWays->ways[i];
 		touchedWayIdsOut.insert(way.objId);
-		touchedWayIdsMap[way.objId] = &way;
+		touchedWayIdsMapOut[way.objId] = way;
 	}
 	for(size_t i=0; i<changedWays->ways.size(); i++)
 	{
 		const class OsmWay &way = changedWays->ways[i];
 		touchedWayIdsOut.insert(way.objId);
-		touchedWayIdsMap[way.objId] = &way;
+		touchedWayIdsMapOut[way.objId] = way;
 	}
+}
+
+bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	int64_t timestamp,
+	const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
+	std::set<int64_t> &touchedWayIdsOut,
+	std::string &errStr)
+{
+	//Get affected ways
+	std::map<int64_t, class OsmWay> touchedWayIdsMap;
+	DbGetAffectedWays(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup, 
+		touchedNodeIds,
+		touchedWayIds,
+		touchedWayIdsOut,
+		touchedWayIdsMap,
+		errStr);
 
 	std::vector<int64_t> touchedWayIdsLi(touchedWayIdsOut.begin(), touchedWayIdsOut.end());
 
@@ -172,7 +232,7 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
 		//Get way bbox
-		const class OsmWay &way = *touchedWayIdsMap[touchedWayIdsLi[i]];
+		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
 		int64_t maxTimestamp = way.metaData.timestamp;
 		std::vector<int32_t> memNodeVers;
 		std::vector<double> bbox;
@@ -196,7 +256,7 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	//Insert old way shape into log
 	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
-		const class OsmWay &way = *touchedWayIdsMap[touchedWayIdsLi[i]];
+		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
 		int64_t maxTimestamp = wayMaxTimestamps[i];
 		const std::vector<int32_t> &memNodeVers = wayMemNodeVers[i];
 		const std::vector<double> &bbox = wayBboxes[i];
@@ -210,6 +270,76 @@ bool DbLogWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	return true;
 }
+
+bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
+	std::set<int64_t> &touchedWayIdsOut,
+	std::string &errStr)
+{
+	//Get affected ways
+	std::map<int64_t, class OsmWay> touchedWayIdsMap;
+	DbGetAffectedWays(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup, 
+		touchedNodeIds,
+		touchedWayIds,
+		touchedWayIdsOut,
+		touchedWayIdsMap,
+		errStr);
+
+	std::vector<int64_t> touchedWayIdsLi(touchedWayIdsOut.begin(), touchedWayIdsOut.end());
+
+	vector<int64_t> wayMaxTimestamps;
+	std::vector<std::vector<int32_t> > wayMemNodeVers;
+	std::vector<std::vector<double> > wayBboxes;
+	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
+	{
+		//Get way bbox
+		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
+		int64_t maxTimestamp = way.metaData.timestamp;
+		std::vector<int32_t> memNodeVers;
+		std::vector<double> bbox;
+
+		bool ok = DbGetNodeIdsBbox(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup, 
+			way.GetRefIds(), maxTimestamp, memNodeVers, bbox);
+		if(!ok)
+		{
+			errStr = "Way has invalid bbox (not enough nodes?)";
+			return false;
+		}
+
+		wayMaxTimestamps.push_back(maxTimestamp);
+		wayMemNodeVers.push_back(memNodeVers);
+		wayBboxes.push_back(bbox);
+	}
+
+	//Insert old way shape into log
+	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
+	{
+		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
+		int64_t maxTimestamp = wayMaxTimestamps[i];
+		const std::vector<int32_t> &memNodeVers = wayMemNodeVers[i];
+		const std::vector<double> &bbox = wayBboxes[i];
+
+		bool ok = DbUpdateWayBboxInTable(c, work, 
+			staticTablePrefix,
+			activeTablePrefix, dbUsernameLookup,
+			way, maxTimestamp, bbox, errStr);
+		if (!ok) return false;
+	}
+
+	return true;
+}
+
+// *****************************************************************************************
 
 void DbGetNodesIdInRelationRecursive(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
@@ -366,18 +496,76 @@ bool DbStoreRelationShapeInTable(pqxx::connection &c, pqxx::transaction_base *wo
 
 }
 
-bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbUpdateRelatonBboxInTable(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
-	int64_t timestamp,
+	const class OsmRelation &relation,
+	int64_t maxTimestamp,
+	bool has_bbox,
+	const std::vector<double> &bbox,
+	std::string &errStr)
+{
+	try
+	{
+		if(has_bbox)
+		{
+			stringstream ss;
+			ss << "UPDATE "<< c.quote_name(activeTablePrefix+"liverelations") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
+			ss << " WHERE id=$6;";
+
+			c.prepare(activeTablePrefix+"updaterelbbox", ss.str());
+
+			pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"updaterelbbox");
+			invoc(bbox[0]);
+			invoc(bbox[1]);
+			invoc(bbox[2]);
+			invoc(bbox[3]);
+
+			invoc(maxTimestamp);
+
+			invoc(relation.objId);
+			invoc.exec();
+		}
+		else
+		{
+			stringstream ss;
+			ss << "UPDATE "<< c.quote_name(activeTablePrefix+"liverelations") + " SET bbox = NULL, bbox_timestamp = $1";
+			ss << " WHERE id=$2;";
+
+			c.prepare(activeTablePrefix+"updaterelbbox2", ss.str());
+
+			pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"updaterelbbox2");
+
+			invoc(maxTimestamp);
+			invoc(relation.objId);
+			invoc.exec();			
+		}
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
+void DbGetAffectedRelations(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
 	const std::set<int64_t> &touchedNodeIds,
 	const std::set<int64_t> &touchedWayIds,
 	const std::set<int64_t> &touchedRelationIds,
+	std::shared_ptr<class OsmData> affectedRelations,
 	std::string &errStr)
 {
 	//Get affected relations by modified nodes
-	std::shared_ptr<class OsmData> affectedRelations(new class OsmData());
 	DbGetRelationsForObjs(c, work,
 		staticTablePrefix, 
 		activeTablePrefix, 
@@ -428,6 +616,29 @@ bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 		searchCount ++;
 	}
+}
+
+bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	int64_t timestamp,
+	const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
+	const std::set<int64_t> &touchedRelationIds,
+	std::string &errStr)
+{
+	//Get affected relations
+	std::shared_ptr<class OsmData> affectedRelations(new class OsmData());
+	DbGetAffectedRelations(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup, 
+			touchedNodeIds,
+			touchedWayIds,
+			touchedRelationIds,
+			affectedRelations,
+			errStr);
 
 	std::vector<int64_t> relMaxTimestamps;
 	std::vector<std::vector<double> > relBboxes;
@@ -463,6 +674,67 @@ bool DbLogRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 			staticTablePrefix,
 			activeTablePrefix, dbUsernameLookup,
 			rel, maxTimestamp, timestamp, has_bbox, bbox, errStr);
+		if (!ok) return false;
+	}
+
+	return true;
+}
+
+bool DbUpdateRelationShapes(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup, 
+	const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
+	const std::set<int64_t> &touchedRelationIds,
+	std::string &errStr)
+{
+	//Get affected relations
+	std::shared_ptr<class OsmData> affectedRelations(new class OsmData());
+	DbGetAffectedRelations(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup, 
+			touchedNodeIds,
+			touchedWayIds,
+			touchedRelationIds,
+			affectedRelations,
+			errStr);
+
+	std::vector<int64_t> relMaxTimestamps;
+	std::vector<std::vector<double> > relBboxes;
+	std::vector<bool> relHasBbox;	
+	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
+
+		class OsmRelation &rel = affectedRelations->relations[i];
+
+		//Get bbox for relation
+		int64_t maxTimestamp = 0;
+		std::vector<double> bbox;
+		bool has_bbox = DbGetRelationBbox(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup, 
+			rel,
+			maxTimestamp,
+			bbox);
+		relMaxTimestamps.push_back(maxTimestamp);
+		relBboxes.push_back(bbox);
+		relHasBbox.push_back(has_bbox);
+	}
+
+	//Insert old relation shape into log
+	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
+
+		class OsmRelation &rel = affectedRelations->relations[i];
+		int64_t maxTimestamp = relMaxTimestamps[i];
+		const std::vector<double> &bbox = relBboxes[i];
+		bool has_bbox = relHasBbox[i];
+
+		bool ok = DbUpdateRelatonBboxInTable(c, work, 
+			staticTablePrefix,
+			activeTablePrefix, dbUsernameLookup,
+			rel, maxTimestamp, has_bbox, bbox, errStr);
 		if (!ok) return false;
 	}
 

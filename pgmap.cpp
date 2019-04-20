@@ -745,7 +745,8 @@ void PgTransaction::GetObjectsHistoryById(const std::string &type, const std::se
 			it, 1000, out);
 }
 
-bool PgTransaction::LogWayShapes(const class OsmData &data, 
+bool PgTransaction::LogWayShapes(const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
 	int64_t timestamp,
 	std::set<int64_t> &touchedWayIdsOut,
 	class PgMapError &errStr)
@@ -768,7 +769,8 @@ bool PgTransaction::LogWayShapes(const class OsmData &data,
 		this->tableActivePrefix, 
 		this->dbUsernameLookup, 
 		timestamp,
-		data,
+		touchedNodeIds,
+		touchedWayIds,
 		touchedWayIdsOut,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
@@ -800,6 +802,68 @@ bool PgTransaction::LogRelationShapes(int64_t timestamp,
 		this->tableActivePrefix, 
 		this->dbUsernameLookup, 
 		timestamp,
+		touchedNodeIds,
+		touchedWayIds,
+		touchedRelationIds,
+		nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
+bool PgTransaction::UpdateWayShapes(const std::set<int64_t> &touchedNodeIds,
+	const std::set<int64_t> &touchedWayIds,
+	std::set<int64_t> &touchedWayIdsOut,
+	class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
+
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbUpdateWayShapes(*dbconn, work.get(), 
+		this->tableStaticPrefix, 
+		this->tableActivePrefix, 
+		this->dbUsernameLookup, 
+		touchedNodeIds,
+		touchedWayIds,
+		touchedWayIdsOut,
+		nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
+bool PgTransaction::UpdateRelationShapes(const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
+		const std::set<int64_t> &touchedRelationIds,
+		class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
+
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbUpdateRelationShapes(*dbconn, work.get(), 
+		this->tableStaticPrefix, 
+		this->tableActivePrefix, 
+		this->dbUsernameLookup, 
 		touchedNodeIds,
 		touchedWayIds,
 		touchedRelationIds,
