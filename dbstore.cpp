@@ -5,6 +5,73 @@
 #include "dbquery.h"
 using namespace std;
 
+bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	const std::string &typeStr, int64_t objId,
+	bool &foundExisting, int64_t &currentVersion,
+	bool &foundOld, int64_t &oldVersion,
+	std::shared_ptr<pqxx::result> r,
+	std::string &errStr, int verbose)
+{
+	//Get existing object object in live table (if any)
+	string checkExistingLiveSql = "SELECT * FROM "+ c.quote_name(tablePrefix + "live"+typeStr+"s")+" WHERE (id=$1);";
+	pqxx::result r;
+	try
+	{
+		if(verbose >= 1)
+			cout << checkExistingLiveSql << " " << objId << endl;
+		c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
+		r.reset(work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec());
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+
+	foundExisting = r.size() > 0;
+	currentVersion = -1;
+	if(foundExisting)
+	{
+		const pqxx::result::tuple row = r[0];
+		currentVersion = row["version"].as<int64_t>();
+	}
+
+	//Get existing object version in old table (if any)
+	string checkExistingOldSql = "SELECT MAX(version) FROM "+ c.quote_name(tablePrefix + "old"+typeStr+"s") + " WHERE (id=$1);";
+	pqxx::result r2;
+	try
+	{
+		if(verbose >= 1)
+			cout << checkExistingOldSql << " " << objId << endl;
+		c.prepare(tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
+		r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+
+	const pqxx::result::tuple row = r2[0];
+	const pqxx::result::field field = row[0];
+	if(!field.is_null())
+	{
+		oldVersion = field.as<int64_t>();
+		foundOld = true;
+	}
+	return true;
+}
+
 bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &typeStr,
 	const std::vector<const class OsmObject *> &objPtrs, 
@@ -63,65 +130,15 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			EncodeStringVec(relationObject->refRoles, rolesJson);
 		}
 
-		//Get existing object object in live table (if any)
-		string checkExistingLiveSql = "SELECT * FROM "+ c.quote_name(tablePrefix + "live"+typeStr+"s")+" WHERE (id=$1);";
-		pqxx::result r;
-		try
-		{
-			if(verbose >= 1)
-				cout << checkExistingLiveSql << " " << objId << endl;
-			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
-			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
-		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-
-		bool foundExisting = r.size() > 0;
+		//TODO get existing object from old and new tables
+		bool foundExisting = false;
 		int64_t currentVersion = -1;
-		if(foundExisting)
-		{
-			const pqxx::result::tuple row = r[0];
-			currentVersion = row["version"].as<int64_t>();
-		}
-
-		//Get existing object version in old table (if any)
-		string checkExistingOldSql = "SELECT MAX(version) FROM "+ c.quote_name(tablePrefix + "old"+typeStr+"s") + " WHERE (id=$1);";
-		pqxx::result r2;
-		try
-		{
-			if(verbose >= 1)
-				cout << checkExistingOldSql << " " << objId << endl;
-			c.prepare(tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
-			r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
-		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-
 		bool foundOld = false;
 		int64_t oldVersion = -1;
-		const pqxx::result::tuple row = r2[0];
-		const pqxx::result::field field = row[0];
-		if(!field.is_null())
-		{
-			oldVersion = field.as<int64_t>();
-			foundOld = true;
-		}
+		bool ok = GetObjectByIdLowLevel(c, work, tablePrefix, 
+			typeStr, objId, foundExisting, currentVersion, foundOld, oldVersion, 
+			errStr, verbose);
+		if(!ok) return false;
 
 		//Check if we need to delete object from live table
 		if(foundExisting && version >= currentVersion && !osmObject->metaData.visible)
