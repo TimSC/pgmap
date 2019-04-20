@@ -121,23 +121,24 @@ bool DbStoreWayShapeInTable(pqxx::connection &c, pqxx::transaction_base *work,
 }
 
 bool DbUpdateWayBboxInTable(pqxx::connection &c, pqxx::transaction_base *work, 
-	const std::string &staticTablePrefix, 
-	const std::string &activeTablePrefix, 
+	const std::string &tablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
 	const class OsmWay &way,
 	int64_t maxTimestamp,
 	const std::vector<double> &bbox,
+	int &affectedRowsOut,
 	std::string &errStr)
 {
+	affectedRowsOut = 0;
 	stringstream ss;
-	ss << "UPDATE "<< c.quote_name(activeTablePrefix+"liveways") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
+	ss << "UPDATE "<< c.quote_name(tablePrefix+"liveways") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
 	ss << " WHERE id=$6;";
 
 	try
 	{
-		c.prepare(activeTablePrefix+"updatewaybbox", ss.str());
+		c.prepare(tablePrefix+"updatewaybbox", ss.str());
 
-		pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"updatewaybbox");
+		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatewaybbox");
 		invoc(bbox[0]);
 		invoc(bbox[1]);
 		invoc(bbox[2]);
@@ -146,7 +147,8 @@ bool DbUpdateWayBboxInTable(pqxx::connection &c, pqxx::transaction_base *work,
 		invoc(maxTimestamp);
 
 		invoc(way.objId);
-		invoc.exec();
+		pqxx::result result = invoc.exec();
+		affectedRowsOut = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -328,12 +330,23 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		int64_t maxTimestamp = wayMaxTimestamps[i];
 		const std::vector<int32_t> &memNodeVers = wayMemNodeVers[i];
 		const std::vector<double> &bbox = wayBboxes[i];
-
+	
+		//TODO would it be better to move the object to the active table in all cases?
+		int affectedRows = 0;
 		bool ok = DbUpdateWayBboxInTable(c, work, 
-			staticTablePrefix,
-			activeTablePrefix, dbUsernameLookup,
-			way, maxTimestamp, bbox, errStr);
+			activeTablePrefix,
+			dbUsernameLookup,
+			way, maxTimestamp, bbox, affectedRows, errStr);
 		if (!ok) return false;
+
+		if(affectedRows==0)
+		{
+			ok = DbUpdateWayBboxInTable(c, work, 
+				staticTablePrefix,
+				dbUsernameLookup,
+				way, maxTimestamp, bbox, affectedRows, errStr);
+			if (!ok) return false;
+		}
 	}
 
 	return true;
@@ -496,27 +509,28 @@ bool DbStoreRelationShapeInTable(pqxx::connection &c, pqxx::transaction_base *wo
 
 }
 
-bool DbUpdateRelatonBboxInTable(pqxx::connection &c, pqxx::transaction_base *work, 
-	const std::string &staticTablePrefix, 
-	const std::string &activeTablePrefix, 
+bool DbUpdateRelationBboxInTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
 	const class OsmRelation &relation,
 	int64_t maxTimestamp,
 	bool has_bbox,
 	const std::vector<double> &bbox,
+	int &affectedRowsOut,
 	std::string &errStr)
 {
+	affectedRowsOut = 0;
 	try
 	{
 		if(has_bbox)
 		{
 			stringstream ss;
-			ss << "UPDATE "<< c.quote_name(activeTablePrefix+"liverelations") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
+			ss << "UPDATE "<< c.quote_name(tablePrefix+"liverelations") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
 			ss << " WHERE id=$6;";
 
-			c.prepare(activeTablePrefix+"updaterelbbox", ss.str());
+			c.prepare(tablePrefix+"updaterelbbox", ss.str());
 
-			pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"updaterelbbox");
+			pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updaterelbbox");
 			invoc(bbox[0]);
 			invoc(bbox[1]);
 			invoc(bbox[2]);
@@ -525,21 +539,23 @@ bool DbUpdateRelatonBboxInTable(pqxx::connection &c, pqxx::transaction_base *wor
 			invoc(maxTimestamp);
 
 			invoc(relation.objId);
-			invoc.exec();
+			pqxx::result result = invoc.exec();
+			affectedRowsOut = result.affected_rows();
 		}
 		else
 		{
 			stringstream ss;
-			ss << "UPDATE "<< c.quote_name(activeTablePrefix+"liverelations") + " SET bbox = NULL, bbox_timestamp = $1";
+			ss << "UPDATE "<< c.quote_name(tablePrefix+"liverelations") + " SET bbox = NULL, bbox_timestamp = $1";
 			ss << " WHERE id=$2;";
 
-			c.prepare(activeTablePrefix+"updaterelbbox2", ss.str());
+			c.prepare(tablePrefix+"updaterelbbox2", ss.str());
 
-			pqxx::prepare::invocation invoc = work->prepared(activeTablePrefix+"updaterelbbox2");
+			pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updaterelbbox2");
 
 			invoc(maxTimestamp);
 			invoc(relation.objId);
-			invoc.exec();			
+			pqxx::result result = invoc.exec();
+			affectedRowsOut = result.affected_rows();
 		}
 	}
 	catch (const pqxx::sql_error &e)
@@ -731,11 +747,21 @@ bool DbUpdateRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		const std::vector<double> &bbox = relBboxes[i];
 		bool has_bbox = relHasBbox[i];
 
-		bool ok = DbUpdateRelatonBboxInTable(c, work, 
-			staticTablePrefix,
+		//TODO would it be better to move the object to the active table in all cases?
+		int affectedRows = 0;
+		bool ok = DbUpdateRelationBboxInTable(c, work, 
 			activeTablePrefix, dbUsernameLookup,
-			rel, maxTimestamp, has_bbox, bbox, errStr);
+			rel, maxTimestamp, has_bbox, bbox, affectedRows, errStr);
 		if (!ok) return false;
+
+		if(affectedRows)
+		{
+			ok = DbUpdateRelationBboxInTable(c, work, 
+				staticTablePrefix, dbUsernameLookup,
+				rel, maxTimestamp, has_bbox, bbox, affectedRows, errStr);
+			if (!ok) return false;
+
+		}
 	}
 
 	return true;
