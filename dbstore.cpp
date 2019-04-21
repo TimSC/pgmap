@@ -9,7 +9,8 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, co
 	const std::string &typeStr, int64_t objId,
 	bool &foundExisting, int64_t &currentVersion,
 	bool &foundOld, int64_t &oldVersion,
-	std::shared_ptr<pqxx::result> r,
+	pqxx::result &resultl, //Live result
+	pqxx::result &resulto, //Old result
 	std::string &errStr, int verbose)
 {
 	//Get existing object object in live table (if any)
@@ -20,7 +21,7 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, co
 		if(verbose >= 1)
 			cout << checkExistingLiveSql << " " << objId << endl;
 		c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
-		r.reset(work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec());
+		resultl = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -33,23 +34,22 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, co
 		return false;
 	}
 
-	foundExisting = r.size() > 0;
+	foundExisting = resultl.size() > 0;
 	currentVersion = -1;
 	if(foundExisting)
 	{
-		const pqxx::result::tuple row = r[0];
+		pqxx::result::tuple row = resultl[0];
 		currentVersion = row["version"].as<int64_t>();
 	}
 
 	//Get existing object version in old table (if any)
 	string checkExistingOldSql = "SELECT MAX(version) FROM "+ c.quote_name(tablePrefix + "old"+typeStr+"s") + " WHERE (id=$1);";
-	pqxx::result r2;
 	try
 	{
 		if(verbose >= 1)
 			cout << checkExistingOldSql << " " << objId << endl;
 		c.prepare(tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
-		r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
+		resulto = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -62,12 +62,125 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, co
 		return false;
 	}
 
-	const pqxx::result::tuple row = r2[0];
+	pqxx::result::tuple row = resulto[0];
 	const pqxx::result::field field = row[0];
 	if(!field.is_null())
 	{
 		oldVersion = field.as<int64_t>();
 		foundOld = true;
+	}
+	return true;
+}
+
+bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tableName,
+	const std::string &typeStr,
+	string ocdn,
+	const pqxx::result::tuple &row,
+	std::string &errStr, int verbose)
+{
+	stringstream ss;
+	ss << "INSERT INTO "<< c.quote_name(tableName) + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
+	bool isNode = typeStr == "node";
+	bool isWay = typeStr == "way";
+	bool isRelation = typeStr == "relation";
+	if(isNode)
+		ss << ", geom";
+	else if(isWay)
+		ss << ", members";
+	else if(isRelation)
+		ss << ", members, memberroles";
+	else
+	{
+		errStr = "Unrecognised object type";
+		return false;
+	}
+	
+	ss << ") VALUES ";
+	ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
+	if(isNode || isWay)
+		ss << ",$10";
+	else if (isRelation)
+		ss << ",$10,$11";
+	ss << ") " << ocdn << ";";
+
+	try
+	{
+		if(isNode)
+		{
+			if(verbose >= 1)
+				cout << ss.str() << endl;
+			c.prepare(tableName+"copyoldnode", ss.str());
+
+			pqxx::prepare::invocation invoc = work->prepared(tableName+"copyoldnode");
+			BindVal<int64_t>(invoc, row["id"]);
+			BindVal<int64_t>(invoc, row["changeset"]);
+			BindVal<int64_t>(invoc, row["changeset_index"]);
+			BindVal<string>(invoc, row["username"]);
+			BindVal<int64_t>(invoc, row["uid"]);
+			BindVal<int64_t>(invoc, row["timestamp"]);
+			BindVal<int64_t>(invoc, row["version"]);
+			BindVal<string>(invoc, row["tags"]);
+			invoc(true);
+			BindVal<string>(invoc, row["geom"]);
+
+			invoc.exec();
+		}
+		else if(isWay)
+		{
+			if(verbose >= 1)
+				cout << ss.str() << endl;
+			c.prepare(tableName+"copyoldway", ss.str());
+
+			pqxx::prepare::invocation invoc = work->prepared(tableName+"copyoldway");
+			BindVal<int64_t>(invoc, row["id"]);
+			BindVal<int64_t>(invoc, row["changeset"]);
+			BindVal<int64_t>(invoc, row["changeset_index"]);
+			BindVal<string>(invoc, row["username"]);
+			BindVal<int64_t>(invoc, row["uid"]);
+			BindVal<int64_t>(invoc, row["timestamp"]);
+			BindVal<int64_t>(invoc, row["version"]);
+			BindVal<string>(invoc, row["tags"]);
+			invoc(true);
+			BindVal<string>(invoc, row["members"]);
+
+			invoc.exec();
+		}
+		else if(isRelation)
+		{
+			if(verbose >= 1)
+				cout << ss.str() << endl;
+			c.prepare(tableName+"copyoldrelation", ss.str());
+
+			pqxx::prepare::invocation invoc = work->prepared(tableName+"copyoldrelation");
+			BindVal<int64_t>(invoc, row["id"]);
+			BindVal<int64_t>(invoc, row["changeset"]);
+			BindVal<int64_t>(invoc, row["changeset_index"]);
+			BindVal<string>(invoc, row["username"]);
+			BindVal<int64_t>(invoc, row["uid"]);
+			BindVal<int64_t>(invoc, row["timestamp"]);
+			BindVal<int64_t>(invoc, row["version"]);
+			BindVal<string>(invoc, row["tags"]);
+			invoc(true);
+			BindVal<string>(invoc, row["members"]);
+			BindVal<string>(invoc, row["memberroles"]);
+
+			invoc.exec();
+		}
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		stringstream ss2;
+		ss2 << e.what() << ":" << e.query() << ":" << ss.str();
+		errStr = ss2.str();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		stringstream ss2;
+		ss2 << e.what() << ";" << ss.str() << endl;
+		errStr = ss2.str();
+		return false;
 	}
 	return true;
 }
@@ -130,13 +243,15 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			EncodeStringVec(relationObject->refRoles, rolesJson);
 		}
 
-		//TODO get existing object from old and new tables
+		//Get existing objects from old and new tables
 		bool foundExisting = false;
 		int64_t currentVersion = -1;
 		bool foundOld = false;
 		int64_t oldVersion = -1;
+		pqxx::result resultl, resulto;
 		bool ok = GetObjectByIdLowLevel(c, work, tablePrefix, 
 			typeStr, objId, foundExisting, currentVersion, foundOld, oldVersion, 
+			resultl, resulto,
 			errStr, verbose);
 		if(!ok) return false;
 
@@ -167,103 +282,14 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		//Check if we need to copy row from live to history table
 		if(foundExisting && version > currentVersion)
 		{
-			const pqxx::result::tuple row = r[0];
-
-			//Insert into live table
-			stringstream ss;
-			ss << "INSERT INTO "<< c.quote_name(tablePrefix+"old"+typeStr+"s") + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
-			if(nodeObject != nullptr)
-				ss << ", geom";
-			else if(wayObject != nullptr)
-				ss << ", members";
-			else if(relationObject != nullptr)
-				ss << ", members, memberroles";
-			ss << ") VALUES ";
-			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
-			if(nodeObject != nullptr || wayObject != nullptr)
-				ss << ",$10";
-			else if (relationObject != nullptr)
-				ss << ",$10,$11";
-			ss << ") " << ocdn << ";";
-
-			try
-			{
-				if(nodeObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"copyoldnode", ss.str());
-
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["geom"]);
-
-					invoc.exec();
-				}
-				else if(wayObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"copyoldway", ss.str());
-
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["members"]);
-
-					invoc.exec();
-				}
-				else if(relationObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"copyoldrelation", ss.str());
-	
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["members"]);
-					BindVal<string>(invoc, row["memberroles"]);
-
-					invoc.exec();
-				}
-			}
-			catch (const pqxx::sql_error &e)
-			{
-				stringstream ss2;
-				ss2 << e.what() << ":" << e.query() << ":" << ss.str();
-				errStr = ss2.str();
-				return false;
-			}
-			catch (const std::exception &e)
-			{
-				stringstream ss2;
-				ss2 << e.what() << ";" << ss.str() << endl;
-				errStr = ss2.str();
-				return false;
-			}
+			const pqxx::result::tuple row = resultl[0];
+			bool ok = InsertObjectIntoTableFromRow(c, work,
+				tablePrefix+"old"+typeStr+"s",
+				typeStr,
+				ocdn,
+				row,
+				errStr, verbose);
+			if(!ok) return false;
 		}
 
 		//Check if this is the latest version and visible
