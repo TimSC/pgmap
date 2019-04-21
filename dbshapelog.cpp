@@ -323,7 +323,21 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		wayBboxes.push_back(bbox);
 	}
 
-	//Insert old way shape into log
+	bool ocdnSupported = true;
+	string ocdn;
+	DbCheckOcdnSupport(c, work, ocdnSupported, ocdn);
+
+	//Move the object to the active table in all cases
+	DbCheckAndCopyObjectsToActiveTable(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup,
+		"way", touchedWayIdsOut, 
+		ocdnSupported,
+		ocdn,
+		errStr, 0);
+
+	//Update way shape in active table
 	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
 		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
@@ -331,22 +345,12 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		const std::vector<int32_t> &memNodeVers = wayMemNodeVers[i];
 		const std::vector<double> &bbox = wayBboxes[i];
 	
-		//TODO would it be better to move the object to the active table in all cases?
 		int affectedRows = 0;
 		bool ok = DbUpdateWayBboxInTable(c, work, 
 			activeTablePrefix,
 			dbUsernameLookup,
 			way, maxTimestamp, bbox, affectedRows, errStr);
 		if (!ok) return false;
-
-		if(affectedRows==0)
-		{
-			ok = DbUpdateWayBboxInTable(c, work, 
-				staticTablePrefix,
-				dbUsernameLookup,
-				way, maxTimestamp, bbox, affectedRows, errStr);
-			if (!ok) return false;
-		}
 	}
 
 	return true;
@@ -739,7 +743,20 @@ bool DbUpdateRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		relHasBbox.push_back(has_bbox);
 	}
 
-	//Insert old relation shape into log
+	bool ocdnSupported = true;
+	string ocdn;
+	DbCheckOcdnSupport(c, work, ocdnSupported, ocdn);
+
+	//Move the object to the active table in all cases
+	DbCheckAndCopyObjectsToActiveTable(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		dbUsernameLookup,
+		"relation", affectedRelations->GetRelationIds(), 
+		ocdnSupported,
+		ocdn,
+		errStr, 0);
+
 	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
 
 		class OsmRelation &rel = affectedRelations->relations[i];
@@ -747,21 +764,12 @@ bool DbUpdateRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		const std::vector<double> &bbox = relBboxes[i];
 		bool has_bbox = relHasBbox[i];
 
-		//TODO would it be better to move the object to the active table in all cases?
+		//Update bbox in active table
 		int affectedRows = 0;
 		bool ok = DbUpdateRelationBboxInTable(c, work, 
 			activeTablePrefix, dbUsernameLookup,
 			rel, maxTimestamp, has_bbox, bbox, affectedRows, errStr);
 		if (!ok) return false;
-
-		if(affectedRows)
-		{
-			ok = DbUpdateRelationBboxInTable(c, work, 
-				staticTablePrefix, dbUsernameLookup,
-				rel, maxTimestamp, has_bbox, bbox, affectedRows, errStr);
-			if (!ok) return false;
-
-		}
 	}
 
 	return true;

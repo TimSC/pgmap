@@ -87,3 +87,17 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 	minorVerOut = (ver / 100) % 100;
 }
 
+void DbCheckOcdnSupport(pqxx::connection &c, pqxx::transaction_base *work,
+	bool &ocdnSupported, std::string &ocdn)
+{
+	int majorVer=0, minorVer=0;
+	DbGetVersion(c, work, majorVer, minorVer);
+	ocdnSupported = true;
+	ocdn = " ON CONFLICT DO NOTHING";
+	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+	{
+		ocdn = "";
+		ocdnSupported = false;
+	}
+}
+

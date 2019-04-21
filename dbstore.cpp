@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "dbstore.h"
 #include "dbids.h"
 #include "dbcommon.h"
@@ -5,12 +6,11 @@
 #include "dbquery.h"
 using namespace std;
 
-bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tablePrefix, 
 	const std::string &typeStr, int64_t objId,
 	bool &foundExisting, int64_t &currentVersion,
-	bool &foundOld, int64_t &oldVersion,
 	pqxx::result &resultl, //Live result
-	pqxx::result &resulto, //Old result
 	std::string &errStr, int verbose)
 {
 	//Get existing object object in live table (if any)
@@ -41,8 +41,17 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, co
 		pqxx::result::tuple row = resultl[0];
 		currentVersion = row["version"].as<int64_t>();
 	}
+	return true;
+}
 
+bool GetMaxVersionByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, 
+	const string &tablePrefix, 
+	const std::string &typeStr, int64_t objId,
+	bool &foundOld, int64_t &oldVersion,
+	std::string &errStr, int verbose)
+{
 	//Get existing object version in old table (if any)
+	pqxx::result resulto;
 	string checkExistingOldSql = "SELECT MAX(version) FROM "+ c.quote_name(tablePrefix + "old"+typeStr+"s") + " WHERE (id=$1);";
 	try
 	{
@@ -73,14 +82,22 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, co
 }
 
 bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *work,
-	const std::string &tableName,
+	const std::string &tablePrefix,
 	const std::string &typeStr,
+	bool useLiveTable,
 	string ocdn,
 	const pqxx::result::tuple &row,
 	std::string &errStr, int verbose)
 {
+	std::string tableName;
+	if(useLiveTable)
+		tableName = tablePrefix+"live"+typeStr+"s";
+	else
+		tableName = tablePrefix+"old"+typeStr+"s";
 	stringstream ss;
-	ss << "INSERT INTO "<< c.quote_name(tableName) + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
+	ss << "INSERT INTO "<< c.quote_name(tableName) + " (id, changeset, changeset_index, username, uid, timestamp, version, tags";
+	if(!useLiveTable)
+		ss << ", visible";
 	bool isNode = typeStr == "node";
 	bool isWay = typeStr == "way";
 	bool isRelation = typeStr == "relation";
@@ -97,11 +114,23 @@ bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *w
 	}
 	
 	ss << ") VALUES ";
-	ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
+	ss << "($1,$2,$3,$4,$5,$6,$7,$8";
+	int nextParamNum = 9;
+	if(!useLiveTable)
+	{
+		ss << ",$" << nextParamNum;
+		nextParamNum ++;
+	}
 	if(isNode || isWay)
-		ss << ",$10";
+	{
+		ss << ",$" << nextParamNum;
+		nextParamNum ++;
+	}
 	else if (isRelation)
-		ss << ",$10,$11";
+	{
+		ss << ",$"<<nextParamNum<<",$"<<(nextParamNum+1)<<"";
+		nextParamNum += 2;
+	}
 	ss << ") " << ocdn << ";";
 
 	try
@@ -121,7 +150,8 @@ bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *w
 			BindVal<int64_t>(invoc, row["timestamp"]);
 			BindVal<int64_t>(invoc, row["version"]);
 			BindVal<string>(invoc, row["tags"]);
-			invoc(true);
+			if(!useLiveTable)
+				invoc(true);
 			BindVal<string>(invoc, row["geom"]);
 
 			invoc.exec();
@@ -141,7 +171,8 @@ bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *w
 			BindVal<int64_t>(invoc, row["timestamp"]);
 			BindVal<int64_t>(invoc, row["version"]);
 			BindVal<string>(invoc, row["tags"]);
-			invoc(true);
+			if(!useLiveTable)
+				invoc(true);
 			BindVal<string>(invoc, row["members"]);
 
 			invoc.exec();
@@ -161,7 +192,8 @@ bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *w
 			BindVal<int64_t>(invoc, row["timestamp"]);
 			BindVal<int64_t>(invoc, row["version"]);
 			BindVal<string>(invoc, row["tags"]);
-			invoc(true);
+			if(!useLiveTable)
+				invoc(true);
 			BindVal<string>(invoc, row["members"]);
 			BindVal<string>(invoc, row["memberroles"]);
 
@@ -185,6 +217,63 @@ bool InsertObjectIntoTableFromRow(pqxx::connection &c, pqxx::transaction_base *w
 	return true;
 }
 
+bool AddIdToExistingIdList(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix,
+	const std::string &typeStr,
+	int64_t objId,
+	bool ocdnSupported,
+	string ocdn,
+	std::string &errStr, int verbose)
+{
+	stringstream ssi;
+	try
+	{
+		ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
+		if(verbose >= 1)
+			cout << ssi.str() << endl;
+		c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
+
+		if(ocdnSupported)
+		{
+			work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+		}
+		else
+		{
+			//For support of older postgreSQL
+			//Check if id already exists in table
+			stringstream ssi2;
+			ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
+			c.prepare(tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
+			pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
+			
+			if(r.size() == 0)
+				throw runtime_error("No data returned from db unexpectedly");
+			const pqxx::result::tuple row = r[0];
+			int64_t count = row[0].as<int64_t>();
+
+			//Insert id value if not already in table
+			if(count == 0)
+				work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+		}
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		stringstream ss2;
+		ss2 << e.what() << ":" << e.query() << ":" << ssi.str();
+		errStr = ss2.str();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		stringstream ss2;
+		ss2 << e.what() << ";" << ssi.str() << endl;
+		errStr = ss2.str();
+		return false;
+	}
+
+	return true;
+}
+
 bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &typeStr,
 	const std::vector<const class OsmObject *> &objPtrs, 
@@ -196,15 +285,9 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
 
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
 	bool ocdnSupported = true;
-	string ocdn = " ON CONFLICT DO NOTHING";
-	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-	{
-		ocdn = "";
-		ocdnSupported = false;
-	}
+	string ocdn;
+	DbCheckOcdnSupport(c, work, ocdnSupported, ocdn);
 
 	for(size_t i=0; i<objPtrs.size(); i++)
 	{
@@ -246,12 +329,17 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		//Get existing objects from old and new tables
 		bool foundExisting = false;
 		int64_t currentVersion = -1;
+		pqxx::result resultl;
+		bool ok = GetObjectByIdLowLevel(c, work, tablePrefix, 
+			typeStr, objId, foundExisting, currentVersion, 
+			resultl,
+			errStr, verbose);
+		if(!ok) return false;
+
 		bool foundOld = false;
 		int64_t oldVersion = -1;
-		pqxx::result resultl, resulto;
-		bool ok = GetObjectByIdLowLevel(c, work, tablePrefix, 
-			typeStr, objId, foundExisting, currentVersion, foundOld, oldVersion, 
-			resultl, resulto,
+		ok = GetMaxVersionByIdLowLevel(c, work, tablePrefix, 
+			typeStr, objId, foundOld, oldVersion, 
 			errStr, verbose);
 		if(!ok) return false;
 
@@ -284,8 +372,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		{
 			const pqxx::result::tuple row = resultl[0];
 			bool ok = InsertObjectIntoTableFromRow(c, work,
-				tablePrefix+"old"+typeStr+"s",
-				typeStr,
+				tablePrefix,
+				typeStr, false,
 				ocdn,
 				row,
 				errStr, verbose);
@@ -375,34 +463,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				}
 
 				//Update existing id lists (nodeids, wayids, relationids)
-				stringstream ssi;
-				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
-				if(verbose >= 1)
-					cout << ssi.str() << endl;
-				c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
-
-				if(ocdnSupported)
-				{
-					work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
-				}
-				else
-				{
-					//For support of older postgreSQL
-					//Check if id already exists in table
-					stringstream ssi2;
-					ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
-					c.prepare(tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
-					pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
-					
-					if(r.size() == 0)
-						throw runtime_error("No data returned from db unexpectedly");
-					const pqxx::result::tuple row = r[0];
-					int64_t count = row[0].as<int64_t>();
-
-					//Insert id value if not already in table
-					if(count == 0)
-						work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
-				}
+				bool ok = AddIdToExistingIdList(c, work,
+					tablePrefix,
+					typeStr,
+					objId,
+					ocdnSupported, ocdn,
+					errStr, verbose);
+				if(!ok) return false;
 			}
 			else
 			{
@@ -767,6 +834,92 @@ bool DbStoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = UpdateNextObjectIds(c, work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
 	if(!ok)
 		return false;
+	return true;
+}
+
+bool DbCheckAndCopyObjectsToActiveTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,
+	const std::string &typeStr, const std::set<int64_t> &objectIds, 
+	bool ocdnSupported,
+	const std::string &ocdn,
+	std::string &errStr, int verbose)
+{
+	//Check if objects are already in active tables
+	std::set<int64_t> foundIds;
+	std::shared_ptr<class OsmData> foundObjs(new class OsmData());
+	auto it = objectIds.begin();
+	if(typeStr=="node")
+	{
+		while(it != objectIds.end())
+			GetLiveNodesById(c, work, dbUsernameLookup,
+				activeTablePrefix, "", objectIds, 
+				it, 1000, foundObjs);
+		foundIds = foundObjs->GetNodeIds();
+	}
+	if(typeStr=="way")
+	{
+		while(it != objectIds.end())
+			GetLiveWaysById(c, work, dbUsernameLookup,
+				activeTablePrefix, "", objectIds, 
+				it, 1000, foundObjs);
+		foundIds = foundObjs->GetWayIds();
+	}
+	else if(typeStr=="relation")
+	{
+		while(it != objectIds.end())
+			GetLiveRelationsById(c, work, dbUsernameLookup,
+				activeTablePrefix, "",
+				objectIds, 
+				it, 1000, foundObjs);
+		foundIds = foundObjs->GetRelationIds();
+	}
+	else
+	{
+		errStr = "Unsupported type in DbCheckAndCopyObjectsToActiveTable";
+		return false;
+	}
+	std::set<int64_t> relsToCopy;
+	std::set_difference(objectIds.begin(), objectIds.end(),
+		foundIds.begin(), foundIds.end(),
+		std::inserter(relsToCopy, relsToCopy.begin()));
+
+	//For any not present, copy from static to active tables
+	for(auto it=relsToCopy.begin(); it!=relsToCopy.end(); it++)
+	{
+		bool foundExisting = false;
+		int64_t currentVersion = -1;
+		pqxx::result resultl;
+		bool ok = GetObjectByIdLowLevel(c, work, staticTablePrefix, 
+			typeStr, *it, foundExisting, currentVersion, 
+			resultl,
+			errStr, verbose);
+		if(!ok) return false;
+		if(!foundExisting)
+		{
+			errStr = "Could not find object in static table";
+			return false;
+		}
+		
+		const pqxx::result::tuple row = resultl[0];
+		ok = InsertObjectIntoTableFromRow(c, work,
+			activeTablePrefix,
+			typeStr, true,
+			ocdn,
+			row,
+			errStr, verbose);
+		if(!ok) return false;		
+
+		//Update existing id lists (nodeids, wayids, relationids)
+		ok = AddIdToExistingIdList(c, work,
+			activeTablePrefix,
+			typeStr,
+			*it,
+			ocdnSupported, ocdn,
+			errStr, verbose);
+		if(!ok) return false;
+	}
 	return true;
 }
 

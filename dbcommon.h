@@ -30,5 +30,8 @@ bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work,
 
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut);
 
+void DbCheckOcdnSupport(pqxx::connection &c, pqxx::transaction_base *work,
+	bool &ocdnSupported, std::string &ocdn);
+
 #endif //_DB_COMMON_H
 
