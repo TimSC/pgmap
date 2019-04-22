@@ -378,6 +378,32 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				row,
 				errStr, verbose);
 			if(!ok) return false;
+
+			if(typeStr == "node" and version == currentVersion+1)
+			{
+				//Store timestamp when node was replaced by later version
+				stringstream ss;
+				ss << "UPDATE "<< c.quote_name(tablePrefix+"oldnodes") << " SET end_timestamp=$1";
+				ss << " WHERE id = $2 AND version = $3;";
+
+				try
+				{
+					if(verbose >= 1)
+						cout << ss.str() << endl;
+					c.prepare(tablePrefix+"updatenodeendtime", ss.str());
+					work->prepared(tablePrefix+"updatenodeendtime")(osmObject->metaData.timestamp)(objId)(currentVersion).exec();
+				}
+				catch (const pqxx::sql_error &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+				catch (const std::exception &e)
+				{
+					errStr = e.what();
+					return false;
+				}
+			}
 		}
 
 		//Check if this is the latest version and visible

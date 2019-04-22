@@ -951,7 +951,8 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbStoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
+	bool ok = DbStoreObjects(*dbconn, work.get(), tablePrefix, data, 
+		createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;

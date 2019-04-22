@@ -143,7 +143,10 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	if (schemaVersion == 11)
 	{
 		//Update to schema ver 12
-		string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
+		string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"oldnodes")+" ADD COLUMN end_timestamp BIGINT;";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relshapes")+" (id BIGSERIAL PRIMARY KEY, rel_id BIGINT, rel_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, bbox GEOMETRY(Polygon, 4326));";
@@ -671,7 +674,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				//Store objects
 				std::map<int64_t, int64_t> createdNodeIds, createdWayIds, createdRelationIds;
 
-				bool ok = DbStoreObjects(c, work, tableModPrefix, block, 
+				bool ok = DbStoreObjects(c, work, tableModPrefix, block,
 					createdNodeIds, createdWayIds, createdRelationIds, errStr);
 				if(!ok)
 					cout << "Warning: " << errStr << endl;
