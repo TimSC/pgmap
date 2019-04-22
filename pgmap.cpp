@@ -951,6 +951,20 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
+	if(!saveToStaticTables)
+	{
+		//Nodes must be in active live table to track end_timestamp. Treat ways
+		//and relations the same for consistency.
+		bool ok = DbCheckAndCopyObjectsToActiveTable(*dbconn, work.get(), 
+			this->tableStaticPrefix, 
+			this->tableActivePrefix, 
+			dbUsernameLookup,
+			data, 
+			nativeErrStr, 0);
+		errStr.errStr = nativeErrStr;
+		if(!ok) return false;
+	}
+
 	bool ok = DbStoreObjects(*dbconn, work.get(), tablePrefix, data, 
 		createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
 	errStr.errStr = nativeErrStr;

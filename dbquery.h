@@ -36,6 +36,13 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 	const std::set<int64_t> &skipIds, 
 	std::shared_ptr<IDataStreamHandler> enc);
 
+bool CheckObjectIdsKnown(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const std::string &tablePrefix, 
+	const std::string &objType, const std::set<int64_t> &objectIds,
+	std::set<int64_t> &out,
+	std::string &errStr);
+
 void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 

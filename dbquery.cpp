@@ -116,6 +116,58 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 	}
 }
 
+bool CheckObjectIdsKnown(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const std::string &tablePrefix, 
+	const std::string &objType, const std::set<int64_t> &objectIds,
+	std::set<int64_t> &out,
+	std::string &errStr)
+{
+	string idTable = c.quote_name(tablePrefix + objType + "ids");
+
+	auto it = objectIds.begin();
+	int step = 1000;
+	while(it != objectIds.end())
+	{
+		stringstream sqlFrags;
+		int count = 0;
+		for(; it != objectIds.end() && count < step; it++)
+		{
+			if(count >= 1)
+				sqlFrags << " OR ";
+			sqlFrags << idTable << ".id = " << *it;
+			count ++;
+		}
+
+		string sql = "SELECT * FROM "+ idTable;
+		sql += " WHERE ("+sqlFrags.str()+")";
+		sql += ";";
+
+		try
+		{
+			pqxx::result result = work->exec(sql);
+			int idCol = result.column_number("id");
+
+			for (pqxx::result::const_iterator c = result.begin(); c != result.end(); ++c)
+			{
+				int64_t objId = c[idCol].as<int64_t>();
+				out.insert(objId);
+			}
+		}
+		catch (const pqxx::sql_error &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+		catch (const std::exception &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+	}
+	return true;
+}
+
 void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 

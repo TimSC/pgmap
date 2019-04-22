@@ -25,4 +25,11 @@ bool DbCheckAndCopyObjectsToActiveTable(pqxx::connection &c, pqxx::transaction_b
 	const std::string &ocdn,
 	std::string &errStr, int verbose);
 
+bool DbCheckAndCopyObjectsToActiveTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,
+	const class OsmData &osmData, 
+	std::string &errStr, int verbose);
+
 #endif //_DB_STORE_H

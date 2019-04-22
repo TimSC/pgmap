@@ -6,7 +6,7 @@
 #include "dbquery.h"
 using namespace std;
 
-bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, 
+bool GetLiveObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	const std::string &typeStr, int64_t objId,
 	bool &foundExisting, int64_t &currentVersion,
@@ -44,7 +44,7 @@ bool GetObjectByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
-bool GetMaxVersionByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, 
+bool GetOldMaxVersionByIdLowLevel(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix, 
 	const std::string &typeStr, int64_t objId,
 	bool &foundOld, int64_t &oldVersion,
@@ -330,7 +330,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		bool foundExisting = false;
 		int64_t currentVersion = -1;
 		pqxx::result resultl;
-		bool ok = GetObjectByIdLowLevel(c, work, tablePrefix, 
+		bool ok = GetLiveObjectByIdLowLevel(c, work, tablePrefix, 
 			typeStr, objId, foundExisting, currentVersion, 
 			resultl,
 			errStr, verbose);
@@ -338,7 +338,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 		bool foundOld = false;
 		int64_t oldVersion = -1;
-		ok = GetMaxVersionByIdLowLevel(c, work, tablePrefix, 
+		ok = GetOldMaxVersionByIdLowLevel(c, work, tablePrefix, 
 			typeStr, objId, foundOld, oldVersion, 
 			errStr, verbose);
 		if(!ok) return false;
@@ -874,78 +874,107 @@ bool DbCheckAndCopyObjectsToActiveTable(pqxx::connection &c, pqxx::transaction_b
 {
 	//Check if objects are already in active tables
 	std::set<int64_t> foundIds;
-	std::shared_ptr<class OsmData> foundObjs(new class OsmData());
-	auto it = objectIds.begin();
-	if(typeStr=="node")
-	{
-		while(it != objectIds.end())
-			GetLiveNodesById(c, work, dbUsernameLookup,
-				activeTablePrefix, "", objectIds, 
-				it, 1000, foundObjs);
-		foundIds = foundObjs->GetNodeIds();
-	}
-	if(typeStr=="way")
-	{
-		while(it != objectIds.end())
-			GetLiveWaysById(c, work, dbUsernameLookup,
-				activeTablePrefix, "", objectIds, 
-				it, 1000, foundObjs);
-		foundIds = foundObjs->GetWayIds();
-	}
-	else if(typeStr=="relation")
-	{
-		while(it != objectIds.end())
-			GetLiveRelationsById(c, work, dbUsernameLookup,
-				activeTablePrefix, "",
-				objectIds, 
-				it, 1000, foundObjs);
-		foundIds = foundObjs->GetRelationIds();
-	}
-	else
-	{
-		errStr = "Unsupported type in DbCheckAndCopyObjectsToActiveTable";
-		return false;
-	}
+	bool ok = CheckObjectIdsKnown(c, work, 
+		dbUsernameLookup, 
+		activeTablePrefix, 
+		typeStr, objectIds,
+		foundIds, errStr);
+	if(!ok) return false;
+
 	std::set<int64_t> relsToCopy;
 	std::set_difference(objectIds.begin(), objectIds.end(),
 		foundIds.begin(), foundIds.end(),
 		std::inserter(relsToCopy, relsToCopy.begin()));
-
+	
 	//For any not present, copy from static to active tables
 	for(auto it=relsToCopy.begin(); it!=relsToCopy.end(); it++)
 	{
 		bool foundExisting = false;
 		int64_t currentVersion = -1;
 		pqxx::result resultl;
-		bool ok = GetObjectByIdLowLevel(c, work, staticTablePrefix, 
+		bool ok = GetLiveObjectByIdLowLevel(c, work, staticTablePrefix, 
 			typeStr, *it, foundExisting, currentVersion, 
 			resultl,
 			errStr, verbose);
 		if(!ok) return false;
-		if(!foundExisting)
-		{
-			errStr = "Could not find object in static table";
-			return false;
-		}
 		
-		const pqxx::result::tuple row = resultl[0];
-		ok = InsertObjectIntoTableFromRow(c, work,
-			activeTablePrefix,
-			typeStr, true,
-			ocdn,
-			row,
-			errStr, verbose);
-		if(!ok) return false;		
+		if(foundExisting)
+		{
+			const pqxx::result::tuple row = resultl[0];
+			ok = InsertObjectIntoTableFromRow(c, work,
+				activeTablePrefix,
+				typeStr, true,
+				ocdn,
+				row,
+				errStr, verbose);
+			if(!ok) return false;		
 
-		//Update existing id lists (nodeids, wayids, relationids)
-		ok = AddIdToExistingIdList(c, work,
-			activeTablePrefix,
-			typeStr,
-			*it,
-			ocdnSupported, ocdn,
-			errStr, verbose);
+			//Update existing id lists (nodeids, wayids, relationids)
+			ok = AddIdToExistingIdList(c, work,
+				activeTablePrefix,
+				typeStr,
+				*it,
+				ocdnSupported, ocdn,
+				errStr, verbose);
+			if(!ok) return false;
+		}
+	}
+	return true;
+}
+
+bool DbCheckAndCopyObjectsToActiveTable(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix, 
+	class DbUsernameLookup &dbUsernameLookup,
+	const class OsmData &osmData, 
+	std::string &errStr, int verbose)
+{
+	bool ocdnSupported = true;
+	string ocdn;
+	DbCheckOcdnSupport(c, work, ocdnSupported, ocdn);
+
+	std::set<int64_t> nodeIds = osmData.GetNodeIds();
+	if(nodeIds.size()>0)
+	{
+		bool ok = DbCheckAndCopyObjectsToActiveTable(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup,
+			"node", nodeIds, 
+			ocdnSupported,
+			ocdn,
+			errStr, 0);
 		if(!ok) return false;
 	}
+
+	std::set<int64_t> wayIds = osmData.GetWayIds();
+	if(wayIds.size()>0)
+	{
+		bool ok = DbCheckAndCopyObjectsToActiveTable(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup,
+			"way", wayIds, 
+			ocdnSupported,
+			ocdn,
+			errStr, 0);
+		if(!ok) return false;
+	}
+
+	std::set<int64_t> relationIds = osmData.GetRelationIds();
+	if(relationIds.size()>0)
+	{
+		bool ok = DbCheckAndCopyObjectsToActiveTable(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup,
+			"relation", relationIds, 
+			ocdnSupported,
+			ocdn,
+			errStr, 0);
+		if(!ok) return false;
+	}
+
 	return true;
 }
 
