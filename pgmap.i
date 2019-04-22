@@ -271,6 +271,17 @@ public:
 	std::string errStr;
 };
 
+class PgStringWrap
+{
+public:
+	PgStringWrap();
+	PgStringWrap(const std::string &strIn);
+	PgStringWrap(const PgStringWrap &obj);
+	virtual ~PgStringWrap();
+
+	std::string str;
+};
+
 %shared_ptr(PgChangeset)
 
 class PgChangeset
@@ -363,6 +374,11 @@ public:
 	bool UpdateRelationShapes(const std::set<int64_t> &touchedNodeIds,
 		const std::set<int64_t> &touchedWayIds,
 		const std::set<int64_t> &touchedRelationIds,
+		class PgMapError &errStr);
+	bool QueryAugDiff(int64_t startTimestamp,
+		bool bboxSet,
+		const std::vector<double> &bbox,
+		class PgStringWrap &fiOut,
 		class PgMapError &errStr);
 
 	bool StoreObjects(class OsmData &data, 

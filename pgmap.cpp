@@ -11,6 +11,7 @@
 #include "dbmeta.h"
 #include "dbcommon.h"
 #include "dbshapelog.h"
+#include "dbaugdiff.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
@@ -32,6 +33,28 @@ PgMapError::PgMapError(const PgMapError &obj)
 }
 
 PgMapError::~PgMapError()
+{
+
+}
+
+// *********************************************
+
+PgStringWrap::PgStringWrap()
+{
+
+}
+
+PgStringWrap::PgStringWrap(const string &strIn)
+{
+	this->str = strIn;
+}
+
+PgStringWrap::PgStringWrap(const PgStringWrap &obj)
+{
+	this->str = obj.str;
+}
+
+PgStringWrap::~PgStringWrap()
 {
 
 }
@@ -869,6 +892,38 @@ bool PgTransaction::UpdateRelationShapes(const std::set<int64_t> &touchedNodeIds
 		touchedRelationIds,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
+bool PgTransaction::QueryAugDiff(int64_t startTimestamp,
+	bool bboxSet,
+	const std::vector<double> &bbox,
+	class PgStringWrap &fiOut,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	std::stringbuf sb;
+
+	bool ok = DbQueryAugDiff(*dbconn, work.get(), 
+		this->tableStaticPrefix, 
+		this->tableActivePrefix, 
+		this->dbUsernameLookup, 
+		startTimestamp,
+		bboxSet,
+		bbox,
+		sb,
+		nativeErrStr);
+
+	errStr.errStr = nativeErrStr;
+	fiOut.str = sb.str();
 
 	return ok;
 }
