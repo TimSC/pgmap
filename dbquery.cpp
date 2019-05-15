@@ -526,7 +526,7 @@ void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 				tableStaticPrefix, tableActivePrefix, objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
-		while(it != objectIds.end())
+		while(tableActivePrefix != "" and it != objectIds.end())
 			GetLiveNodesById(c, work, dbUsernameLookup,
 				tableActivePrefix, "", objectIds, 
 				it, 1000, out);
@@ -539,7 +539,7 @@ void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 				tableStaticPrefix, tableActivePrefix, objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
-		while(it != objectIds.end())
+		while(tableActivePrefix != "" and it != objectIds.end())
 			GetLiveWaysById(c, work, dbUsernameLookup,
 				tableActivePrefix, "", objectIds, 
 				it, 1000, out);
@@ -553,7 +553,7 @@ void DbGetObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 				objectIds, 
 				it, 1000, out);
 		it = objectIds.begin();
-		while(it != objectIds.end())
+		while(tableActivePrefix != "" and it != objectIds.end())
 			GetLiveRelationsById(c, work, dbUsernameLookup,
 				tableActivePrefix, "",
 				objectIds, 
@@ -573,8 +573,9 @@ void DbGetWaysForNodes(pqxx::connection &c, pqxx::transaction_base *work,
 	GetLiveWaysThatContainNodes(c, work, dbUsernameLookup,
 		tableStaticPrefix, tableActivePrefix, objectIds, out);
 
-	GetLiveWaysThatContainNodes(c, work, dbUsernameLookup,
-		tableActivePrefix, "", objectIds, out);
+	if (tableActivePrefix != "")
+		GetLiveWaysThatContainNodes(c, work, dbUsernameLookup,
+			tableActivePrefix, "", objectIds, out);
 }
 
 void DbGetRelationsForObjs(pqxx::connection &c, pqxx::transaction_base *work,
@@ -594,7 +595,7 @@ void DbGetRelationsForObjs(pqxx::connection &c, pqxx::transaction_base *work,
 			type[0], objectIds, it, 1000, empty, out);
 	}
 	it = objectIds.begin();
-	while(it != objectIds.end())
+	while(tableActivePrefix != "" and it != objectIds.end())
 	{
 		GetLiveRelationsForObjects(c, work, dbUsernameLookup,
 			tableActivePrefix, "", 

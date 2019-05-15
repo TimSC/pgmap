@@ -327,17 +327,24 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	string ocdn;
 	DbCheckOcdnSupport(c, work, ocdnSupported, ocdn);
 
-	//Move the object to the active table in all cases
-	DbCheckAndCopyObjectsToActiveTable(c, work, 
-		staticTablePrefix, 
-		activeTablePrefix, 
-		dbUsernameLookup,
-		"way", touchedWayIdsOut, 
-		ocdnSupported,
-		ocdn,
-		errStr, 0);
+	if(activeTablePrefix != "")
+	{
+		//Move the object to the active table in all cases
+		DbCheckAndCopyObjectsToActiveTable(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup,
+			"way", touchedWayIdsOut, 
+			ocdnSupported,
+			ocdn,
+			errStr, 0);
+	}
 
-	//Update way shape in active table
+	//Update way shape in appropriate table
+	string insertTable = activeTablePrefix;
+	if(activeTablePrefix == "")
+		insertTable = staticTablePrefix;
+
 	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
 		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
@@ -347,7 +354,7 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	
 		int affectedRows = 0;
 		bool ok = DbUpdateWayBboxInTable(c, work, 
-			activeTablePrefix,
+			insertTable,
 			dbUsernameLookup,
 			way, maxTimestamp, bbox, affectedRows, errStr);
 		if (!ok) return false;

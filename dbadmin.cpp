@@ -889,8 +889,15 @@ private:
 	std::set<int64_t> wayBuffer;
 	pqxx::connection &c;
 	pqxx::transaction_base *work;
+	std::string staticTablePrefix; 
+	std::string activeTablePrefix;
+
 public:
-	CollectWayObjs(pqxx::connection &c, pqxx::transaction_base *work);
+	std::string errStr;
+	int64_t count;
+
+	CollectWayObjs(pqxx::connection &c, pqxx::transaction_base *work,
+		const std::string &staticTablePrefix, const std::string &activeTablePrefix);
 	virtual ~CollectWayObjs() {};
 
 	virtual void Finish();
@@ -901,10 +908,13 @@ public:
 	void ProcessBuffer();
 };
 
-CollectWayObjs::CollectWayObjs(pqxx::connection &c, pqxx::transaction_base *work) : 
-	IDataStreamHandler(), c(c), work(work)
+CollectWayObjs::CollectWayObjs(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &staticTablePrefix, const std::string &activeTablePrefix) : 
+	IDataStreamHandler(), c(c), work(work),
+	staticTablePrefix(staticTablePrefix),
+	activeTablePrefix(activeTablePrefix)
 {
-
+	count = 0;
 }
 
 void CollectWayObjs::Finish()
@@ -922,20 +932,21 @@ void CollectWayObjs::StoreWay(int64_t objId, const class MetaData &metaData,
 
 void CollectWayObjs::ProcessBuffer()
 {
-	for(auto it=wayBuffer.begin(); it != wayBuffer.end(); it++)
-	{
-		cout << *it << endl;
-	}
+	//Update bbox of ways in buffer
+	class DbUsernameLookup *usernames = nullptr;
+	std::set<int64_t> emptyNodeIds;
+	std::set<int64_t> touchedWayIds2;
+	DbUpdateWayShapes(c, work, 
+		staticTablePrefix, 
+		activeTablePrefix, 
+		*usernames, 
+		emptyNodeIds,
+		wayBuffer,
+		touchedWayIds2,
+		errStr);
 
-/*	DbUpdateWayShapes(c, work, 
-		const std::string &staticTablePrefix, 
-		const std::string &activeTablePrefix, 
-		class DbUsernameLookup &dbUsernameLookup, 
-		const std::set<int64_t> &touchedNodeIds,
-		const std::set<int64_t> &touchedWayIds,
-		std::set<int64_t> &touchedWayIdsOut,
-		std::string &errStr);*/
-
+	count += wayBuffer.size();
+	cout << count << endl;
 	wayBuffer.clear();
 }
 
@@ -947,13 +958,18 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	//Process static ways
 	class DbUsernameLookup *usernames = nullptr;
-	std::shared_ptr<class CollectWayObjs> collectWayObjs = make_shared<class CollectWayObjs>(c, work);
+	std::shared_ptr<class CollectWayObjs> collectWayObjs = make_shared<class CollectWayObjs>(
+		c, work,
+		staticTablePrefix, activeTablePrefix);
 	DumpWays(c, work, *usernames, 
 		staticTablePrefix, 
 		"",
 		false,
 		collectWayObjs);
-	
+	errStr = collectWayObjs->errStr;
+
+	return 0;	
 }
 
 // ******************************************************************
+
