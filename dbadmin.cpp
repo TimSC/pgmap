@@ -6,6 +6,8 @@
 #include "dbquery.h"
 #include "dbusername.h"
 #include "dbmeta.h"
+#include "dbdump.h"
+#include "dbshapelog.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include <map>
@@ -879,3 +881,79 @@ void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 		cout << "No missing IDs found" << endl;
 }
 
+// *********************************************************************************
+
+class CollectWayObjs : public IDataStreamHandler
+{
+private:
+	std::set<int64_t> wayBuffer;
+	pqxx::connection &c;
+	pqxx::transaction_base *work;
+public:
+	CollectWayObjs(pqxx::connection &c, pqxx::transaction_base *work);
+	virtual ~CollectWayObjs() {};
+
+	virtual void Finish();
+
+	virtual void StoreWay(int64_t objId, const class MetaData &metaData, 
+		const TagMap &tags, const std::vector<int64_t> &refs);
+
+	void ProcessBuffer();
+};
+
+CollectWayObjs::CollectWayObjs(pqxx::connection &c, pqxx::transaction_base *work) : 
+	IDataStreamHandler(), c(c), work(work)
+{
+
+}
+
+void CollectWayObjs::Finish()
+{
+	this->ProcessBuffer();
+}
+
+void CollectWayObjs::StoreWay(int64_t objId, const class MetaData &metaData, 
+		const TagMap &tags, const std::vector<int64_t> &refs)
+{
+	wayBuffer.insert(objId);
+	if(wayBuffer.size() > 1000)
+		this->ProcessBuffer();
+}
+
+void CollectWayObjs::ProcessBuffer()
+{
+	for(auto it=wayBuffer.begin(); it != wayBuffer.end(); it++)
+	{
+		cout << *it << endl;
+	}
+
+/*	DbUpdateWayShapes(c, work, 
+		const std::string &staticTablePrefix, 
+		const std::string &activeTablePrefix, 
+		class DbUsernameLookup &dbUsernameLookup, 
+		const std::set<int64_t> &touchedNodeIds,
+		const std::set<int64_t> &touchedWayIds,
+		std::set<int64_t> &touchedWayIdsOut,
+		std::string &errStr);*/
+
+	wayBuffer.clear();
+}
+
+int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix,
+	std::string &errStr)
+{
+	//Process static ways
+	class DbUsernameLookup *usernames = nullptr;
+	std::shared_ptr<class CollectWayObjs> collectWayObjs = make_shared<class CollectWayObjs>(c, work);
+	DumpWays(c, work, *usernames, 
+		staticTablePrefix, 
+		"",
+		false,
+		collectWayObjs);
+	
+}
+
+// ******************************************************************
