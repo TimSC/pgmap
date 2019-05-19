@@ -754,15 +754,23 @@ bool DbUpdateRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	string ocdn;
 	DbCheckOcdnSupport(c, work, ocdnSupported, ocdn);
 
-	//Move the object to the active table in all cases
-	DbCheckAndCopyObjectsToActiveTable(c, work, 
-		staticTablePrefix, 
-		activeTablePrefix, 
-		dbUsernameLookup,
-		"relation", affectedRelations->GetRelationIds(), 
-		ocdnSupported,
-		ocdn,
-		errStr, 0);
+	if(activeTablePrefix != "")
+	{
+		//Move the object to the active table
+		DbCheckAndCopyObjectsToActiveTable(c, work, 
+			staticTablePrefix, 
+			activeTablePrefix, 
+			dbUsernameLookup,
+			"relation", affectedRelations->GetRelationIds(), 
+			ocdnSupported,
+			ocdn,
+			errStr, 0);
+	}
+
+	//Update way shape in appropriate table
+	string insertTable = activeTablePrefix;
+	if(activeTablePrefix == "")
+		insertTable = staticTablePrefix;
 
 	for(size_t i=0; i<affectedRelations->relations.size(); i++)	{
 
@@ -774,7 +782,7 @@ bool DbUpdateRelationShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		//Update bbox in active table
 		int affectedRows = 0;
 		bool ok = DbUpdateRelationBboxInTable(c, work, 
-			activeTablePrefix, dbUsernameLookup,
+			insertTable, dbUsernameLookup,
 			rel, maxTimestamp, has_bbox, bbox, affectedRows, errStr);
 		if (!ok) return false;
 	}

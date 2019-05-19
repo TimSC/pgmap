@@ -74,5 +74,10 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &activeTablePrefix,
 	std::string &errStr);
 
+int DbSaveBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
 #endif //_DB_ADMIN_H
 

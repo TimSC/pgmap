@@ -64,6 +64,7 @@ int main(int argc, char **argv)
 		cout << "c. Check nodes exist for ways" << endl;
 		cout << "d. Check object ID tables" << endl;
 		cout << "e. Update way bboxes" << endl;
+		cout << "f. Save bboxes to file" << endl;
 		cout << endl << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -301,6 +302,17 @@ int main(int argc, char **argv)
 		{
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
 			bool ok = admin->UpdateBboxes(verbose, errStr);
+
+			cout << "All done!" << ok << endl;
+			admin->Commit();
+
+			continue;
+		}
+
+		if(inputStr == "f")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
+			bool ok = admin->SaveBboxes(verbose, errStr);
 
 			cout << "All done!" << ok << endl;
 			admin->Commit();

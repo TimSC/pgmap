@@ -57,7 +57,9 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = ClearTable(c, work, tableActivePrefix + "relation_mems_r", errStr);     if(!ok) return false;
 	ok = ClearTable(c, work, tableActivePrefix + "nextids", errStr);             if(!ok) return false;
 	ok = ClearTable(c, work, tableActivePrefix + "changesets", errStr);          if(!ok) return false;
-	ok = ClearTable(c, work, tableActivePrefix + "usernames", errStr);            if(!ok) return false;
+	ok = ClearTable(c, work, tableActivePrefix + "usernames", errStr);           if(!ok) return false;
+	ok = ClearTable(c, work, tableActivePrefix + "wayshapes", errStr);           if(!ok) return false;
+	ok = ClearTable(c, work, tableActivePrefix + "relshapes", errStr);           if(!ok) return false;
 
 	map<string, int64_t> nextIdMap;
 	ok = GetNextObjectIds(c, work, 
@@ -956,7 +958,7 @@ void CollectObjsUpdateBbox::ProcessWayBuffer()
 	std::set<int64_t> touchedWayIds2;
 	bool ok = DbUpdateWayShapes(c, work, 
 		staticTablePrefix, 
-		activeTablePrefix, 
+		"", 
 		*usernames, 
 		emptyNodeIds,
 		wayBuffer,
@@ -965,6 +967,8 @@ void CollectObjsUpdateBbox::ProcessWayBuffer()
 
 	wayCount += wayBuffer.size();
 	cout << "w " << wayCount << endl;
+	if(!ok)
+		cout << errStr << endl;
 	wayBuffer.clear();
 }
 
@@ -975,7 +979,7 @@ void CollectObjsUpdateBbox::ProcessRelationBuffer()
 	std::set<int64_t> emptyNodeIds, emptyWayIds;
 	bool ok = DbUpdateRelationShapes(c, work, 
 		staticTablePrefix, 
-		activeTablePrefix, 
+		"", 
 		*usernames, 
 		emptyNodeIds,
 		emptyWayIds,
@@ -984,6 +988,8 @@ void CollectObjsUpdateBbox::ProcessRelationBuffer()
 
 	relationCount += relationBuffer.size();
 	cout << "r " << relationCount << endl;
+	if(!ok)
+		cout << errStr << endl;
 	relationBuffer.clear();
 }
 
@@ -1014,6 +1020,82 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	errStr = collectObjsUpdateBbox->errStr;
 
 	return 0;	
+}
+
+void DbOutputBboxRows(const string &objType, pqxx::icursorstream &cursor)
+{
+	while(true)
+	{
+		pqxx::result rows;
+		cursor.get(rows);
+		if ( rows.empty() )
+			break;
+
+		//for(size_t i=0; i<rows.columns(); i++)
+		//	cout << "col " << i << "," << rows.column_name(i) << endl;
+
+		int idCol = rows.column_number("id");
+		int bboxCol = rows.column_number("bbox");
+		int tsCol = rows.column_number("bbox_timestamp");
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+			int64_t objId = c[idCol].as<int64_t>();
+			cout << objType << "," << objId;
+
+			if (!c[bboxCol].is_null())
+			{
+				string bboxWkt = c[bboxCol].as<string>();
+				cout << "," << bboxWkt;
+			}
+			else
+			{
+				cout << ", NULL";
+			}
+
+			if (!c[tsCol].is_null())
+			{
+				cout << "," << c[tsCol].as<int64_t>();
+			}
+			else
+			{
+				cout << ", NULL";
+			}
+
+			cout << endl;
+		}
+	}
+}
+
+int DbSaveBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	string objTable = c.quote_name(tablePrefix + "liveways");
+
+	stringstream sql;
+	sql << "SELECT id, ST_AsEWKT(bbox) AS bbox, bbox_timestamp FROM ";
+	sql << objTable;
+	//sql << " WHERE "<< objTable <<".bbox IS NOT NULL";
+	sql << ";";
+
+	int step = 1000;
+	pqxx::icursorstream cursor( *work, sql.str(), "bboxcursor", step );	
+	DbOutputBboxRows("way", cursor);
+
+	objTable = c.quote_name(tablePrefix + "liverelations");
+
+	stringstream sql2;
+	sql2 << "SELECT id, ST_AsEWKT(bbox) AS bbox, bbox_timestamp FROM ";
+	sql2 << objTable;
+	//sql2 << " WHERE "<< objTable <<".bbox IS NOT NULL";
+	sql2 << ";";
+
+	pqxx::icursorstream cursor2( *work, sql.str(), "bboxcursor", step );	
+	DbOutputBboxRows("relation", cursor2);
+
+	return 0;
 }
 
 // ******************************************************************

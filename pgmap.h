@@ -239,7 +239,9 @@ public:
 	bool ImportChangesetMetadata(const std::string &fina, int verbose, class PgMapError &errStr);
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 	bool GenerateUsernameTable(int verbose, class PgMapError &errStr);
+
 	bool UpdateBboxes(int verbose, class PgMapError &errStr);
+	bool SaveBboxes(int verbose, class PgMapError &errStr);
 
 	bool CheckNodesExistForWays(class PgMapError &errStr);
 	bool CheckObjectIdTables(class PgMapError &errStr);
