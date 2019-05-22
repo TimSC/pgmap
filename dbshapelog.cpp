@@ -377,7 +377,13 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		std::vector<class OsmNode> wayNodes;
 		for(size_t j=0; j<way.refs.size(); j++)
 		{
-			const class OsmNode &n = *nodeMap[way.refs[j]];
+			auto it = nodeMap.find(way.refs[j]);
+			if(it == nodeMap.end() or it->second == nullptr)
+			{
+				cout << "Missing node " << way.refs[j] << "?" << endl;
+				continue;
+			}
+			const class OsmNode &n = *it->second;
 			memNodeVers.push_back(n.metaData.version);
 			if(n.metaData.timestamp > maxTimestamp)
 				maxTimestamp = n.metaData.timestamp;
