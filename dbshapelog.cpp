@@ -130,43 +130,63 @@ bool DbUpdateWayBboxInTable(pqxx::connection &c, pqxx::transaction_base *work,
 	int &affectedRowsOut,
 	std::string &errStr)
 {
+	stringstream proc;
+	proc << tablePrefix << "updatewaybbox" << wayIds.size();
+
+	stringstream ss;
+
+	//Based on https://stackoverflow.com/a/18799497/4288232
+	ss << "UPDATE " << c.quote_name(tablePrefix+"liveways") << " AS t SET\n";
+	ss << "	bbox = c.column_a,\n";
+	ss << "	bbox_timestamp = CAST(c.column_c AS BIGINT)\n";
+	ss << "from (values\n";
+	int64_t p = 1;
 	for(size_t i=0; i<wayIds.size(); i++)
 	{
-		int64_t maxTimestamp = wayMaxTimestamps[i];
-		const std::vector<double> &bbox = wayBboxes[i];
+		if (i>0) ss << ",";
+		ss << "	($"<<p<<",ST_MakeEnvelope($"<<(p+1)<<",$"<<(p+2)<<",$"<<(p+3)<<",$"<<(p+4)<<",4326),$"<<(p+5)<<")\n";
+		p += 6;
+	}
+	ss << ") as c(column_b, column_a, column_c) \n";
+	ss << "where CAST(c.column_b AS BIGINT) = t.id;\n";
 
-		affectedRowsOut = 0;
-		stringstream ss;
-		ss << "UPDATE "<< c.quote_name(tablePrefix+"liveways") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
-		ss << " WHERE id=$6;";
+	affectedRowsOut = 0;
 
-		try
+	try
+	{
+		c.prepare(proc.str(), ss.str());
+
+		pqxx::prepare::invocation invoc = work->prepared(proc.str());
+
+		for(size_t i=0; i<wayIds.size(); i++)
 		{
-			c.prepare(tablePrefix+"updatewaybbox", ss.str());
+			int64_t maxTimestamp = wayMaxTimestamps[i];
+			const std::vector<double> &bbox = wayBboxes[i];
 
-			pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatewaybbox");
+			invoc(wayIds[i]);
+
 			invoc(bbox[0]);
 			invoc(bbox[1]);
 			invoc(bbox[2]);
 			invoc(bbox[3]);
 
 			invoc(maxTimestamp);
+		}
 
-			invoc(wayIds[i]);
-			pqxx::result result = invoc.exec();
-			affectedRowsOut = result.affected_rows();
-		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = e.what();
-			return false;
-		}
+		pqxx::result result = invoc.exec();
+		affectedRowsOut = result.affected_rows();
 	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	
 	return true;
 }
 
@@ -289,6 +309,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	std::set<int64_t> &touchedWayIdsOut,
 	std::string &errStr)
 {
+	int verbose = 0;
+
 	//Get affected ways
 	auto start = chrono::steady_clock::now();
 
@@ -307,7 +329,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	auto end = chrono::steady_clock::now();
 	auto diff = end - start;
-	cout << "get affected ways " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+	if(verbose > 0)
+		cout << "get affected ways " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	//Extract relevant node IDs
 	start = chrono::steady_clock::now();
@@ -335,7 +358,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	end = chrono::steady_clock::now();
 	diff = end - start;
-	cout << "get "<< relevantNodeIds.size() <<" relevant nodes " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+	if(verbose > 0)
+		cout << "get "<< relevantNodeIds.size() <<" relevant nodes " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	//Get bbox of nodes in each way
 	start = chrono::steady_clock::now();
@@ -367,7 +391,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	end = chrono::steady_clock::now();
 	diff = end - start;
-	cout << "get bbox from node objs " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+	if(verbose > 0)
+		cout << "get bbox from node objs " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	bool ocdnSupported = true;
 	string ocdn;
@@ -402,7 +427,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	end = chrono::steady_clock::now();
 	diff = end - start;
-	cout << "write bboxes " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+	if(verbose > 0)
+		cout << "write "<< touchedWayIdsLi.size() << " bboxes " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	return true;
 }
