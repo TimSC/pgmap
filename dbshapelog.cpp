@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <chrono>
 #include "dbstore.h"
 #include "dbids.h"
 #include "dbcommon.h"
@@ -283,6 +284,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	std::string &errStr)
 {
 	//Get affected ways
+	auto start = chrono::steady_clock::now();
+
 	std::map<int64_t, class OsmWay> touchedWayIdsMap;
 	DbGetAffectedWays(c, work, 
 		staticTablePrefix, 
@@ -296,6 +299,41 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	std::vector<int64_t> touchedWayIdsLi(touchedWayIdsOut.begin(), touchedWayIdsOut.end());
 
+	auto end = chrono::steady_clock::now();
+	auto diff = end - start;
+	cout << "get affected ways " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+
+	//Extract relevant node IDs
+	start = chrono::steady_clock::now();
+	set<int64_t> relevantNodeIds;
+	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
+	{
+		//Get way bbox
+		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
+		set<int64_t> refIds = way.GetRefIds();
+		relevantNodeIds.insert(refIds.begin(), refIds.end());
+	}
+
+	//Get all relevant nodes
+	std::shared_ptr<class OsmData> memNodes(new class OsmData());
+	DbGetObjectsById(c, work,
+		staticTablePrefix, activeTablePrefix, 
+		dbUsernameLookup, "node", relevantNodeIds, memNodes);
+
+	map<int64_t, const class OsmNode *> nodeMap;
+	for(size_t i=0; i<memNodes->nodes.size(); i++)
+	{
+		const class OsmNode &n = memNodes->nodes[i];
+		nodeMap[n.objId] = &n;
+	}
+
+	end = chrono::steady_clock::now();
+	diff = end - start;
+	cout << "get "<< relevantNodeIds.size() <<" relevant nodes " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+
+	//Get bbox of nodes in each way
+	start = chrono::steady_clock::now();
+
 	vector<int64_t> wayMaxTimestamps;
 	std::vector<std::vector<int32_t> > wayMemNodeVers;
 	std::vector<std::vector<double> > wayBboxes;
@@ -307,21 +345,25 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		std::vector<int32_t> memNodeVers;
 		std::vector<double> bbox;
 
-		bool ok = DbGetNodeIdsBbox(c, work, 
-			staticTablePrefix, 
-			activeTablePrefix, 
-			dbUsernameLookup, 
-			way.GetRefIds(), maxTimestamp, memNodeVers, bbox);
-		if(!ok)
+		std::vector<class OsmNode> wayNodes;
+		for(size_t j=0; j<way.refs.size(); j++)
 		{
-			errStr = "Way has invalid bbox (not enough nodes?)";
-			return false;
+			const class OsmNode &n = *nodeMap[way.refs[j]];
+			memNodeVers.push_back(n.metaData.version);
+			if(n.metaData.timestamp > maxTimestamp)
+				maxTimestamp = n.metaData.timestamp;
+			wayNodes.push_back(n);
 		}
+		CalcBboxForNodes(wayNodes, bbox);
 
 		wayMaxTimestamps.push_back(maxTimestamp);
 		wayMemNodeVers.push_back(memNodeVers);
 		wayBboxes.push_back(bbox);
 	}
+
+	end = chrono::steady_clock::now();
+	diff = end - start;
+	cout << "get bbox from node IDs " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	bool ocdnSupported = true;
 	string ocdn;
@@ -345,6 +387,8 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	if(activeTablePrefix == "")
 		insertTable = staticTablePrefix;
 
+	start = chrono::steady_clock::now();
+
 	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
 		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
@@ -359,6 +403,10 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 			way, maxTimestamp, bbox, affectedRows, errStr);
 		if (!ok) return false;
 	}
+
+	end = chrono::steady_clock::now();
+	diff = end - start;
+	cout << "write bboxes " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	return true;
 }
