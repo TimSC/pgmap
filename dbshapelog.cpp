@@ -124,42 +124,48 @@ bool DbStoreWayShapeInTable(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbUpdateWayBboxInTable(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
 	class DbUsernameLookup &dbUsernameLookup, 
-	const class OsmWay &way,
-	int64_t maxTimestamp,
-	const std::vector<double> &bbox,
+	const vector<int64_t> &wayIds,
+	const vector<int64_t> &wayMaxTimestamps,
+	const std::vector<std::vector<double> > &wayBboxes,
 	int &affectedRowsOut,
 	std::string &errStr)
 {
-	affectedRowsOut = 0;
-	stringstream ss;
-	ss << "UPDATE "<< c.quote_name(tablePrefix+"liveways") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
-	ss << " WHERE id=$6;";
-
-	try
+	for(size_t i=0; i<wayIds.size(); i++)
 	{
-		c.prepare(tablePrefix+"updatewaybbox", ss.str());
+		int64_t maxTimestamp = wayMaxTimestamps[i];
+		const std::vector<double> &bbox = wayBboxes[i];
 
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatewaybbox");
-		invoc(bbox[0]);
-		invoc(bbox[1]);
-		invoc(bbox[2]);
-		invoc(bbox[3]);
+		affectedRowsOut = 0;
+		stringstream ss;
+		ss << "UPDATE "<< c.quote_name(tablePrefix+"liveways") + " SET bbox = ST_MakeEnvelope($1,$2,$3,$4,4326), bbox_timestamp = $5";
+		ss << " WHERE id=$6;";
 
-		invoc(maxTimestamp);
+		try
+		{
+			c.prepare(tablePrefix+"updatewaybbox", ss.str());
 
-		invoc(way.objId);
-		pqxx::result result = invoc.exec();
-		affectedRowsOut = result.affected_rows();
-	}
-	catch (const pqxx::sql_error &e)
-	{
-		errStr = e.what();
-		return false;
-	}
-	catch (const std::exception &e)
-	{
-		errStr = e.what();
-		return false;
+			pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatewaybbox");
+			invoc(bbox[0]);
+			invoc(bbox[1]);
+			invoc(bbox[2]);
+			invoc(bbox[3]);
+
+			invoc(maxTimestamp);
+
+			invoc(wayIds[i]);
+			pqxx::result result = invoc.exec();
+			affectedRowsOut = result.affected_rows();
+		}
+		catch (const pqxx::sql_error &e)
+		{
+			errStr = e.what();
+			return false;
+		}
+		catch (const std::exception &e)
+		{
+			errStr = e.what();
+			return false;
+		}
 	}
 	return true;
 }
@@ -335,7 +341,6 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 	start = chrono::steady_clock::now();
 
 	vector<int64_t> wayMaxTimestamps;
-	std::vector<std::vector<int32_t> > wayMemNodeVers;
 	std::vector<std::vector<double> > wayBboxes;
 	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
 	{
@@ -357,13 +362,12 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 		CalcBboxForNodes(wayNodes, bbox);
 
 		wayMaxTimestamps.push_back(maxTimestamp);
-		wayMemNodeVers.push_back(memNodeVers);
 		wayBboxes.push_back(bbox);
 	}
 
 	end = chrono::steady_clock::now();
 	diff = end - start;
-	cout << "get bbox from node IDs " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
+	cout << "get bbox from node objs " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
 	bool ocdnSupported = true;
 	string ocdn;
@@ -389,20 +393,12 @@ bool DbUpdateWayShapes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	start = chrono::steady_clock::now();
 
-	for(size_t i=0; i<touchedWayIdsLi.size(); i++)
-	{
-		const class OsmWay &way = touchedWayIdsMap[touchedWayIdsLi[i]];
-		int64_t maxTimestamp = wayMaxTimestamps[i];
-		const std::vector<int32_t> &memNodeVers = wayMemNodeVers[i];
-		const std::vector<double> &bbox = wayBboxes[i];
-	
-		int affectedRows = 0;
-		bool ok = DbUpdateWayBboxInTable(c, work, 
-			insertTable,
-			dbUsernameLookup,
-			way, maxTimestamp, bbox, affectedRows, errStr);
-		if (!ok) return false;
-	}
+	int affectedRows = 0;
+	bool ok = DbUpdateWayBboxInTable(c, work, 
+		insertTable,
+		dbUsernameLookup,
+		touchedWayIdsLi, wayMaxTimestamps, wayBboxes, affectedRows, errStr);
+	if (!ok) return false;
 
 	end = chrono::steady_clock::now();
 	diff = end - start;
