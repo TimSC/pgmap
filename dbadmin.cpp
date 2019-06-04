@@ -894,10 +894,12 @@ private:
 	pqxx::transaction_base *work;
 	std::string staticTablePrefix; 
 	std::string activeTablePrefix;
+	int64_t committedAtWay, committedAtRelation;
 
 public:
 	std::string errStr;
 	int64_t wayCount, relationCount;
+    bool incrementalCommit;
 
 	CollectObjsUpdateBbox(pqxx::connection &c, pqxx::transaction_base *work,
 		const std::string &staticTablePrefix, const std::string &activeTablePrefix);
@@ -923,6 +925,9 @@ CollectObjsUpdateBbox::CollectObjsUpdateBbox(pqxx::connection &c, pqxx::transact
 {
 	wayCount = 0;
 	relationCount = 0;
+	committedAtWay=0;
+	committedAtRelation=0;
+	incrementalCommit=true;
 }
 
 void CollectObjsUpdateBbox::Finish()
@@ -931,6 +936,8 @@ void CollectObjsUpdateBbox::Finish()
 		this->ProcessWayBuffer();
 	if(relationBuffer.size() > 0)
 		this->ProcessRelationBuffer();
+	if(incrementalCommit)
+	    this->work->commit();
 }
 
 void CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaData, 
@@ -939,6 +946,12 @@ void CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaDa
 	wayBuffer.insert(objId);
 	if(wayBuffer.size() > 1000)
 		this->ProcessWayBuffer();
+	if(incrementalCommit and wayCount > committedAtWay + 1000000)
+	{
+		this->work->commit();
+		cout << "committed way bboxes" << endl;
+		committedAtWay = wayCount;
+	}
 }
 
 void CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
@@ -948,6 +961,12 @@ void CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &m
 	relationBuffer.insert(objId);
 	if(relationBuffer.size() > 1000)
 		this->ProcessRelationBuffer();
+	if(incrementalCommit and relationCount > committedAtRelation + 100000)
+	{
+		this->work->commit();
+		cout << "committed relation bboxes" << endl;
+		committedAtRelation = relationCount;
+	}
 }
 
 void CollectObjsUpdateBbox::ProcessWayBuffer()
