@@ -891,17 +891,21 @@ private:
 	std::set<int64_t> wayBuffer;
 	std::set<int64_t> relationBuffer;
 	pqxx::connection &c;
-	pqxx::transaction_base *work;
+	std::shared_ptr<class PgWork> work;
 	std::string staticTablePrefix; 
 	std::string activeTablePrefix;
 	int64_t committedAtWay, committedAtRelation;
+	std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj);
+	void *adminObj;
 
 public:
 	std::string errStr;
 	int64_t wayCount, relationCount;
     bool incrementalCommit;
 
-	CollectObjsUpdateBbox(pqxx::connection &c, pqxx::transaction_base *work,
+	CollectObjsUpdateBbox(pqxx::connection &c,
+		std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj),
+		void *adminObj,
 		const std::string &staticTablePrefix, const std::string &activeTablePrefix);
 	virtual ~CollectObjsUpdateBbox() {};
 
@@ -917,9 +921,13 @@ public:
 	void ProcessRelationBuffer();
 };
 
-CollectObjsUpdateBbox::CollectObjsUpdateBbox(pqxx::connection &c, pqxx::transaction_base *work,
+CollectObjsUpdateBbox::CollectObjsUpdateBbox(pqxx::connection &c,
+	std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj),
+	void *adminObj,
 	const std::string &staticTablePrefix, const std::string &activeTablePrefix) : 
-	IDataStreamHandler(), c(c), work(work),
+	IDataStreamHandler(), c(c),
+	transactionFactory(transactionFactory),
+	adminObj(adminObj),
 	staticTablePrefix(staticTablePrefix),
 	activeTablePrefix(activeTablePrefix)
 {
@@ -937,7 +945,10 @@ void CollectObjsUpdateBbox::Finish()
 	if(relationBuffer.size() > 0)
 		this->ProcessRelationBuffer();
 	if(incrementalCommit)
-	    this->work->commit();
+	{
+	    this->work->work->commit();
+		this->work.reset();
+	}
 }
 
 void CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaData, 
@@ -948,7 +959,8 @@ void CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaDa
 		this->ProcessWayBuffer();
 	if(incrementalCommit and wayCount > committedAtWay + 1000000)
 	{
-		this->work->commit();
+		this->work->work->commit();
+		this->work.reset();
 		cout << "committed way bboxes" << endl;
 		committedAtWay = wayCount;
 	}
@@ -963,7 +975,8 @@ void CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &m
 		this->ProcessRelationBuffer();
 	if(incrementalCommit and relationCount > committedAtRelation + 100000)
 	{
-		this->work->commit();
+		this->work->work->commit();
+		this->work.reset();
 		cout << "committed relation bboxes" << endl;
 		committedAtRelation = relationCount;
 	}
@@ -971,11 +984,17 @@ void CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &m
 
 void CollectObjsUpdateBbox::ProcessWayBuffer()
 {
+	if(!work)
+	{
+		//Create transaction
+		work = this->transactionFactory(this->adminObj);
+	}
+
 	//Update bbox of ways in buffer
 	class DbUsernameLookup *usernames = nullptr;
 	std::set<int64_t> emptyNodeIds;
 	std::set<int64_t> touchedWayIds2;
-	bool ok = DbUpdateWayShapes(c, work, 
+	bool ok = DbUpdateWayShapes(c, work->work.get(), 
 		staticTablePrefix, 
 		"", 
 		*usernames, 
@@ -993,10 +1012,16 @@ void CollectObjsUpdateBbox::ProcessWayBuffer()
 
 void CollectObjsUpdateBbox::ProcessRelationBuffer()
 {
+	if(!work)
+	{
+		//Create transaction
+		work = this->transactionFactory(this->adminObj);
+	}
+
 	//Update bbox of ways in buffer
 	class DbUsernameLookup *usernames = nullptr;
 	std::set<int64_t> emptyNodeIds, emptyWayIds;
-	bool ok = DbUpdateRelationShapes(c, work, 
+	bool ok = DbUpdateRelationShapes(c, work->work.get(), 
 		staticTablePrefix, 
 		"", 
 		*usernames, 
@@ -1016,12 +1041,15 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix,
+	std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj),
+	void *adminObj,
 	std::string &errStr)
 {
 	//Process static ways
 	class DbUsernameLookup *usernames = nullptr;
 	std::shared_ptr<class CollectObjsUpdateBbox> collectObjsUpdateBbox = make_shared<class CollectObjsUpdateBbox>(
-		c, work,
+		c,
+		transactionFactory, adminObj,
 		staticTablePrefix, activeTablePrefix);
 	DumpWays(c, work, *usernames, 
 		staticTablePrefix, 
@@ -1030,13 +1058,13 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 		collectObjsUpdateBbox);
 	collectObjsUpdateBbox->Finish();
 
-	DumpRelations(c, work, *usernames, 
+	/*DumpRelations(c, work, *usernames, 
 		staticTablePrefix, 
 		"",
 		false,
 		collectObjsUpdateBbox);
 	collectObjsUpdateBbox->Finish();
-	errStr = collectObjsUpdateBbox->errStr;
+	errStr = collectObjsUpdateBbox->errStr;*/
 
 	return 0;	
 }

@@ -101,3 +101,79 @@ void DbCheckOcdnSupport(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 }
 
+// ************************************************
+
+PgWork::PgWork()
+{
+
+}
+
+PgWork::PgWork(pqxx::transaction_base *workIn):
+	work(workIn)
+{
+	
+}
+
+PgWork::PgWork(const PgWork &obj)
+{
+	*this = obj;
+}
+
+PgWork::~PgWork()
+{
+	work.reset();
+}
+
+PgWork& PgWork::operator=(const PgWork &obj)
+{
+	work = obj.work;
+	return *this;
+}
+
+// **********************************************
+
+bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &prefix, const std::string &accessMode, std::string &errStr)
+{
+	try
+	{
+		//It is important resources are locked in a consistent order to avoid deadlock
+		//Also, lock everything in one command to get a consistent view of the data.
+		string sql = "LOCK TABLE "+prefix+ "oldnodes";
+		sql += ","+prefix+ "oldways";
+		sql += ","+prefix+ "oldrelations";
+		sql += ","+prefix+ "livenodes";
+		sql += ","+prefix+ "liveways";
+		sql += ","+prefix+ "liverelations";
+
+		sql += ","+prefix+ "nodeids";
+		sql += ","+prefix+ "wayids";
+		sql += ","+prefix+ "relationids";
+
+		sql += ","+prefix+ "way_mems";
+		sql += ","+prefix+ "relation_mems_n";
+		sql += ","+prefix+ "relation_mems_w";
+		sql += ","+prefix+ "relation_mems_r";
+		sql += ","+prefix+ "nextids";
+		sql += ","+prefix+ "changesets";
+		sql += ","+prefix+ "meta";
+		sql += ","+prefix+ "usernames";
+		sql += " IN "+accessMode+" MODE;";
+
+		work->exec(sql);
+
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		stringstream ss;
+		ss << e.what() << " (" << e.query() << ")";
+		errStr = ss.str();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+

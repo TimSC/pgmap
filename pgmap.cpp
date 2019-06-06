@@ -61,53 +61,6 @@ PgStringWrap::~PgStringWrap()
 
 // **********************************************
 
-bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &prefix, const std::string &accessMode, std::string &errStr)
-{
-	try
-	{
-		//It is important resources are locked in a consistent order to avoid deadlock
-		//Also, lock everything in one command to get a consistent view of the data.
-		string sql = "LOCK TABLE "+prefix+ "oldnodes";
-		sql += ","+prefix+ "oldways";
-		sql += ","+prefix+ "oldrelations";
-		sql += ","+prefix+ "livenodes";
-		sql += ","+prefix+ "liveways";
-		sql += ","+prefix+ "liverelations";
-
-		sql += ","+prefix+ "nodeids";
-		sql += ","+prefix+ "wayids";
-		sql += ","+prefix+ "relationids";
-
-		sql += ","+prefix+ "way_mems";
-		sql += ","+prefix+ "relation_mems_n";
-		sql += ","+prefix+ "relation_mems_w";
-		sql += ","+prefix+ "relation_mems_r";
-		sql += ","+prefix+ "nextids";
-		sql += ","+prefix+ "changesets";
-		sql += ","+prefix+ "meta";
-		sql += ","+prefix+ "usernames";
-		sql += " IN "+accessMode+" MODE;";
-
-		work->exec(sql);
-
-	}
-	catch (const pqxx::sql_error &e)
-	{
-		stringstream ss;
-		ss << e.what() << " (" << e.query() << ")";
-		errStr = ss.str();
-		return false;
-	}
-	catch (const std::exception &e)
-	{
-		errStr = e.what();
-		return false;
-	}
-	return true;
-}
-
-// **********************************************
-
 PgChangeset::PgChangeset()
 {
 	objId = 0;
@@ -139,35 +92,6 @@ PgChangeset& PgChangeset::operator=(const PgChangeset &obj)
 	is_open = obj.is_open;
 	bbox_set = obj.bbox_set;
 	x1 = obj.x1; y1 = obj.y1; x2 = obj.x2; y2 = obj.y2;
-	return *this;
-}
-
-// ************************************************
-
-PgWork::PgWork()
-{
-
-}
-
-PgWork::PgWork(pqxx::transaction_base *workIn):
-	work(workIn)
-{
-	
-}
-
-PgWork::PgWork(const PgWork &obj)
-{
-	*this = obj;
-}
-
-PgWork::~PgWork()
-{
-	work.reset();
-}
-
-PgWork& PgWork::operator=(const PgWork &obj)
-{
-	work = obj.work;
 	return *this;
 }
 
@@ -1704,42 +1628,63 @@ void PgTransaction::Abort()
 
 // **********************************************
 
+std::shared_ptr<class PgWork> CreateTransaction(void *adminObj)
+{
+	class PgAdmin *pgAdmin = static_cast<class PgAdmin *>(adminObj);
+	return pgAdmin->CreateTransaction();
+}
+
+// **********************************************
+
 PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		const string &tableStaticPrefixIn, 
 		const string &tableModPrefixIn,
 		const string &tableTestPrefixIn,
-		std::shared_ptr<class PgWork> sharedWorkIn,
-		const string &shareModeIn):
-	sharedWork(sharedWorkIn)
+		const std::string &shareModeIn)
 {
 	dbconn = dbconnIn;
 	shareMode = shareModeIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
-	if(!work)
-		throw runtime_error("Transaction has been deleted");
 
-	if(shareMode.size() > 0)
-	{
-		string errStr;
-		bool ok = LockMap(work, this->tableStaticPrefix, this->shareMode, errStr);
-		if(!ok)
-			throw runtime_error(errStr);
-		ok = LockMap(work, this->tableModPrefix, this->shareMode, errStr);
-		if(!ok)
-			throw runtime_error(errStr);
-		ok = LockMap(work, this->tableTestPrefix, this->shareMode, errStr);
-		if(!ok)
-			throw runtime_error(errStr);
-	}
+	this->sharedWork = this->CreateTransaction();
 }
 
 PgAdmin::~PgAdmin()
 {
 	this->sharedWork->work.reset();
 	this->sharedWork.reset();
+}
+
+std::shared_ptr<class PgWork> PgAdmin::CreateTransaction()
+{
+	if(shareMode.size() > 0)
+	{
+		std::shared_ptr<class PgWork> w(new class PgWork(new pqxx::work(*dbconn)));
+		this->LockTables(w);
+		return w;
+	}
+	else
+	{
+		std::shared_ptr<class PgWork> w(new class PgWork(new pqxx::nontransaction(*dbconn)));
+		return w;
+	}
+}
+
+void PgAdmin::LockTables(std::shared_ptr<class PgWork> w)
+{
+	std::shared_ptr<pqxx::transaction_base> work(w->work);
+	string errStr;
+	bool ok = LockMap(work, this->tableStaticPrefix, shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
+	ok = LockMap(work, this->tableModPrefix, shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
+	ok = LockMap(work, this->tableTestPrefix, shareMode, errStr);
+	if(!ok)
+		throw runtime_error(errStr);
 }
 
 bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
@@ -1943,8 +1888,13 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
+	std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj) = &::CreateTransaction;
+
 	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
-		this->tableModPrefix, nativeErrStr);
+		this->tableModPrefix, 
+		transactionFactory,
+		reinterpret_cast<void *>(this),
+		nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
 
@@ -2069,8 +2019,7 @@ std::shared_ptr<class PgAdmin> PgMap::GetAdmin()
 	dbconn->cancel_query();
 	if(this->sharedWork)
 		this->sharedWork->work.reset();
-	this->sharedWork.reset(new class PgWork(new pqxx::nontransaction(*dbconn)));
-	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, this->sharedWork, ""));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, ""));
 	return out;
 }
 
@@ -2079,8 +2028,7 @@ std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
 	dbconn->cancel_query();
 	if(this->sharedWork)
 		this->sharedWork->work.reset();
-	this->sharedWork.reset(new class PgWork(new pqxx::transaction<pqxx::repeatable_read>(*dbconn)));
-	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, this->sharedWork, shareMode));
+	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, shareMode));
 	return out;
 }
 

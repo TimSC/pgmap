@@ -33,5 +33,20 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 void DbCheckOcdnSupport(pqxx::connection &c, pqxx::transaction_base *work,
 	bool &ocdnSupported, std::string &ocdn);
 
+class PgWork
+{
+public:
+	PgWork();
+	PgWork(pqxx::transaction_base *workIn);
+	PgWork(const PgWork &obj);
+	virtual ~PgWork();
+	PgWork& operator=(const PgWork &obj);
+
+	std::shared_ptr<pqxx::transaction_base> work;
+};
+
+bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &prefix, 
+	const std::string &accessMode, std::string &errStr);
+
 #endif //_DB_COMMON_H
 

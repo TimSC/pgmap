@@ -72,6 +72,8 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
 	const std::string &staticTablePrefix, 
 	const std::string &activeTablePrefix,
+    std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj),
+	void *adminObj,
 	std::string &errStr);
 
 int DbSaveBboxes(pqxx::connection &c, pqxx::transaction_base *work,

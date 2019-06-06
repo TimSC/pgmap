@@ -9,6 +9,7 @@
 #include "cppo5m/osmxml.h"
 #include "cppo5m/OsmData.h"
 #include "dbusername.h"
+#include "dbcommon.h"
 
 class PgMapError
 {
@@ -45,18 +46,6 @@ public:
 	TagMap tags;
 	bool is_open, bbox_set;
 	double x1, y1, x2, y2;
-};
-
-class PgWork
-{
-public:
-	PgWork();
-	PgWork(pqxx::transaction_base *workIn);
-	PgWork(const PgWork &obj);
-	virtual ~PgWork();
-	PgWork& operator=(const PgWork &obj);
-
-	std::shared_ptr<pqxx::transaction_base> work;
 };
 
 class PgMapQuery
@@ -221,15 +210,16 @@ private:
 	std::shared_ptr<class PgWork> sharedWork;
 	std::string shareMode;
 
+	void LockTables(std::shared_ptr<class PgWork> work);
 public:
 	PgAdmin(std::shared_ptr<pqxx::connection> dbconnIn,
 		const std::string &tableStaticPrefixIn, 
 		const std::string &tableModPrefixIn,
 		const std::string &tableTestPrefixIn,
-		std::shared_ptr<class PgWork> sharedWorkIn,
 		const std::string &shareModeIn);
 	virtual ~PgAdmin();
 
+	std::shared_ptr<class PgWork> CreateTransaction();
 	bool CreateMapTables(int verbose, class PgMapError &errStr);
 	bool DropMapTables(int verbose, class PgMapError &errStr);
 	bool CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr);
