@@ -891,18 +891,21 @@ private:
 	std::set<int64_t> wayBuffer;
 	std::set<int64_t> relationBuffer;
 	pqxx::connection &c;
-	pqxx::transaction_base *work;
 	std::string staticTablePrefix; 
 	std::string activeTablePrefix;
-	int64_t committedAtWay, committedAtRelation;
+
+	void ProcessWayBuffer();
+	void ProcessRelationBuffer();
 
 public:
 	std::string errStr;
 	int64_t wayCount, relationCount;
+	int64_t waysSinceCommit, relationsSinceCommit;
+	int64_t prevWayId, prevRelationId;
     bool incrementalCommit;
+	pqxx::transaction_base *work;
 
 	CollectObjsUpdateBbox(pqxx::connection &c,
-		pqxx::transaction_base *work,
 		const std::string &staticTablePrefix, const std::string &activeTablePrefix);
 	virtual ~CollectObjsUpdateBbox() {};
 
@@ -914,22 +917,22 @@ public:
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles);
 
-	void ProcessWayBuffer();
-	void ProcessRelationBuffer();
+	void Flush();
 };
 
 CollectObjsUpdateBbox::CollectObjsUpdateBbox(pqxx::connection &c,
-	pqxx::transaction_base *work,
 	const std::string &staticTablePrefix, const std::string &activeTablePrefix) : 
 	IDataStreamHandler(), c(c),
-	work(work),
 	staticTablePrefix(staticTablePrefix),
 	activeTablePrefix(activeTablePrefix)
 {
+	work = nullptr;
 	wayCount = 0;
 	relationCount = 0;
-	committedAtWay=0;
-	committedAtRelation=0;
+	waysSinceCommit = 0;
+	relationsSinceCommit = 0;
+	prevWayId=-1;
+	prevRelationId=-1;
 	incrementalCommit=true;
 }
 
@@ -946,13 +949,11 @@ bool CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaDa
 		const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	wayBuffer.insert(objId);
+	prevWayId = objId;
 	if(wayBuffer.size() > 1000)
 		this->ProcessWayBuffer();
-	if(incrementalCommit and wayCount > committedAtWay + 1000000)
-	{
-		//committedAtWay = wayCount;
-		return true;
-	}
+	if(incrementalCommit and waysSinceCommit > 5000)
+		return true;	
 	return false;
 }
 
@@ -961,19 +962,18 @@ bool CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &m
 	const std::vector<std::string> &refRoles)
 {
 	relationBuffer.insert(objId);
+	prevRelationId = relationCount;
 	if(relationBuffer.size() > 1000)
 		this->ProcessRelationBuffer();
-	if(incrementalCommit and relationCount > committedAtRelation + 100000)
-	{
-		cout << "committed relation bboxes" << endl;
-		//committedAtRelation = relationCount;
+	if(incrementalCommit and relationsSinceCommit > 5000)		
 		return true;
-	}
 	return false;
 }
 
 void CollectObjsUpdateBbox::ProcessWayBuffer()
 {
+	if(wayBuffer.size() == 0) return;
+
 	//Update bbox of ways in buffer
 	class DbUsernameLookup *usernames = nullptr;
 	std::set<int64_t> emptyNodeIds;
@@ -988,6 +988,7 @@ void CollectObjsUpdateBbox::ProcessWayBuffer()
 		errStr);
 
 	wayCount += wayBuffer.size();
+	waysSinceCommit += wayBuffer.size();
 	cout << "w " << wayCount << endl;
 	if(!ok)
 		cout << errStr << endl;
@@ -996,7 +997,9 @@ void CollectObjsUpdateBbox::ProcessWayBuffer()
 
 void CollectObjsUpdateBbox::ProcessRelationBuffer()
 {
-	//Update bbox of ways in buffer
+	if(relationBuffer.size() == 0) return;
+
+	//Update bbox of relations in buffer
 	class DbUsernameLookup *usernames = nullptr;
 	std::set<int64_t> emptyNodeIds, emptyWayIds;
 	bool ok = DbUpdateRelationShapes(c, work, 
@@ -1009,10 +1012,17 @@ void CollectObjsUpdateBbox::ProcessRelationBuffer()
 		errStr);
 
 	relationCount += relationBuffer.size();
+	relationsSinceCommit += relationBuffer.size();
 	cout << "r " << relationCount << endl;
 	if(!ok)
 		cout << errStr << endl;
 	relationBuffer.clear();
+}
+
+void CollectObjsUpdateBbox::Flush()
+{
+	this->ProcessWayBuffer();
+	this->ProcessRelationBuffer();
 }
 
 int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
@@ -1026,25 +1036,49 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	//Process static ways
 	class DbUsernameLookup *usernames = nullptr;
 	std::shared_ptr<class CollectObjsUpdateBbox> collectObjsUpdateBbox = make_shared<class CollectObjsUpdateBbox>(
-		c, work,
+		c,
 		staticTablePrefix, activeTablePrefix);
 
-	int ret = DumpWays(c, work, *usernames, 
-		staticTablePrefix, 
-		"",
-		false, -1,
-		collectObjsUpdateBbox);
-	cout << "ret" << ret << endl;
-	collectObjsUpdateBbox->Finish();
+	int dumpFinished = 0;
 	work->commit();
 
-	/*DumpRelations(c, work, *usernames, 
-		staticTablePrefix, 
-		"",
-		false, -1,
-		collectObjsUpdateBbox);
+	while(!dumpFinished)
+	{
+		cout << "prevWayId " << collectObjsUpdateBbox->prevWayId << endl;
+		std::shared_ptr<class PgWork> work2 = transactionFactory(adminObj);
+		collectObjsUpdateBbox->work = work2->work.get();
+
+		dumpFinished = DumpWays(c, work2->work.get(), *usernames, 
+			staticTablePrefix, 
+			"",
+			false, collectObjsUpdateBbox->prevWayId,
+			collectObjsUpdateBbox);
+		cout << "dumpFinished " << dumpFinished << endl;
+		collectObjsUpdateBbox->Flush();
+
+		work2->work->commit();
+		collectObjsUpdateBbox->waysSinceCommit = 0;
+	}
 	collectObjsUpdateBbox->Finish();
-	errStr = collectObjsUpdateBbox->errStr;*/
+
+	dumpFinished = 0;
+	/*while(!dumpFinished)
+	{
+		cout << "prevRelationId " << collectObjsUpdateBbox->prevRelationId << endl;
+		std::shared_ptr<class PgWork> work2 = transactionFactory(adminObj);
+		collectObjsUpdateBbox->work = work2->work.get();
+
+		dumpFinished = DumpRelations(c, work2->work.get(), *usernames, 
+			staticTablePrefix, 
+			"",
+			false, collectObjsUpdateBbox->prevRelationId,
+			collectObjsUpdateBbox);
+		
+		work2->work->commit();
+		collectObjsUpdateBbox->relationsSinceCommit = 0;		
+	}*/
+	collectObjsUpdateBbox->Finish();
+	errStr = collectObjsUpdateBbox->errStr;
 
 	return 0;	
 }
