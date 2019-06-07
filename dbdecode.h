@@ -28,7 +28,7 @@ void DecodeRelMembers(const pqxx::result::const_iterator &c, int membersCol, int
 
 int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, std::shared_ptr<IDataStreamHandler> enc);
 int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, std::shared_ptr<IDataStreamHandler> enc);
-void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
+int RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
 	const std::set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc);
 
 #endif //_DB_DECODE_H

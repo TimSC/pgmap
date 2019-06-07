@@ -891,12 +891,10 @@ private:
 	std::set<int64_t> wayBuffer;
 	std::set<int64_t> relationBuffer;
 	pqxx::connection &c;
-	std::shared_ptr<class PgWork> work;
+	pqxx::transaction_base *work;
 	std::string staticTablePrefix; 
 	std::string activeTablePrefix;
 	int64_t committedAtWay, committedAtRelation;
-	std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj);
-	void *adminObj;
 
 public:
 	std::string errStr;
@@ -904,16 +902,15 @@ public:
     bool incrementalCommit;
 
 	CollectObjsUpdateBbox(pqxx::connection &c,
-		std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj),
-		void *adminObj,
+		pqxx::transaction_base *work,
 		const std::string &staticTablePrefix, const std::string &activeTablePrefix);
 	virtual ~CollectObjsUpdateBbox() {};
 
-	virtual void Finish();
+	virtual bool Finish();
 
-	virtual void StoreWay(int64_t objId, const class MetaData &metaData, 
+	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, const std::vector<int64_t> &refs);
-	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	virtual bool StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles);
 
@@ -922,12 +919,10 @@ public:
 };
 
 CollectObjsUpdateBbox::CollectObjsUpdateBbox(pqxx::connection &c,
-	std::shared_ptr<class PgWork> (*transactionFactory)(void *adminObj),
-	void *adminObj,
+	pqxx::transaction_base *work,
 	const std::string &staticTablePrefix, const std::string &activeTablePrefix) : 
 	IDataStreamHandler(), c(c),
-	transactionFactory(transactionFactory),
-	adminObj(adminObj),
+	work(work),
 	staticTablePrefix(staticTablePrefix),
 	activeTablePrefix(activeTablePrefix)
 {
@@ -938,20 +933,16 @@ CollectObjsUpdateBbox::CollectObjsUpdateBbox(pqxx::connection &c,
 	incrementalCommit=true;
 }
 
-void CollectObjsUpdateBbox::Finish()
+bool CollectObjsUpdateBbox::Finish()
 {
 	if(wayBuffer.size() > 0)
 		this->ProcessWayBuffer();
 	if(relationBuffer.size() > 0)
 		this->ProcessRelationBuffer();
-	if(incrementalCommit)
-	{
-	    this->work->work->commit();
-		this->work.reset();
-	}
+	return false;
 }
 
-void CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaData, 
+bool CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	wayBuffer.insert(objId);
@@ -959,14 +950,13 @@ void CollectObjsUpdateBbox::StoreWay(int64_t objId, const class MetaData &metaDa
 		this->ProcessWayBuffer();
 	if(incrementalCommit and wayCount > committedAtWay + 1000000)
 	{
-		this->work->work->commit();
-		this->work.reset();
-		cout << "committed way bboxes" << endl;
-		committedAtWay = wayCount;
+		//committedAtWay = wayCount;
+		return true;
 	}
+	return false;
 }
 
-void CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+bool CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
@@ -975,26 +965,20 @@ void CollectObjsUpdateBbox::StoreRelation(int64_t objId, const class MetaData &m
 		this->ProcessRelationBuffer();
 	if(incrementalCommit and relationCount > committedAtRelation + 100000)
 	{
-		this->work->work->commit();
-		this->work.reset();
 		cout << "committed relation bboxes" << endl;
-		committedAtRelation = relationCount;
+		//committedAtRelation = relationCount;
+		return true;
 	}
+	return false;
 }
 
 void CollectObjsUpdateBbox::ProcessWayBuffer()
 {
-	if(!work)
-	{
-		//Create transaction
-		work = this->transactionFactory(this->adminObj);
-	}
-
 	//Update bbox of ways in buffer
 	class DbUsernameLookup *usernames = nullptr;
 	std::set<int64_t> emptyNodeIds;
 	std::set<int64_t> touchedWayIds2;
-	bool ok = DbUpdateWayShapes(c, work->work.get(), 
+	bool ok = DbUpdateWayShapes(c, work, 
 		staticTablePrefix, 
 		"", 
 		*usernames, 
@@ -1012,16 +996,10 @@ void CollectObjsUpdateBbox::ProcessWayBuffer()
 
 void CollectObjsUpdateBbox::ProcessRelationBuffer()
 {
-	if(!work)
-	{
-		//Create transaction
-		work = this->transactionFactory(this->adminObj);
-	}
-
 	//Update bbox of ways in buffer
 	class DbUsernameLookup *usernames = nullptr;
 	std::set<int64_t> emptyNodeIds, emptyWayIds;
-	bool ok = DbUpdateRelationShapes(c, work->work.get(), 
+	bool ok = DbUpdateRelationShapes(c, work, 
 		staticTablePrefix, 
 		"", 
 		*usernames, 
@@ -1048,20 +1026,22 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	//Process static ways
 	class DbUsernameLookup *usernames = nullptr;
 	std::shared_ptr<class CollectObjsUpdateBbox> collectObjsUpdateBbox = make_shared<class CollectObjsUpdateBbox>(
-		c,
-		transactionFactory, adminObj,
+		c, work,
 		staticTablePrefix, activeTablePrefix);
-	DumpWays(c, work, *usernames, 
+
+	int ret = DumpWays(c, work, *usernames, 
 		staticTablePrefix, 
 		"",
-		false,
+		false, -1,
 		collectObjsUpdateBbox);
+	cout << "ret" << ret << endl;
 	collectObjsUpdateBbox->Finish();
+	work->commit();
 
 	/*DumpRelations(c, work, *usernames, 
 		staticTablePrefix, 
 		"",
-		false,
+		false, -1,
 		collectObjsUpdateBbox);
 	collectObjsUpdateBbox->Finish();
 	errStr = collectObjsUpdateBbox->errStr;*/

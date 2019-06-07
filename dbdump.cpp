@@ -5,10 +5,11 @@
 * Dump live nodes but skip node IDs that are in the excludeTablePrefix table. Only current
 * nodes are dumped, not old (non-visible) nodes.
 */
-void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+int DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
+	int64_t startFromId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
@@ -33,10 +34,11 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUserna
 	sql << "SELECT "<< liveNodeTable << ".*, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
 	sql << liveNodeTable;
 	if(excludeTable.size() > 0)
-	{
-		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
-		sql << " WHERE "<<excludeTable<<".id IS NULL";
-	}
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";		
+	sql << " WHERE id>" << startFromId;
+	if(excludeTable.size() > 0)
+		sql<<" AND "<<excludeTable<<".id IS NULL";
+
 	if(order)
 		sql << " ORDER BY " << liveNodeTable << ".id";
 	sql << ";";
@@ -47,12 +49,14 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUserna
 	int count = 1;
 	while(count > 0)
 		count = NodeResultsToEncoder(cursor, usernames, enc);
+	return count >= 0;
 }
 
-void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+int DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
 	const string &excludeTablePrefix,
 	bool order,
+	int64_t startFromId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string wayTable = c.quote_name(tablePrefix + "liveways");
@@ -67,10 +71,11 @@ void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernam
 	sql << "SELECT " << wayTable << ".* FROM ";
 	sql << wayTable;
 	if(excludeTable.size() > 0)
-	{
 		sql << " LEFT JOIN "<<excludeTable<<" ON "<<wayTable<<".id = "<<excludeTable<<".id";
-		sql << " WHERE "<<excludeTable<<".id IS NULL";
-	}
+	sql << " WHERE id>" << startFromId;
+	if(excludeTable.size() > 0)
+		sql<<" AND "<<excludeTable<<".id IS NULL";
+
 	if(order)
 		sql << " ORDER BY " << wayTable << ".id";
 	sql << ";";
@@ -80,12 +85,14 @@ void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernam
 	int count = 1;
 	while (count > 0)
 		count = WayResultsToEncoder(cursor, usernames, enc);
+	return count >= 0;
 }
 
-void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+int DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
 	const string &excludeTablePrefix, 
 	bool order,
+	int64_t startFromId,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
 	string relationTable = c.quote_name(tablePrefix + "liverelations");
@@ -100,10 +107,10 @@ void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUs
 	sql << "SELECT " << relationTable << ".* FROM ";
 	sql << relationTable;
 	if(excludeTable.size() > 0)
-	{
 		sql << " LEFT JOIN "<<excludeTable<<" ON "<<relationTable<<".id = "<<excludeTable<<".id";
-		sql << " WHERE "<<excludeTable<<".id IS NULL";
-	}
+	sql << " WHERE id>" << startFromId;
+	if(excludeTable.size() > 0)
+		sql <<" AND "<<excludeTable<<".id IS NULL";
 	if(order)
 		sql << " ORDER BY " << relationTable << ".id";
 	sql << ";";
@@ -111,6 +118,7 @@ void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUs
 	pqxx::icursorstream cursor( *work, sql.str(), "relationcursor", 1000 );	
 
 	set<int64_t> empty;
-	RelationResultsToEncoder(cursor, usernames, empty, enc);
+	int ret = RelationResultsToEncoder(cursor, usernames, empty, enc);
+	return ret >= 0;
 }
 

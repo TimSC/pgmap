@@ -27,17 +27,17 @@ public:
 	DataChecker(std::shared_ptr<class PgTransaction> transactionIn);
 	virtual ~DataChecker();
 
-	virtual void Sync() {};
-	virtual void Reset() {};
-	virtual void Finish();
+	virtual bool Sync() {return false;};
+	virtual bool Reset() {return false;};
+	virtual bool Finish();
 
-	virtual void StoreIsDiff(bool) {};
-	virtual void StoreBounds(double x1, double y1, double x2, double y2);
-	virtual void StoreNode(int64_t objId, const class MetaData &metaData, 
+	virtual bool StoreIsDiff(bool) {return false;};
+	virtual bool StoreBounds(double x1, double y1, double x2, double y2);
+	virtual bool StoreNode(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, double lat, double lon);
-	virtual void StoreWay(int64_t objId, const class MetaData &metaData, 
+	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, const std::vector<int64_t> &refs);
-	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	virtual bool StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles);
 
@@ -54,7 +54,7 @@ DataChecker::~DataChecker()
 
 }
 
-void DataChecker::Finish()
+bool DataChecker::Finish()
 {
 	for(map<int64_t, vector<int64_t> >::iterator it = nodeIdVers.begin(); it != nodeIdVers.end(); it++)
 	{
@@ -71,14 +71,16 @@ void DataChecker::Finish()
 		if(it->second.size() > 1)
 			cout << "Relation " << it->first << " occurs " << it->second.size() << " times" << endl;
 	}
+	return false;
 }
 
-void DataChecker::StoreBounds(double x1, double y1, double x2, double y2)
+bool DataChecker::StoreBounds(double x1, double y1, double x2, double y2)
 {
 	cout << "bounds " << x1 <<","<< y1 <<","<< x2 <<","<< y2 << endl;
+	return false;
 }
 
-void DataChecker::StoreNode(int64_t objId, const class MetaData &metaData, 
+bool DataChecker::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
 	if(!transaction)
@@ -98,9 +100,10 @@ void DataChecker::StoreNode(int64_t objId, const class MetaData &metaData,
 		cout << "Node " << objId << " lat out of range " << lat << endl;
 	if(lon < -180 or lon > 180)
 		cout << "Node " << objId << " lon out of range " << lon << endl;
+	return false;
 }
 
-void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData, 
+bool DataChecker::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	if(!transaction)
@@ -131,9 +134,10 @@ void DataChecker::StoreWay(int64_t objId, const class MetaData &metaData,
 		cout << "Node " << (*it) << " does not exist, but referenced by way: ";
 		cout << objId << endl;
 	}
+	return false;
 }
 
-void DataChecker::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+bool DataChecker::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
@@ -185,6 +189,7 @@ void DataChecker::StoreRelation(int64_t objId, const class MetaData &metaData, c
 	for(auto it=refNotExists.begin(); it!=refNotExists.end(); it++)
 		cout << "Relation " << (*it) << " does not exist, but referenced by relation: " << objId << endl;
 
+	return false;
 }
 
 void DataChecker::NodesExists(const std::set<int64_t> &objectIds,

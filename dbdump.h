@@ -7,20 +7,25 @@
 #include "cppo5m/o5m.h"
 #include "cppo5m/OsmData.h"
 
-void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+int DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
 	bool order,
+	int64_t startFromId,
 	std::shared_ptr<IDataStreamHandler> enc);
-void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+
+int DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix,
 	bool order,
+	int64_t startFromId,
 	std::shared_ptr<IDataStreamHandler> enc);
-void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
+
+int DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
 	bool order,
+	int64_t startFromId,
 	std::shared_ptr<IDataStreamHandler> enc);
 
 #endif //_DB_DUMP_H

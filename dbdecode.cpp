@@ -135,7 +135,10 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 		}
 
 		if(enc)
-			enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
+		{
+			bool stop = enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
+			if(stop) return -1;
+		}
 	}
 	return count;
 }
@@ -200,12 +203,15 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 		}
 
 		if(enc)
-			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
+		{
+			bool stop = enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
+			if(stop) return -1;
+		}
 	}
 	return count;
 }
 
-void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
+int RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
 	const set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc)
 {
 	uint64_t count = 0;
@@ -277,9 +283,13 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 			}
 
 			if(enc)
-				enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
+			{
+				bool stop = enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
 					relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
+				if(stop) return -1;
+			}
 		}
 	}
+	return count;
 }
 

@@ -52,17 +52,17 @@ public:
 	CsvStore(const std::string &outPrefix);
 	virtual ~CsvStore();
 
-	virtual void Sync() {};
-	virtual void Reset() {};
-	virtual void Finish();
+	virtual bool Sync() {return false;};
+	virtual bool Reset() {return false;};
+	virtual bool Finish();
 
-	virtual void StoreIsDiff(bool) {};
-	virtual void StoreBounds(double x1, double y1, double x2, double y2) {};
-	virtual void StoreNode(int64_t objId, const class MetaData &metaData, 
+	virtual bool StoreIsDiff(bool) {return false;};
+	virtual bool StoreBounds(double x1, double y1, double x2, double y2) {return false;};
+	virtual bool StoreNode(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, double lat, double lon);
-	virtual void StoreWay(int64_t objId, const class MetaData &metaData, 
+	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, const std::vector<int64_t> &refs);
-	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	virtual bool StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 		const std::vector<std::string> &refRoles);
 
@@ -136,12 +136,12 @@ CsvStore::~CsvStore()
 	relationMemRelsFile.close();
 }
 
-void CsvStore::Finish()
+bool CsvStore::Finish()
 {
-
+	return false;
 }
 
-void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData, 
+bool CsvStore::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
 	string tagsJson;
@@ -190,9 +190,10 @@ void CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 	string objIdStr = Int64ToStr(objId);
 	objIdStr += "\n";
 	this->nodeIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
+	return false;
 }
 
-void CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
+bool CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	string tagsJson;
@@ -252,9 +253,10 @@ void CsvStore::StoreWay(int64_t objId, const class MetaData &metaData,
 		string memStr(ss2.str());
 		this->wayMembersFileGzip->sputn(memStr.c_str(), memStr.size());
 	}
+	return false;
 }
 
-void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+bool CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
@@ -332,6 +334,7 @@ void CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 			this->relationMemRelsFileGzip->sputn(memStr.c_str(), memStr.size());
 		}
 	}
+	return false;
 }
 
 int main(int argc, char **argv)

@@ -18,31 +18,35 @@ DataStreamRetainIds::~DataStreamRetainIds()
 
 }
 
-void DataStreamRetainIds::StoreIsDiff(bool diff)
+bool DataStreamRetainIds::StoreIsDiff(bool diff)
 {
 	out.StoreIsDiff(diff);
+	return false;
 }
 
-void DataStreamRetainIds::StoreBounds(double x1, double y1, double x2, double y2)
+bool DataStreamRetainIds::StoreBounds(double x1, double y1, double x2, double y2)
 {
 	out.StoreBounds(x1, y1, x2, y2);
+	return false;
 }
 
-void DataStreamRetainIds::StoreNode(int64_t objId, const class MetaData &metaData, 
+bool DataStreamRetainIds::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
 	out.StoreNode(objId, metaData, tags, lat, lon);
 	this->nodeIds.insert(objId);
+	return false;
 }
 
-void DataStreamRetainIds::StoreWay(int64_t objId, const class MetaData &metaData, 
+bool DataStreamRetainIds::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	out.StoreWay(objId, metaData, tags, refs);
 	this->wayIds.insert(objId);
+	return false;
 }
 
-void DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+bool DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
@@ -50,6 +54,7 @@ void DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &met
 		throw std::invalid_argument("Length of ref vectors must be equal");
 	out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
 	this->relationIds.insert(objId);
+	return false;
 }
 
 // ******************************
@@ -71,31 +76,35 @@ DataStreamRetainMemIds::~DataStreamRetainMemIds()
 
 }
 
-void DataStreamRetainMemIds::StoreIsDiff(bool diff)
+bool DataStreamRetainMemIds::StoreIsDiff(bool diff)
 {
 	out.StoreIsDiff(diff);
+	return false;
 }
 
-void DataStreamRetainMemIds::StoreBounds(double x1, double y1, double x2, double y2)
+bool DataStreamRetainMemIds::StoreBounds(double x1, double y1, double x2, double y2)
 {
 	out.StoreBounds(x1, y1, x2, y2);
+	return false;
 }
 
-void DataStreamRetainMemIds::StoreNode(int64_t objId, const class MetaData &metaData, 
+bool DataStreamRetainMemIds::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
 	out.StoreNode(objId, metaData, tags, lat, lon);
+	return false;
 }
 
-void DataStreamRetainMemIds::StoreWay(int64_t objId, const class MetaData &metaData, 
+bool DataStreamRetainMemIds::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	out.StoreWay(objId, metaData, tags, refs);
 	for(size_t i=0; i < refs.size(); i++)
 		this->nodeIds.insert(refs[i]);
+	return false;
 }
 
-void DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+bool DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
@@ -113,6 +122,7 @@ void DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &
 		else
 			throw runtime_error("Unknown member type in relation");
 	}
+	return false;
 }
 
 // ****************************************************
@@ -127,32 +137,37 @@ FilterObjectsUnique::~FilterObjectsUnique()
 
 }
 
-void FilterObjectsUnique::Sync()
+bool FilterObjectsUnique::Sync()
 {
 	enc->Sync();
+	return false;
 }
 
-void FilterObjectsUnique::Reset()
+bool FilterObjectsUnique::Reset()
 {
 	enc->Reset();
+	return false;
 }
 
-void FilterObjectsUnique::Finish()
+bool FilterObjectsUnique::Finish()
 {
 	enc->Finish();
+	return false;
 }
 
-void FilterObjectsUnique::StoreIsDiff(bool isDiff)
+bool FilterObjectsUnique::StoreIsDiff(bool isDiff)
 {
 	enc->StoreIsDiff(isDiff);
+	return false;
 }
 
-void FilterObjectsUnique::StoreBounds(double x1, double y1, double x2, double y2)
+bool FilterObjectsUnique::StoreBounds(double x1, double y1, double x2, double y2)
 {
 	enc->StoreBounds(x1, y1, x2, y2);
+	return false;
 }
 
-void FilterObjectsUnique::StoreNode(int64_t objId, const class MetaData &metaData, 
+bool FilterObjectsUnique::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
 	auto it = this->nodeIds.find(objId);
@@ -162,9 +177,10 @@ void FilterObjectsUnique::StoreNode(int64_t objId, const class MetaData &metaDat
 			tags, lat, lon);
 		this->nodeIds.insert(objId);
 	}
+	return false;
 }
 
-void FilterObjectsUnique::StoreWay(int64_t objId, const class MetaData &metaData, 
+bool FilterObjectsUnique::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
 	auto it = this->wayIds.find(objId);
@@ -174,9 +190,10 @@ void FilterObjectsUnique::StoreWay(int64_t objId, const class MetaData &metaData
 			tags, refs);
 		this->wayIds.insert(objId);
 	}
+	return false;
 }
 
-void FilterObjectsUnique::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+bool FilterObjectsUnique::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
@@ -188,5 +205,6 @@ void FilterObjectsUnique::StoreRelation(int64_t objId, const class MetaData &met
 			refRoles);
 		this->relationIds.insert(objId);
 	}
+	return false;
 }
 
