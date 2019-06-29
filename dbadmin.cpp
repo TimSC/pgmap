@@ -14,6 +14,7 @@
 #include <set>
 #include <boost/filesystem.hpp>
 #include <fstream>
+#include <iostream>
 using namespace std;
 using namespace boost::filesystem;
 
@@ -81,7 +82,7 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;	
 }
 
-bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
@@ -140,34 +141,36 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"meta")+" (key TEXT, value TEXT);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-		DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
 	}
+	return ok;
+}
 
-	int schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
-	if (schemaVersion == 11)
-	{
-		//Update to schema ver 12
-		string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"oldnodes")+" ADD COLUMN end_timestamp BIGINT;";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	bool ok = true;
 
-		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	//Update to schema ver 12
+	string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"oldnodes")+" ADD COLUMN end_timestamp BIGINT;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relshapes")+" (id BIGSERIAL PRIMARY KEY, rel_id BIGINT, rel_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, bbox GEOMETRY(Polygon, 4326));";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"wayshapes")+" (id BIGSERIAL PRIMARY KEY, way_id BIGINT, way_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, nvers INTEGER[], bbox GEOMETRY(Polygon, 4326));";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326), ADD COLUMN bbox_timestamp BIGINT;";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326), ADD COLUMN bbox_timestamp BIGINT;";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relshapes")+" (id BIGSERIAL PRIMARY KEY, rel_id BIGINT, rel_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, bbox GEOMETRY(Polygon, 4326));";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
-	}
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326), ADD COLUMN bbox_timestamp BIGINT;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326), ADD COLUMN bbox_timestamp BIGINT;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	return ok;
 }
 
-bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
@@ -211,13 +214,97 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"usernames")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayshapes")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose);
+
+	return ok;
+}
+
+bool DbDowngradeTables12To11(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	std::string sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayshapes")+";";
+	bool ok = DbExec(work, sql, errStr, nullptr, verbose);
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relshapes")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 
-	return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"oldnodes")+" DROP COLUMN end_timestamp;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" DROP COLUMN bbox, DROP COLUMN bbox_timestamp;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" DROP COLUMN bbox, DROP COLUMN bbox_timestamp;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
+	return ok;
+}
+
+bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	int targetVer, bool latest, std::string &errStr)
+{
+	int schemaVersion = 0;
+	try
+	{
+		schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
+	}
+	catch (runtime_error &err) {}
+
+	if(latest)
+		targetVer = 12;
+	bool ok = true;
+
+	if(schemaVersion == 0 and targetVer>schemaVersion)
+	{
+		ok = DbUpgradeTables0to11(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
+		if(!ok) return false;
+		schemaVersion = 11;
+	}
+
+	if(schemaVersion == 11 and targetVer>schemaVersion)
+	{
+		ok = DbUpgradeTables11to12(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
+		if(!ok) return false;
+		schemaVersion = 12;
+	}
+
+	if(targetVer < 12 and schemaVersion == 12)
+	{
+		ok = DbDowngradeTables12To11(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
+		if(!ok) return false;
+
+		schemaVersion = 11;
+	}
+
+	if(targetVer < 11 and schemaVersion == 11)
+	{
+		ok = DbDowngradeTables11To0(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+		schemaVersion = 0;
+	}
+
+	return true;
 }
 
 bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 

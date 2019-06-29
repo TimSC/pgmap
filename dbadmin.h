@@ -9,15 +9,10 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableStaticPrefix,
 	std::string &errStr);
 
-bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tablePrefix, 
-	std::string &errStr);
-
-bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work, 
-	int verbose, 
-	const std::string &tablePrefix, 
-	std::string &errStr);
+	int targetVer, bool latest, std::string &errStr);
 
 bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 

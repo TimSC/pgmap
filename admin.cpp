@@ -65,6 +65,7 @@ int main(int argc, char **argv)
 		cout << "d. Check object ID tables" << endl;
 		cout << "e. Update way bboxes" << endl;
 		cout << "f. Save bboxes to file" << endl;
+		cout << "g. Upgrade/downgrade db schema" << endl;
 		cout << endl << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -89,7 +90,7 @@ int main(int argc, char **argv)
 		{
 
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
-			bool ok = admin->CreateMapTables(verbose, errStr);
+			bool ok = admin->CreateMapTables(verbose, 0, true, errStr);
 
 			if(ok)
 				cout << "All done!" << endl;
@@ -319,6 +320,24 @@ int main(int argc, char **argv)
 
 			continue;
 		}
+
+		if(inputStr == "g")
+		{
+			cout << "Schema version?" << endl;
+			std::string schemaVer;
+			cin >> schemaVer;
+
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->CreateMapTables(verbose, atoi(schemaVer.c_str()), false, errStr);
+			admin->Commit();
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
+			continue;
+		}
+
 
 		if(inputStr == "q")
 		{
