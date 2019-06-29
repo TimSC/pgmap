@@ -156,9 +156,9 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 		sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"relshapes")+" (id BIGSERIAL PRIMARY KEY, rel_id BIGINT, rel_version INTEGER, start_timestamp BIGINT, end_timestamp BIGINT, bbox GEOMETRY(Polygon, 4326));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Polygon, 4326), ADD COLUMN bbox_timestamp BIGINT;";
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326), ADD COLUMN bbox_timestamp BIGINT;";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Polygon, 4326), ADD COLUMN bbox_timestamp BIGINT;";
+		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326), ADD COLUMN bbox_timestamp BIGINT;";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
@@ -1034,51 +1034,14 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	std::string &errStr)
 {
 	//Process static ways
-	class DbUsernameLookup *usernames = nullptr;
-	std::shared_ptr<class CollectObjsUpdateBbox> collectObjsUpdateBbox = make_shared<class CollectObjsUpdateBbox>(
-		c,
-		staticTablePrefix, activeTablePrefix);
+    string sql = "UPDATE "+staticTablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+staticTablePrefix+"livenodes WHERE "+staticTablePrefix+"livenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+staticTablePrefix+"liveways.members))::text[]::bigint[])))) WHERE "+staticTablePrefix+"liveways.id IN (SELECT id FROM "+staticTablePrefix+"liveways);";
+	cout << sql << endl;
 
-	int dumpFinished = 0;
+	work->exec(sql);
+
 	work->commit();
 
-	while(!dumpFinished)
-	{
-		cout << "prevWayId " << collectObjsUpdateBbox->prevWayId << endl;
-		std::shared_ptr<class PgWork> work2 = transactionFactory(adminObj);
-		collectObjsUpdateBbox->work = work2->work.get();
-
-		dumpFinished = DumpWays(c, work2->work.get(), *usernames, 
-			staticTablePrefix, 
-			"",
-			false, collectObjsUpdateBbox->prevWayId,
-			collectObjsUpdateBbox);
-		cout << "dumpFinished " << dumpFinished << endl;
-		collectObjsUpdateBbox->Flush();
-
-		work2->work->commit();
-		collectObjsUpdateBbox->waysSinceCommit = 0;
-	}
-	collectObjsUpdateBbox->Finish();
-
-	dumpFinished = 0;
-	/*while(!dumpFinished)
-	{
-		cout << "prevRelationId " << collectObjsUpdateBbox->prevRelationId << endl;
-		std::shared_ptr<class PgWork> work2 = transactionFactory(adminObj);
-		collectObjsUpdateBbox->work = work2->work.get();
-
-		dumpFinished = DumpRelations(c, work2->work.get(), *usernames, 
-			staticTablePrefix, 
-			"",
-			false, collectObjsUpdateBbox->prevRelationId,
-			collectObjsUpdateBbox);
-		
-		work2->work->commit();
-		collectObjsUpdateBbox->relationsSinceCommit = 0;		
-	}*/
-	collectObjsUpdateBbox->Finish();
-	errStr = collectObjsUpdateBbox->errStr;
+	//Process static relations
 
 	return 0;	
 }
