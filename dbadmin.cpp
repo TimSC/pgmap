@@ -87,6 +87,8 @@ bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
+	cout << "DbUpgradeTables0to11" << endl;
+
 	//PostgreSQL 9.3 and earlier does not support JSONB
 	int majorVer=0, minorVer=0;
 	DbGetVersion(c, work, majorVer, minorVer);
@@ -150,6 +152,7 @@ bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
+	cout << "DbUpgradeTables11to12" << endl;
 	bool ok = true;
 
 	//Update to schema ver 12
@@ -175,6 +178,8 @@ bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
+	cout << "DbDowngradeTables11To0" << endl;
+
 	string sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldnodes")+";";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 
@@ -223,6 +228,8 @@ bool DbDowngradeTables12To11(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
+	cout << "DbDowngradeTables12To11" << endl;
+
 	std::string sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayshapes")+";";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose);
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relshapes")+";";

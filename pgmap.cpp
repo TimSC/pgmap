@@ -1694,13 +1694,13 @@ bool PgAdmin::CreateMapTables(int verbose, int targetVer, bool latest, class PgM
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, 0, true, nativeErrStr);
+	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableModPrefix, 0, true, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableModPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableTestPrefix, 0, true, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableTestPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
