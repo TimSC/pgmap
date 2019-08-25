@@ -1127,8 +1127,21 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	void *adminObj,
 	std::string &errStr)
 {
+/*
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on planet2_static_liveways  (cost=0.00..11730376118.25 rows=231463328 width=360) (actual time=721416785.010..721416785.010 rows=0 loops=1)
+   ->  Seq Scan on planet2_static_liveways  (cost=0.00..11730376118.25 rows=231463328 width=360) (actual time=255.928..623747962.059 rows=123746659 loops=1)
+         SubPlan 2
+           ->  Index Scan using planet2_static_livenodes_pkey on planet2_static_livenodes  (cost=1.09..50.64 rows=10 width=32) (actual time=1.106..4.865 rows=12 loops=123746659)
+                 Index Cond: (id = ANY ((($1)::text[])::bigint[]))
+                 InitPlan 1 (returns $1)
+                   ->  Result  (cost=0.00..0.51 rows=100 width=0) (actual time=0.011..0.014 rows=13 loops=123746659)
+ Planning time: 472.667 ms
+ Execution time: 721416787.111 ms
+*/
+
 	//Process static ways
-    string sql = "UPDATE "+staticTablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+staticTablePrefix+"livenodes WHERE "+staticTablePrefix+"livenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+staticTablePrefix+"liveways.members))::text[]::bigint[])))) WHERE "+staticTablePrefix+"liveways.id IN (SELECT id FROM "+staticTablePrefix+"liveways);";
+    string sql = "UPDATE "+staticTablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+staticTablePrefix+"livenodes WHERE "+staticTablePrefix+"livenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+staticTablePrefix+"liveways.members))::text[]::bigint[]))));";
 	cout << sql << endl;
 
 	work->exec(sql);
