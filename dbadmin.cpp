@@ -1153,7 +1153,7 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	return 0;	
 }
 
-void DbOutputBboxRows(const string &objType, pqxx::icursorstream &cursor)
+void DbOutputBboxRows(const string &objType, pqxx::icursorstream &cursor, std::streambuf &out)
 {
 	while(true)
 	{
@@ -1167,33 +1167,26 @@ void DbOutputBboxRows(const string &objType, pqxx::icursorstream &cursor)
 
 		int idCol = rows.column_number("id");
 		int bboxCol = rows.column_number("bbox");
-		int tsCol = rows.column_number("bbox_timestamp");
 
 		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
 
+			stringstream ss;
 			int64_t objId = c[idCol].as<int64_t>();
-			cout << objType << "," << objId;
+			ss << objType << ";" << objId;
 
 			if (!c[bboxCol].is_null())
 			{
 				string bboxWkt = c[bboxCol].as<string>();
-				cout << "," << bboxWkt;
+				ss << ";" << bboxWkt;
 			}
 			else
 			{
-				cout << ", NULL";
+				ss << "; NULL";
 			}
 
-			if (!c[tsCol].is_null())
-			{
-				cout << "," << c[tsCol].as<int64_t>();
-			}
-			else
-			{
-				cout << ", NULL";
-			}
-
-			cout << endl;
+			ss << endl;
+			string outStr = ss.str();
+			out.sputn(outStr.c_str(), outStr.length());
 		}
 	}
 }
@@ -1205,6 +1198,10 @@ int DbSaveBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	string objTable = c.quote_name(tablePrefix + "liveways");
 
+	std::filebuf outfi;
+	outfi.open("bboxes.csv", std::ios::out);
+	class EncodeGzip outFiEnc(outfi);
+
 	stringstream sql;
 	sql << "SELECT id, ST_AsEWKT(bbox) AS bbox, bbox_timestamp FROM ";
 	sql << objTable;
@@ -1213,7 +1210,7 @@ int DbSaveBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	int step = 1000;
 	pqxx::icursorstream cursor( *work, sql.str(), "bboxcursor", step );	
-	DbOutputBboxRows("way", cursor);
+	DbOutputBboxRows("way", cursor, outFiEnc);
 
 	objTable = c.quote_name(tablePrefix + "liverelations");
 
@@ -1224,7 +1221,7 @@ int DbSaveBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	sql2 << ";";
 
 	pqxx::icursorstream cursor2( *work, sql.str(), "bboxcursor", step );	
-	DbOutputBboxRows("relation", cursor2);
+	DbOutputBboxRows("relation", cursor2, outFiEnc);
 
 	return 0;
 }
