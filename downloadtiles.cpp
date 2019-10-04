@@ -31,11 +31,18 @@ public:
 	}
 };
 
-shared_ptr<OutputFileAndEncoder> CreateOutEncoder(const::string &extension, fs::path pth, int zoom, int tilex, int tiley)
+shared_ptr<OutputFileAndEncoder> CreateOutEncoder(const::string &extension, fs::path pth, int zoom, 
+	int tilex, int tiley,
+	bool skipExisting = false)
 {
-	shared_ptr<OutputFileAndEncoder> out(new OutputFileAndEncoder());
 	string outFina = to_string(tiley)+extension;
 	fs::path outPth = pth / outFina;
+	if (skipExisting and fs::exists(outPth))
+	{
+		shared_ptr<OutputFileAndEncoder> empty;
+		return empty;
+	}
+	shared_ptr<OutputFileAndEncoder> out(new OutputFileAndEncoder());
 
 	vector<string> outFinaSp = split(outFina, '.');
 	if(outFinaSp.size() < 3)
@@ -79,6 +86,7 @@ int main(int argc, char **argv)
 		("zoom", po::value<int>()->default_value(12), "zoom (e.g. 12)")
 		("extension", po::value<string>()->default_value(".osm.gz"), "output file extension")
 		("out", po::value<string>()->default_value("."), "path to output")
+		("skipexisting", po::value<int>()->default_value(0), "skip regenerating existing output files")
 	;
 
 	po::variables_map vm;
@@ -194,7 +202,9 @@ int main(int argc, char **argv)
 		{
 			cout << "Tile " << x << "," << y << endl;
 
-			shared_ptr<OutputFileAndEncoder> outputFileAndEncoder = CreateOutEncoder(vm["extension"].as<string>(), pth2, zoom, x, y);
+			shared_ptr<OutputFileAndEncoder> outputFileAndEncoder = CreateOutEncoder(vm["extension"].as<string>(), pth2, zoom, 
+				x, y, vm["skipexisting"].as<int>());
+            if (!outputFileAndEncoder) continue;
 
 			vector<double> tileBbox = {tilex2long(x, zoom), tiley2lat(y, zoom), tilex2long(x+1, zoom), tiley2lat(y+1, zoom)};
 
