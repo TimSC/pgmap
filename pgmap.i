@@ -18,6 +18,7 @@ using std::string;
 /* Put header files here */
 #include "pgmap.h"
 #include "cppo5m/OsmData.h"
+#include "cppo5m/utils.h"
 %}
 
 %exception {
@@ -74,21 +75,19 @@ public:
 class IDataStreamHandler
 {
 public:
-	virtual void Sync() {};
-	virtual void Reset() {};
-	virtual void Finish() {};
+	virtual bool Sync() {return false;};
+	virtual bool Reset() {return false;};
+	virtual bool Finish() {return false;};
 
-	virtual void StoreIsDiff(bool diff) {};
-	virtual void StoreBounds(double x1, double y1, double x2, double y2) {};
-	virtual void StoreNode(int64_t objId, const class MetaData &metaData, 
-		const TagMap &tags, double lat, double lon) {};
-	virtual void StoreWay(int64_t objId, const class MetaData &metaData, 
-		const TagMap &tags, const std::vector<int64_t> &refs) {};
-	virtual void StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
+	virtual bool StoreIsDiff(bool diff) {return false;};
+	virtual bool StoreBounds(double x1, double y1, double x2, double y2) {return false;};
+	virtual bool StoreNode(int64_t objId, const class MetaData &metaData, 
+		const TagMap &tags, double lat, double lon) {return false;};
+	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 
+		const TagMap &tags, const std::vector<int64_t> &refs) {return false;};
+	virtual bool StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-		const std::vector<std::string> &refRoles) {};
-
-
+		const std::vector<std::string> &refRoles) {return false;};
 
 };
 

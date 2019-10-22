@@ -7,6 +7,7 @@
 #include "dbusername.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
+#include "cppo5m/utils.h"
 #include <map>
 #include <set>
 #include <boost/filesystem.hpp>

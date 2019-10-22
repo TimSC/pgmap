@@ -2,6 +2,7 @@
 #include <sstream>
 #include <cmath>
 #include "util.h"
+#include "cppo5m/utils.h"
 using namespace std;
 
 int ReadFileContents(const char *filename, int binaryMode, std::string &contentOut)
