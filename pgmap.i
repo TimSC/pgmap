@@ -232,9 +232,9 @@ public:
 class OsmXmlDecodeString
 {
 public:
-	std::shared_ptr<class IDataStreamHandler> output;
 	std::string errString;
 	bool parseCompletedOk;
+	class IDataStreamHandler *output;
 
 	OsmXmlDecodeString();
 	virtual ~OsmXmlDecodeString();
@@ -247,7 +247,7 @@ class OsmChangeXmlDecodeString
 public:
 	std::string errString;
 	bool parseCompletedOk;
-	std::shared_ptr<class IOsmChangeBlock> output;
+	class IOsmChangeBlock *output;
 
 	OsmChangeXmlDecodeString();
 	virtual ~OsmChangeXmlDecodeString();
@@ -422,16 +422,23 @@ public:
 
 // Convenience functions: load and save from std::streambuf
 
-void LoadFromO5m(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);
-void LoadFromOsmXml(std::streambuf &fi, std::shared_ptr<class IDataStreamHandler> output);
-void LoadFromOsmChangeXml(std::streambuf &fi, std::shared_ptr<class IOsmChangeBlock> output);
+void LoadFromO5m(std::streambuf &fi, class IDataStreamHandler *output);
+void LoadFromOsmXml(std::streambuf &fi, class IDataStreamHandler *output);
+void LoadFromPbf(std::streambuf &fi, class IDataStreamHandler *output);
+void LoadFromDecoder(std::streambuf &fi, class OsmDecoder *osmDecoder, class IDataStreamHandler *output);
+
+void LoadFromOsmChangeXml(std::streambuf &fi, class IOsmChangeBlock *output);
+
 void SaveToO5m(const class OsmData &osmData, std::streambuf &fi);
 void SaveToOsmXml(const class OsmData &osmData, std::streambuf &fi);
 void SaveToOsmChangeXml(const class OsmChange &osmChange, bool separateActions, std::streambuf &fi);
 
+std::shared_ptr<class OsmDecoder> DecoderOsmFactory(std::streambuf &handleIn, const std::string &filename);
+
 // Convenience functions: load from std::string
 
-void LoadFromO5m(const std::string &fi, std::shared_ptr<class IDataStreamHandler> output);
-void LoadFromOsmXml(const std::string &fi, std::shared_ptr<class IDataStreamHandler> output);
-void LoadFromOsmChangeXml(const std::string &fi, std::shared_ptr<class IOsmChangeBlock> output);
+void LoadFromO5m(const std::string &fi, class IDataStreamHandler *output);
+void LoadFromOsmXml(const std::string &fi, class IDataStreamHandler *output);
+
+void LoadFromOsmChangeXml(const std::string &fi, class IOsmChangeBlock *output);
 

@@ -158,9 +158,9 @@ void LoadOsmFromFile(const std::string &filename, shared_ptr<class IDataStreamHa
 	}
 
 	if(filenameSplit[filePart] == "o5m")
-		LoadFromO5m(*fb2.get(), csvStore);
+		LoadFromO5m(*fb2.get(), csvStore.get());
 	else if (filenameSplit[filePart] == "osm")
-		LoadFromOsmXml(*fb2.get(), csvStore);
+		LoadFromOsmXml(*fb2.get(), csvStore.get());
 	else
 		throw runtime_error("File extension not supported");
 
