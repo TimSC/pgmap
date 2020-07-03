@@ -10,7 +10,7 @@ Installation
 
 To use this library using Python 2:
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
 
 	sudo pip install --upgrade pip
 
@@ -30,6 +30,16 @@ Go to the <src>/pycrocosm/pgmap folder or clone a new copy:
 
 	cd pgmap
 
+You may or may need to rebuild to protobuf files:
+
+	cd cppo5m
+
+    protoc -I=proto proto/osmformat.proto --cpp_out=pbf
+
+    protoc -I=proto proto/fileformat.proto --cpp_out=pbf
+
+    cd ..
+
 If you have not already, install the python module and build the tools:
 
 	python setup.py install
@@ -44,7 +54,7 @@ The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. S
 
 To use this library using Python 3:
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
 
 	sudo pip3 install --upgrade pip
 
@@ -63,6 +73,16 @@ Go to the <src>/pycrocosm/pgmap folder or clone a new copy:
 	git clone https://github.com/TimSC/pgmap.git --recursive
 
 	cd pgmap
+
+You may or may need to rebuild to protobuf files:
+
+	cd cppo5m
+
+    protoc -I=proto proto/osmformat.proto --cpp_out=pbf
+
+    protoc -I=proto proto/fileformat.proto --cpp_out=pbf
+
+    cd ..
 
 If you have not already, install the python module and build the tools:
 

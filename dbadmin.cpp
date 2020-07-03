@@ -7,6 +7,7 @@
 #include "dbusername.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
+#include "cppo5m/utils.h"
 #include <map>
 #include <set>
 #include <boost/filesystem.hpp>
@@ -625,7 +626,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 			
 			shared_ptr<class OsmChange> data(new class OsmChange());
 			std::stringbuf sb(xmlData);
-			LoadFromOsmChangeXml(sb, data);
+			LoadFromOsmChangeXml(sb, data.get());
 
 			for(size_t i=0; i<data->blocks.size(); i++)
 			{
