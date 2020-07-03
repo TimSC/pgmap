@@ -72,6 +72,7 @@ namespace std {
 %shared_ptr(OsmXmlEncode)
 %shared_ptr(OsmChangeXmlEncode)
 
+%shared_ptr(DeduplicateOsm)
 
 namespace std {
 	%template(vectorosmnode) vector<class OsmNode>;
