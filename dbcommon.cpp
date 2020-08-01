@@ -2,6 +2,12 @@
 #include <iostream>
 using namespace std;
 
+#if PQXX_VERSION_MAJOR >= 6
+#define pqxxrow pqxx::row
+#else
+#define pqxxrow pqxx::result::tuple
+#endif 
+
 bool DbExec(pqxx::transaction_base *work, const string& sql, string &errStr, size_t *rowsAffected, int verbose)
 {
 	pqxx::result r;
@@ -39,7 +45,7 @@ void DbGetPrimaryKeyCols(pqxx::connection &c, pqxx::transaction_base *work,
 	int colNameCol = r.column_number("column_name");
 	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
 	{
-		const pqxx::result::tuple row = r[rownum];
+		const pqxxrow row = r[rownum];
 		colsOut.push_back(row[colNameCol].as<string>());
 	}
 }

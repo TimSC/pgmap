@@ -3,6 +3,12 @@
 #include <iostream>
 using namespace std;
 
+#if PQXX_VERSION_MAJOR >= 6
+#define pqxxrow pqxx::row
+#else
+#define pqxxrow pqxx::result::tuple
+#endif 
+
 std::string DbGetMetaValue(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &key, 
 	const std::string &tablePrefix, 
@@ -20,7 +26,7 @@ std::string DbGetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	int valueCol = r.column_number("value");	
 	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
 	{
-		const pqxx::result::tuple row = r[rownum];
+		const pqxxrow row = r[rownum];
 		return row[valueCol].as<string>();
 	}
 

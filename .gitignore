@@ -2,6 +2,7 @@ dump
 extract
 osm2csv
 admin
+applydiffs
 *.o5m.gz
 config.cfg
 __pycache__/

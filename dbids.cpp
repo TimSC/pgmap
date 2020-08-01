@@ -2,6 +2,14 @@
 #include "dbcommon.h"
 using namespace std;
 
+#if PQXX_VERSION_MAJOR >= 6
+#define pqxxfield pqxx::field
+#define pqxxrow pqxx::row
+#else
+#define pqxxfield pqxx::result::field
+#define pqxxrow pqxx::result::tuple
+#endif
+
 bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, 
 	const std::string &field,
@@ -39,8 +47,8 @@ bool GetMaxFieldInTable(pqxx::connection &c, pqxx::transaction_base *work,
 		errStr = "No rows returned";
 		return false;
 	}
-	const pqxx::result::tuple row = r[0];
-	const pqxx::result::field fieldObj = row[0];
+	const pqxxrow row = r[0];
+	const pqxxfield fieldObj = row[0];
 	if(fieldObj.is_null())
 		return true; //Return zero
 	val = fieldObj.as<int64_t>();
@@ -98,8 +106,8 @@ bool GetNextId(pqxx::connection &c, pqxx::transaction_base *work,
 
 	if(r.size() == 0)
 		throw runtime_error("Cannot determine ID to allocate");
-	const pqxx::result::tuple row = r[0];
-	const pqxx::result::field field = row[0];
+	const pqxxrow row = r[0];
+	const pqxxfield field = row[0];
 	if(field.is_null())
 		throw runtime_error("Cannot determine ID to allocate");
 	out = row[0].as<int64_t>();
@@ -236,12 +244,12 @@ bool GetNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work,
 
 	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
 	{
-		const pqxx::result::tuple row = r[rownum];
+		const pqxxrow row = r[rownum];
 		string id;
 		int64_t maxid = 0;
 		for (unsigned int colnum=0; colnum < row.size(); ++colnum)
 		{
-			const pqxx::result::field field = row[colnum];
+			const pqxxfield field = row[colnum];
 			if(field.num()==0)
 			{
 				id = pqxx::to_string(field);

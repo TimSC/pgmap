@@ -4,6 +4,14 @@
 #include "dbjson.h"
 using namespace std;
 
+#if PQXX_VERSION_MAJOR >= 6
+#define pqxxfield pqxx::field
+#define pqxxrow pqxx::row
+#else
+#define pqxxfield pqxx::result::field
+#define pqxxrow pqxx::result::tuple
+#endif
+
 bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &typeStr,
 	const std::vector<const class OsmObject *> &objPtrs, 
@@ -89,7 +97,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		int64_t currentVersion = -1;
 		if(foundExisting)
 		{
-			const pqxx::result::tuple row = r[0];
+			const pqxxrow row = r[0];
 			currentVersion = row["version"].as<int64_t>();
 		}
 
@@ -116,8 +124,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 		bool foundOld = false;
 		int64_t oldVersion = -1;
-		const pqxx::result::tuple row = r2[0];
-		const pqxx::result::field field = row[0];
+		const pqxxrow row = r2[0];
+		const pqxxfield field = row[0];
 		if(!field.is_null())
 		{
 			oldVersion = field.as<int64_t>();
@@ -151,7 +159,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		//Check if we need to copy row from live to history table
 		if(foundExisting && version > currentVersion)
 		{
-			const pqxx::result::tuple row = r[0];
+			const pqxxrow row = r[0];
 
 			//Insert into live table
 			stringstream ss;
@@ -354,7 +362,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					
 					if(r.size() == 0)
 						throw runtime_error("No data returned from db unexpectedly");
-					const pqxx::result::tuple row = r[0];
+					const pqxxrow row = r[0];
 					int64_t count = row[0].as<int64_t>();
 
 					//Insert id value if not already in table
@@ -529,7 +537,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			
 				if(r.size() == 0)
 					throw runtime_error("No data returned from db unexpectedly");
-				const pqxx::result::tuple row = r[0];
+				const pqxxrow row = r[0];
 				int64_t count = row[0].as<int64_t>();
 
 				//Insert id value if not already in table

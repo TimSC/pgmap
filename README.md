@@ -10,7 +10,7 @@ Installation
 
 To use this library using Python 2:
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
 
 	sudo pip install --upgrade pip
 
@@ -42,6 +42,8 @@ You may or may need to rebuild to protobuf files:
 
 If you have not already, install the python module and build the tools:
 
+	python setup.py build
+
 	python setup.py install
 
 	make
@@ -54,7 +56,7 @@ The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. S
 
 To use this library using Python 3:
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig3.0 libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
 
 	sudo pip3 install --upgrade pip
 
@@ -86,7 +88,9 @@ You may or may need to rebuild to protobuf files:
 
 If you have not already, install the python module and build the tools:
 
-	python3 setup.py install
+	python setup.py build
+
+	python setup.py install
 
 	make
 
@@ -104,6 +108,10 @@ On Linux Mint 18.* and Ubuntu Xenial:
 On Linux Mint 19.* and Ubuntu Bionic:
 
     sudo apt install postgis postgresql postgresql-10-postgis*
+
+And on Ubuntu Focal:
+	
+	sudo apt install postgis postgresql postgresql-12-postgis-3
 
 Postgresql can run faster if shared_buffers is increased in /etc/postgresql/9.5/main/postgresql.conf to about a quarter of total memory. (Having a large amount of memory wouldn't hurt either.) This is known to improve dump performance since the query has to interate over an index.
 

@@ -8,6 +8,12 @@ extern "C" {
 }
 using namespace std;
 
+#if PQXX_VERSION_MAJOR >= 6
+#define pqxxrow pqxx::row
+#else
+#define pqxxrow pqxx::result::tuple
+#endif 
+
 void DecodeRowsToChangesets(pqxx::result &rows, class DbUsernameLookup &usernames, 
 	std::vector<class PgChangeset> &changesets)
 {
@@ -28,7 +34,7 @@ void DecodeRowsToChangesets(pqxx::result &rows, class DbUsernameLookup &username
 
 	for (unsigned int rownum=0; rownum < rows.size(); ++rownum)
 	{
-		const pqxx::result::tuple row = rows[rownum];
+		const pqxxrow row = rows[rownum];
 
 		class PgChangeset changeset;
 		changeset.objId = row[idCol].as<int64_t>();

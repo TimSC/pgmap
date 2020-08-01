@@ -5,8 +5,14 @@
 #include <string>
 #include <vector>
 
+#if PQXX_VERSION_MAJOR >= 6
+#define pqxxfield pqxx::field
+#else
+#define pqxxfield pqxx::result::field
+#endif
+
 ///Tolerate NULL values when we copy row from live to old table
-template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxx::result::field &field)
+template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxxfield &field)
 {
 	if(field.is_null())
 		invoc();

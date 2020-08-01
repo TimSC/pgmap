@@ -1,6 +1,6 @@
 cppflags= -std=c++11 -Wall
 
-all: dump extract admin applydiffs osm2csv swigpy2 checkdata
+all: dump extract admin applydiffs osm2csv checkdata
 
 %.co: %.c %.h
 	gcc -Wall -fPIC -c -o $@ $<
