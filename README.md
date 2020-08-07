@@ -10,9 +10,7 @@ Installation
 
 To use this library using Python 2:
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
-
-	sudo pip install --upgrade pip
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev protobuf-compiler
 
 If you have not already, create a virtual environment:
 
@@ -23,6 +21,8 @@ If you have not already, create a virtual environment:
 	virtualenv --python=/usr/bin/python pgmapenv
 
 	source pgmapenv/bin/activate	
+
+	sudo pip install --upgrade pip
 
 Go to the <src>/pycrocosm/pgmap folder or clone a new copy:
 
@@ -56,9 +56,7 @@ The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. S
 
 To use this library using Python 3:
 
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev
-
-	sudo pip3 install --upgrade pip
+	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python3-pip python3-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev protobuf-compiler
 
 If you have not already, create a virtual environment:
 
@@ -69,6 +67,8 @@ If you have not already, create a virtual environment:
 	virtualenv --python=/usr/bin/python3 pgmapenv3
 
 	source pgmapenv3/bin/activate	
+
+	sudo pip install --upgrade pip
 
 Go to the <src>/pycrocosm/pgmap folder or clone a new copy:
 
