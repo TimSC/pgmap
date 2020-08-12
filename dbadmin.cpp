@@ -394,11 +394,11 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 	}
 
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_tags_gin")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING gin(tags);";
+	sql = "CREATE INDEX CONCURRENTLY "+ine+c.quote_name(tablePrefix+"livenodes_tags_gin")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING gin(tags);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_tags_gin")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING gin(tags);";
+	sql = "CREATE INDEX CONCURRENTLY "+ine+c.quote_name(tablePrefix+"liveways_tags_gin")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING gin(tags);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_tags_gin")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING gin(tags);";
+	sql = "CREATE INDEX CONCURRENTLY "+ine+c.quote_name(tablePrefix+"liverelations_tags_gin")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING gin(tags);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 
 	return ok;
