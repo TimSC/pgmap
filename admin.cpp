@@ -58,11 +58,13 @@ int main(int argc, char **argv)
 		cout << "6. Refresh max IDs" << endl;
 		cout << "7. Import changetset metadata" << endl;
 		cout << "8. Refresh max changeset IDs and UIDs" << endl;
-		cout << "9. Build username table" << endl << endl;
+		cout << "9. Build username table" << endl;
+		cout << "0. Build tag index" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
 		cout << "b. Reset test tables" << endl;
 		cout << "c. Check nodes exist for ways" << endl;
 		cout << "d. Check object ID tables" << endl;
+		cout << "e. XAPI testing function" << endl;
 		cout << endl << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -237,6 +239,29 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if(inputStr == "0")
+		{
+
+			cout << endl << "Is this database currently live? (y/n)" << endl;
+
+			cin >> inputStr;
+
+			bool concurrently = false;
+			if(inputStr == "y")
+				concurrently = true;
+			else if (inputStr != "n")
+				continue;
+
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->CreateTagIndices(concurrently, verbose, errStr);
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
+			continue;
+		}
+
 		if(inputStr == "a")
 		{
 			std::shared_ptr<class PgTransaction> pgTransaction = pgMap.GetTransaction("EXCLUSIVE");
@@ -292,6 +317,19 @@ int main(int argc, char **argv)
 
 			cout << "All done!" << ok << endl;
 			admin->Commit();
+
+			continue;
+		}
+
+		if(inputStr == "e")
+		{
+			class PgMap pgMap2(cstr, config["dbtableprefix"], config["dbtabletestprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+			std::shared_ptr<class PgTransaction> pgTransaction = pgMap2.GetTransaction("ACCESS SHARE");
+			std::shared_ptr<class OsmData> enc = make_shared<class OsmData>();
+
+			bool ok = pgTransaction->XapiTest(enc, errStr);
+
+			cout << "num nodes " << enc->nodes.size() << endl;
 
 			continue;
 		}

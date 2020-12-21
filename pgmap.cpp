@@ -10,6 +10,7 @@
 #include "dbchangeset.h"
 #include "dbmeta.h"
 #include "dbcommon.h"
+#include "dbxapi.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
@@ -1604,6 +1605,21 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 	return true;
 }
 
+bool PgTransaction::XapiTest(std::shared_ptr<IDataStreamHandler> enc,
+		class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+
+	DbXapiTest(*dbconn, work.get(), 
+		this->dbUsernameLookup, 
+		this->tableStaticPrefix, enc);
+
+	return true;
+}
+
 bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox, 
 	int64_t existsAtTimestamp,
 	std::shared_ptr<IDataStreamHandler> &enc)
@@ -1959,6 +1975,22 @@ bool PgAdmin::GenerateUsernameTable(int verbose, class PgMapError &errStr)
 	if(!ok) return ok;
 
 	return true;
+}
+
+bool PgAdmin::CreateTagIndices(bool concurrently, int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbCreateTagIndices(*dbconn, work.get(), concurrently, verbose, this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateTagIndices(*dbconn, work.get(), concurrently, verbose, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
 }
 
 bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)

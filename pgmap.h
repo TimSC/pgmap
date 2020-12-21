@@ -173,6 +173,9 @@ public:
 		int64_t existsAtTimestamp, 
 		std::shared_ptr<IDataStreamHandler> &enc);
 
+	bool XapiTest(std::shared_ptr<IDataStreamHandler> enc,
+		class PgMapError &errStr);
+
 	void Commit();
 	void Abort();
 };
@@ -206,6 +209,7 @@ public:
 	bool ImportChangesetMetadata(const std::string &fina, int verbose, class PgMapError &errStr);
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 	bool GenerateUsernameTable(int verbose, class PgMapError &errStr);
+	bool CreateTagIndices(bool concurrently, int verbose, class PgMapError &errStr);
 
 	bool CheckNodesExistForWays(class PgMapError &errStr);
 	bool CheckObjectIdTables(class PgMapError &errStr);

@@ -393,12 +393,27 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		sql = "ALTER TABLE "+c.quote_name(tablePrefix+"usernames")+" ADD PRIMARY KEY (uid);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 	}
+	return ok;
+}
 
-	sql = "CREATE INDEX CONCURRENTLY "+ine+c.quote_name(tablePrefix+"livenodes_tags_gin")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING gin(tags);";
+bool DbCreateTagIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	bool concurrently,
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	bool ok = true;
+	string sql;
+	string ine = "IF NOT EXISTS ";
+	string conc = "";
+	if (concurrently)
+		conc = "CONCURRENTLY ";
+
+	sql = "CREATE INDEX "+conc+ine+c.quote_name(tablePrefix+"livenodes_tags_gin")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING gin(tags);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX CONCURRENTLY "+ine+c.quote_name(tablePrefix+"liveways_tags_gin")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING gin(tags);";
+	sql = "CREATE INDEX "+conc+ine+c.quote_name(tablePrefix+"liveways_tags_gin")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING gin(tags);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "CREATE INDEX CONCURRENTLY "+ine+c.quote_name(tablePrefix+"liverelations_tags_gin")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING gin(tags);";
+	sql = "CREATE INDEX "+conc+ine+c.quote_name(tablePrefix+"liverelations_tags_gin")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING gin(tags);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 
 	return ok;

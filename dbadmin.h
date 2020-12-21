@@ -51,6 +51,12 @@ bool DbGenerateUsernameTable(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableTestPrefix, 
 	std::string &errStr);
 
+bool DbCreateTagIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	bool concurrently,
+	int verbose, 
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
 bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tableStaticPrefix, 
