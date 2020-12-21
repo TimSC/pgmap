@@ -1767,20 +1767,20 @@ PgAdmin::~PgAdmin()
 	this->sharedWork.reset();
 }
 
-bool PgAdmin::CreateMapTables(int verbose, class PgMapError &errStr)
+bool PgAdmin::CreateMapTables(int verbose, int targetVer, bool latest, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableModPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbCreateTables(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableTestPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
@@ -1793,13 +1793,13 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbDropTables(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, 0, false, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbDropTables(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableModPrefix, 0, false, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbDropTables(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableTestPrefix, 0, false, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;

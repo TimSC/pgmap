@@ -5,6 +5,7 @@
 #include "dbdecode.h"
 #include "dbquery.h"
 #include "dbusername.h"
+#include "dbmeta.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include "cppo5m/utils.h"
@@ -77,7 +78,7 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;	
 }
 
-bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
@@ -139,7 +140,7 @@ bool DbCreateTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;
 }
 
-bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work, 
+bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
@@ -185,6 +186,49 @@ bool DbDropTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 	return ok;	
 
+}
+
+bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	int targetVer, bool latest, std::string &errStr)
+{
+	cout << "DbSetSchemaVersion" << endl;
+	int schemaVersion = 0;
+	try
+	{
+		schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
+	}
+	catch (runtime_error &err) {}
+
+	if(latest)
+		targetVer = 11;
+	bool ok = true;
+
+	if(schemaVersion == 0 and targetVer>schemaVersion)
+	{
+		ok = DbUpgradeTables0to11(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
+		if(!ok) return false;
+		schemaVersion = 11;
+	}
+
+	if(targetVer < 11 and schemaVersion == 11)
+	{
+		ok = DbDowngradeTables11To0(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+		schemaVersion = 0;
+	}
+
+	return true;
 }
 
 bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 

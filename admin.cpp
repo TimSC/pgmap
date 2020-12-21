@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 		{
 
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
-			bool ok = admin->CreateMapTables(verbose, errStr);
+			bool ok = admin->CreateMapTables(verbose, 0, true, errStr);
 
 			if(ok)
 				cout << "All done!" << endl;

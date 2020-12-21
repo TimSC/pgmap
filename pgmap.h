@@ -197,7 +197,7 @@ public:
 		const std::string &shareModeIn);
 	virtual ~PgAdmin();
 
-	bool CreateMapTables(int verbose, class PgMapError &errStr);
+	bool CreateMapTables(int verbose, int targetVer, bool latest, class PgMapError &errStr);
 	bool DropMapTables(int verbose, class PgMapError &errStr);
 	bool CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr);
 	bool CreateMapIndices(int verbose, class PgMapError &errStr);
