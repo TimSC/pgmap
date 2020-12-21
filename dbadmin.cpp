@@ -140,6 +140,37 @@ bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;
 }
 
+bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	cout << "DbUpgradeTables11to12" << endl;
+	bool ok = true;
+
+	string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	return ok;
+}
+
+bool DbDowngradeTables12To11(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	cout << "DbDowngradeTables12To11" << endl;
+
+	string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" DROP COLUMN bbox;";
+	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" DROP COLUMN bbox;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	return ok;
+}
+
 bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
@@ -202,9 +233,10 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	catch (runtime_error &err) {}
 
 	if(latest)
-		targetVer = 11;
+		targetVer = 12;
 	bool ok = true;
 
+	//Upgrading
 	if(schemaVersion == 0 and targetVer>schemaVersion)
 	{
 		ok = DbUpgradeTables0to11(c, work, 
@@ -215,6 +247,34 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 
 		ok = DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
 		if(!ok) return false;
+		schemaVersion = 11;
+	}
+
+	if(schemaVersion == 11 and targetVer>schemaVersion)
+	{
+		ok = DbUpgradeTables11to12(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
+		if(!ok) return false;
+		schemaVersion = 12;
+	}
+
+	//Downgrading
+	if(targetVer < 12 and schemaVersion == 12)
+	{
+		ok = DbDowngradeTables12To11(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(11), tablePrefix, errStr);
+		if(!ok) return false;
+
 		schemaVersion = 11;
 	}
 
@@ -893,4 +953,40 @@ void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 	if(not found)
 		cout << "No missing IDs found" << endl;
 }
+
+// ***************************************************************************
+
+int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix,
+	void *adminObj,
+	std::string &errStr)
+{
+/*
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Update on planet2_static_liveways  (cost=0.00..11730376118.25 rows=231463328 width=360) (actual time=721416785.010..721416785.010 rows=0 loops=1)
+   ->  Seq Scan on planet2_static_liveways  (cost=0.00..11730376118.25 rows=231463328 width=360) (actual time=255.928..623747962.059 rows=123746659 loops=1)
+         SubPlan 2
+           ->  Index Scan using planet2_static_livenodes_pkey on planet2_static_livenodes  (cost=1.09..50.64 rows=10 width=32) (actual time=1.106..4.865 rows=12 loops=123746659)
+                 Index Cond: (id = ANY ((($1)::text[])::bigint[]))
+                 InitPlan 1 (returns $1)
+                   ->  Result  (cost=0.00..0.51 rows=100 width=0) (actual time=0.011..0.014 rows=13 loops=123746659)
+ Planning time: 472.667 ms
+ Execution time: 721416787.111 ms
+*/
+
+	//Process static ways
+    string sql = "UPDATE "+staticTablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+staticTablePrefix+"livenodes WHERE "+staticTablePrefix+"livenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+staticTablePrefix+"liveways.members))::text[]::bigint[]))));";
+	cout << sql << endl;
+
+	work->exec(sql);
+
+	work->commit();
+
+	//Process static relations
+
+	return 0;	
+}
+
 

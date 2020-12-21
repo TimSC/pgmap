@@ -63,6 +63,9 @@ int main(int argc, char **argv)
 		cout << "b. Reset test tables" << endl;
 		cout << "c. Check nodes exist for ways" << endl;
 		cout << "d. Check object ID tables" << endl;
+		cout << "e. Update way bboxes" << endl;
+		cout << "g. Upgrade/downgrade db schema" << endl;
+
 		cout << endl << "q. Quit" << endl;
 
 		cin >> inputStr;
@@ -293,6 +296,35 @@ int main(int argc, char **argv)
 			cout << "All done!" << ok << endl;
 			admin->Commit();
 
+			continue;
+		}
+
+		if(inputStr == "e")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
+			bool ok = admin->UpdateBboxes(verbose, errStr);
+
+			cout << "All done!" << ok << endl;
+			admin->Commit();
+
+			continue;
+		}
+
+
+		if(inputStr == "g")
+		{
+			cout << "Schema version?" << endl;
+			std::string schemaVer;
+			cin >> schemaVer;
+
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->CreateMapTables(verbose, atoi(schemaVer.c_str()), false, errStr);
+			admin->Commit();
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
 			continue;
 		}
 

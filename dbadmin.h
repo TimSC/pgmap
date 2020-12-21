@@ -9,16 +9,6 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableStaticPrefix,
 	std::string &errStr);
 
-bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work, 
-	int verbose, 
-	const std::string &tablePrefix, 
-	std::string &errStr);
-
-bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work, 
-	int verbose, 
-	const std::string &tablePrefix, 
-	std::string &errStr);
-
 bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tablePrefix, 
@@ -72,6 +62,13 @@ void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *wo
 
 void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, const std::string &edition, const std::string &objType);
+
+int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &staticTablePrefix, 
+	const std::string &activeTablePrefix,
+	void *adminObj,
+	std::string &errStr);
 
 #endif //_DB_ADMIN_H
 
