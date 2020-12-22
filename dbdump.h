@@ -9,17 +9,14 @@
 
 void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc);
 

@@ -1075,27 +1075,21 @@ void PgTransaction::Dump(bool order, bool nodes, bool ways, bool relations,
 
 	if(nodes)
 	{
-		DumpNodes(*dbconn, work.get(), this->dbUsernameLookup, this->tableStaticPrefix, this->tableActivePrefix, order, enc);
-
-		DumpNodes(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, "", order, enc);
+		DumpNodes(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, order, enc);
 
 		enc->Reset();
 	}
 
 	if(ways)
 	{
-		DumpWays(*dbconn, work.get(), this->dbUsernameLookup, this->tableStaticPrefix, this->tableActivePrefix, order, enc);
-
-		DumpWays(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, "", order, enc);
+		DumpWays(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, order, enc);
 
 		enc->Reset();
 	}
 
 	if(relations)
 	{	
-		DumpRelations(*dbconn, work.get(), this->dbUsernameLookup, this->tableStaticPrefix, this->tableActivePrefix, order, enc);
-
-		DumpRelations(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, "", order, enc);
+		DumpRelations(*dbconn, work.get(), this->dbUsernameLookup, this->tableActivePrefix, order, enc);
 	}
 
 	enc->Finish();

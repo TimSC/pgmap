@@ -2,19 +2,16 @@
 #include "dbdecode.h"
 
 /**
-* Dump live nodes but skip node IDs that are in the excludeTablePrefix table. Only current
+* Dump visible nodes. Only current
 * nodes are dumped, not old (non-visible) nodes.
 */
 void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
-	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
+	string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
 	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	//Discourage sequential scans of tables, since they are not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
@@ -30,15 +27,15 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUserna
 	*/
 
 	stringstream sql;
-	sql << "SELECT "<< liveNodeTable << ".*, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
-	sql << liveNodeTable;
+	sql << "SELECT "<< vNodeTable << ".*, ST_X(geom) as lon, ST_Y(geom) AS lat FROM ";
+	sql << vNodeTable;
 	if(excludeTable.size() > 0)
 	{
-		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<vNodeTable<<".id = "<<excludeTable<<".id";
 		sql << " WHERE "<<excludeTable<<".id IS NULL";
 	}
 	if(order)
-		sql << " ORDER BY " << liveNodeTable << ".id";
+		sql << " ORDER BY " << vNodeTable << ".id";
 	sql << ";";
 	//cout << sql.str() << endl;
 
@@ -51,14 +48,11 @@ void DumpNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUserna
 
 void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
-	const string &excludeTablePrefix,
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = c.quote_name(tablePrefix + "liveways");
+	string wayTable = c.quote_name(tablePrefix + "visibleways");
 	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
 
 	//Discourage sequential scans of tables, since they are not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
@@ -84,14 +78,11 @@ void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernam
 
 void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
-	const string &excludeTablePrefix, 
 	bool order,
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	string relationTable = c.quote_name(tablePrefix + "liverelations");
+	string relationTable = c.quote_name(tablePrefix + "visiblerelations");
 	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
 
 	//Discourage sequential scans of tables, since they are not necessary and we want to avoid doing a sort
 	work->exec("set enable_seqscan to off;");
