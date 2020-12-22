@@ -9,12 +9,12 @@
 
 //Functions for querying current (live) data
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	int64_t existsAtTimestamp,
 	const std::string &excludeTablePrefix);
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> VisibleNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	const std::string &wkt, int srid,
 	const std::string &excludeTablePrefix);
 

@@ -229,56 +229,24 @@ int PgMapQuery::Continue()
 		this->mapQueryEnc->StoreIsDiff(false);
 		if(this->mapQueryBbox.size() == 4)
 			this->mapQueryEnc->StoreBounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]);
-		this->mapQueryPhase ++;
+		this->mapQueryPhase = 3;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 1)
-	{
-		if(this->mapQueryBbox.size() == 4)
-		{
-			//Get nodes in bbox (static db)
-			cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryBbox, 0, this->tableActivePrefix);
-		}
-		else
-			cursor = LiveNodesInWktStart(*dbconn, work.get(), this->tableStaticPrefix, this->mapQueryWkt, 4326, this->tableActivePrefix);
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-
-	}
-
-	if(this->mapQueryPhase == 2)
-	{
-		int ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup, retainNodeIds);
-		if(ret > 0)
-			return 0;
-		if(ret < 0)
-			return -1; 
-
-		cursor.reset();
-		cout << "Found " << retainNodeIds->nodeIds.size() << " static nodes in bbox" << endl;
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-	}
+	//Phases 1 and 2 have been simplifed out of the system
 
 	if(this->mapQueryPhase == 3)
 	{
 		if(this->mapQueryBbox.size() == 4)
 		{
 			//Get nodes in bbox (active db)
-			cursor = LiveNodesInBboxStart(*dbconn, work.get(), 
+			cursor = VisibleNodesInBboxStart(*dbconn, work.get(), 
 				this->tableActivePrefix, this->mapQueryBbox, 0, "");
 		}
 		else
-			cursor = LiveNodesInWktStart(*dbconn, work.get(), 
+			cursor = VisibleNodesInWktStart(*dbconn, work.get(), 
 				this->tableActivePrefix, this->mapQueryWkt, 4326, "");
 
 		this->mapQueryPhase ++;
@@ -1600,112 +1568,6 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 
 	DbUpsertUsername(*dbconn, work.get(), this->tableActivePrefix, 
 		uid, username);
-
-	return true;
-}
-
-bool PgTransaction::GetHistoricMapQuery(const std::vector<double> &bbox, 
-	int64_t existsAtTimestamp,
-	std::shared_ptr<IDataStreamHandler> &enc)
-{
-	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
-		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
-	if (bbox.size()!=4)
-		return false;
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
-	if(!work)
-		throw runtime_error("Transaction has been deleted");
-	
-	//Get live nodes from static tables
-	std::shared_ptr<class OsmData> nodesInBbox(new class OsmData());	
-	std::shared_ptr<pqxx::icursorstream> cursor;
-	cursor = LiveNodesInBboxStart(*dbconn, work.get(), this->tableStaticPrefix, 
-		bbox, existsAtTimestamp, "");
-
-	int ret = 1;
-	while (ret>0)
-		ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup, nodesInBbox);
-	
-	//Get old nodes from static tables
-	QueryOldNodesInBbox(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableStaticPrefix, 
-		bbox, 
-		existsAtTimestamp,
-		nodesInBbox);
-
-	//Get live nodes from active tables
-	cursor = LiveNodesInBboxStart(*dbconn, work.get(),
-		this->tableActivePrefix, 
-		bbox, existsAtTimestamp, "");
-
-	ret = 1;
-	while (ret>0)
-		ret = LiveNodesInBboxContinue(cursor, this->dbUsernameLookup,
-			nodesInBbox);
-	
-	//Get old nodes from active tables
-	QueryOldNodesInBbox(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableActivePrefix, 
-		bbox, 
-		existsAtTimestamp,
-		nodesInBbox);
-
-	//Find most recent versions of nodes, ignore non-visible nodes
-	map<int64_t, int64_t> nodeHighestVer;
-	for(size_t i=0; i<nodesInBbox->nodes.size(); i++)
-	{
-		const class OsmNode &node = nodesInBbox->nodes[i];
-		auto it = nodeHighestVer.find(node.objId);
-		if(it == nodeHighestVer.end())
-			nodeHighestVer[node.objId] = node.metaData.version;
-		else
-		{
-			if(node.metaData.version > it->second)
-				it->second = node.metaData.version;
-		}
-	}
-
-	//Filter to find only latest versions of nodes and remove duplicates
-	std::shared_ptr<class OsmData> output(new class OsmData());
-	set<int64_t> nodesInOutput;	
-	for(size_t i=0; i<nodesInBbox->nodes.size(); i++)
-	{
-		const class OsmNode &node = nodesInBbox->nodes[i];
-		auto it = nodeHighestVer.find(node.objId);
-		if(node.metaData.version < it->second)
-			continue;
-		auto it2 = nodesInOutput.find(node.objId);
-		if(it2 != nodesInOutput.end())
-			continue;
-		output->nodes.push_back(node);
-		nodesInOutput.insert(node.objId);
-	}
-
-	//Generate initial list of node IDs
-	std::set<int64_t> nodeIds;
-	for(size_t i=0; i<output->nodes.size(); i++)
-		nodeIds.insert(nodeIds.begin(), output->nodes[i].objId);
-
-	//Find ID and version list of all possible way parents for initial nodes
-	std::set<std::pair<int64_t, int64_t> > parentWayIdVers;
-	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableStaticPrefix, 
-		nodeIds, parentWayIdVers);
-	GetWayIdVersThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableActivePrefix, 
-		nodeIds, parentWayIdVers);
-
-	//Find latest versions of ways that contain nodes of interest and exist at the query timestamp
-	//TODO
-
-	//Complete ways with extra nodes that exist at the query timestamp
-	//TODO
-
-	//Retrieve relations
-	//TODO
-
-	//Write results to output
-	output->StreamTo(*enc.get());
 
 	return true;
 }

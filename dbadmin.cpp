@@ -148,25 +148,58 @@ bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	cout << "DbUpgradeTables11to12" << endl;
 	bool ok = true;
+	string sql;
 
-	string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	string vn = c.quote_name(tablePrefix+"visiblenodes");
-	string nids = c.quote_name(tablePrefix+"nodeids");
 	string ln = c.quote_name(tablePrefix+"livenodes");
 	if(parentPrefix.size() > 0)
 	{
 		string pvn = c.quote_name(parentPrefix+"visiblenodes");
+		string nids = c.quote_name(tablePrefix+"nodeids");
 
-		sql = "CREATE VIEW "+vn+" AS SELECT "+pvn+".* FROM "+pvn+" LEFT JOIN "+nids+" ON "+nids+".id = "+pvn+".id AND "+nids+".id IS NULL UNION SELECT * FROM "+ln+";";
+		sql = "CREATE VIEW "+vn+" AS SELECT "+pvn+".* FROM "+pvn+" LEFT JOIN "+nids+" ON "+nids+".id = "+pvn+".id WHERE "+nids+".id IS NULL UNION SELECT * FROM "+ln+";";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 	else
 	{
 		sql = "CREATE VIEW "+vn+" AS SELECT * FROM "+ln+";";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	string vw = c.quote_name(tablePrefix+"visibleways");
+	string lw = c.quote_name(tablePrefix+"liveways");
+	if(parentPrefix.size() > 0)
+	{
+		string pvw = c.quote_name(parentPrefix+"visibleways");
+		string wids = c.quote_name(tablePrefix+"wayids");
+
+		sql = "CREATE VIEW "+vw+" AS SELECT "+pvw+".* FROM "+pvw+" LEFT JOIN "+wids+" ON "+wids+".id = "+pvw+".id WHERE "+wids+".id IS NULL UNION SELECT * FROM "+lw+";";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+	else
+	{
+		sql = "CREATE VIEW "+vw+" AS SELECT * FROM "+lw+";";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	string vr = c.quote_name(tablePrefix+"visiblerelations");
+	string lr = c.quote_name(tablePrefix+"liverelations");
+	if(parentPrefix.size() > 0)
+	{
+		string pvr = c.quote_name(parentPrefix+"visiblerelations");
+		string rids = c.quote_name(tablePrefix+"relationids");
+
+		sql = "CREATE VIEW "+vr+" AS SELECT "+pvr+".* FROM "+pvr+" LEFT JOIN "+rids+" ON "+rids+".id = "+pvr+".id WHERE "+rids+".id IS NULL UNION SELECT * FROM "+lr+";";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+	else
+	{
+		sql = "CREATE VIEW "+vr+" AS SELECT * FROM "+lr+";";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
@@ -179,13 +212,19 @@ bool DbDowngradeTables12To11(pqxx::connection &c, pqxx::transaction_base *work,
 	std::string &errStr)
 {
 	cout << "DbDowngradeTables12To11" << endl;
+	string sql;
+	bool ok = true;
 
-	string sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" DROP COLUMN bbox;";
-	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" DROP COLUMN bbox;";
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liveways")+" DROP COLUMN bbox CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" DROP COLUMN bbox CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "DROP VIEW IF EXISTS "+c.quote_name(tablePrefix+"visiblenodes");
+	sql = "DROP VIEW IF EXISTS "+c.quote_name(tablePrefix+"visiblenodes")+" CASCADE";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "DROP VIEW IF EXISTS "+c.quote_name(tablePrefix+"visibleways")+" CASCADE";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	sql = "DROP VIEW IF EXISTS "+c.quote_name(tablePrefix+"visiblerelations")+" CASCADE";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	return ok;

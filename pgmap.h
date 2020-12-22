@@ -169,10 +169,6 @@ public:
 	bool UpdateUsername(int uid, const std::string &username,
 		class PgMapError &errStr);
 
-	bool GetHistoricMapQuery(const std::vector<double> &bbox,
-		int64_t existsAtTimestamp, 
-		std::shared_ptr<IDataStreamHandler> &enc);
-
 	void Commit();
 	void Abort();
 };

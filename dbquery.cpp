@@ -5,26 +5,26 @@ using namespace std;
 
 // ************* Basic query methods ***************
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
 	int64_t existsAtTimestamp,
 	const string &excludeTablePrefix)
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
-	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
+	string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	stringstream sql;
 	sql.precision(9);
-	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
+	sql << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
 	sql << " FROM ";
-	sql << liveNodeTable;
+	sql << vNodeTable;
 	if(excludeTable.size() > 0)
-		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
-	sql << " WHERE "<<liveNodeTable<<".geom && ST_MakeEnvelope(";
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<vNodeTable<<".id = "<<excludeTable<<".id";
+	sql << " WHERE "<<vNodeTable<<".geom && ST_MakeEnvelope(";
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
@@ -35,23 +35,23 @@ std::shared_ptr<pqxx::icursorstream> LiveNodesInBboxStart(pqxx::connection &c, p
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
 }
 
-std::shared_ptr<pqxx::icursorstream> LiveNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+std::shared_ptr<pqxx::icursorstream> VisibleNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &wkt, int srid,
 	const string &excludeTablePrefix)
 {
-	string liveNodeTable = c.quote_name(tablePrefix + "livenodes");
+	string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	stringstream sql;
 	sql.precision(9);
-	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
+	sql << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
 	sql << " FROM ";
-	sql << liveNodeTable;
+	sql << vNodeTable;
 	if(excludeTable.size() > 0)
-		sql << " LEFT JOIN "<<excludeTable<<" ON "<<liveNodeTable<<".id = "<<excludeTable<<".id";
-	sql << " WHERE "<<liveNodeTable<<".geom && ST_GeomFromText(";
+		sql << " LEFT JOIN "<<excludeTable<<" ON "<<vNodeTable<<".id = "<<excludeTable<<".id";
+	sql << " WHERE "<<vNodeTable<<".geom && ST_GeomFromText(";
 	sql << c.quote(wkt) << ", "<< srid << ")";
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
