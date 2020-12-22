@@ -100,6 +100,7 @@ namespace std {
 
 %shared_ptr(PgWork)
 %shared_ptr(PgMapQuery)
+%shared_ptr(PgCommon)
 %shared_ptr(PgTransaction)
 %shared_ptr(PgMap)
 

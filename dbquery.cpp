@@ -458,3 +458,5 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 		}
 	}
 }
+
+

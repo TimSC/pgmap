@@ -9,6 +9,7 @@
 #include "cppo5m/osmxml.h"
 #include "cppo5m/OsmData.h"
 #include "dbusername.h"
+#include "pgcommon.h"
 
 class PgMapError
 {
@@ -34,18 +35,6 @@ public:
 	TagMap tags;
 	bool is_open, bbox_set;
 	double x1, y1, x2, y2;
-};
-
-class PgWork
-{
-public:
-	PgWork();
-	PgWork(pqxx::transaction_base *workIn);
-	PgWork(const PgWork &obj);
-	virtual ~PgWork();
-	PgWork& operator=(const PgWork &obj);
-
-	std::shared_ptr<pqxx::transaction_base> work;
 };
 
 class PgMapQuery
@@ -85,16 +74,10 @@ public:
 	void Reset();
 };
 
-class PgTransaction
+class PgTransaction : public PgCommon
 {
 private:
-	std::shared_ptr<pqxx::connection> dbconn;
-	std::string tableStaticPrefix;
-	std::string tableActivePrefix;
-	std::string connectionString;
-	std::string shareMode;
-	std::shared_ptr<class PgWork> sharedWork;
-	class DbUsernameLookup dbUsernameLookup;
+
 
 public:
 	PgTransaction(std::shared_ptr<pqxx::connection> dbconnIn,
@@ -124,15 +107,6 @@ public:
 	int UpdateWayBboxesById(const std::set<int64_t> &objectIds, int verbose, 
 		bool saveToStaticTables,
 		class PgMapError &errStr);
-
-	void GetWaysForNodes(const std::set<int64_t> &objectIds, 
-		std::shared_ptr<IDataStreamHandler> out);	
-	void GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
-		std::shared_ptr<IDataStreamHandler> out);	
-	void GetAffectedParents(std::shared_ptr<class OsmData> inputObjects,
-		std::shared_ptr<class OsmData> outputObjects);
-	//void GetAffectedChildren(std::shared_ptr<class OsmData> inputObjects,
-	//	std::shared_ptr<class OsmData> outputObjects);
 
 	bool ResetActiveTables(class PgMapError &errStr);
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,
@@ -179,16 +153,11 @@ public:
 	void Abort();
 };
 
-class PgAdmin
+class PgAdmin : public PgCommon
 {
 private:
-	std::shared_ptr<pqxx::connection> dbconn;
-	std::string tableStaticPrefix;
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
-	std::string connectionString;
-	std::shared_ptr<class PgWork> sharedWork;
-	std::string shareMode;
 
 public:
 	PgAdmin(std::shared_ptr<pqxx::connection> dbconnIn,

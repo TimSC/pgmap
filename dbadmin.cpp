@@ -755,6 +755,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableModPrefix, 
 	const std::string &tableTestPrefix, 
 	const std::string &diffPath, 
+	class PgCommon *pgCommon,
 	std::string &errStr)
 {
 	path p (diffPath);
@@ -777,6 +778,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				tableModPrefix, 
 				tableTestPrefix, 
 				pathStr, 
+				pgCommon,
 				errStr);
 			if(!ok) return false;
 		}
@@ -799,6 +801,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				class OsmData &block = data->blocks[i];
 
 				//Set visibility flag depending on action
+				bool isCreate = data->actions[i] == "delete";
 				bool isDelete = data->actions[i] == "delete";
 				for(size_t j=0; j<block.nodes.size(); j++)
 					block.nodes[j].metaData.visible = !isDelete;
@@ -814,6 +817,35 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 					createdNodeIds, createdWayIds, createdRelationIds, errStr);
 				if(!ok)
 					cout << "Warning: " << errStr << endl;
+
+				std::set<int64_t> waysToUpdate;
+				for(size_t j=0; j<block.ways.size(); j++)
+				{
+					if (block.ways[j].objId <= 0) throw runtime_error("Oops");
+					waysToUpdate.insert(block.ways[j].objId);
+				}
+
+				if(!isCreate)
+				{
+					//Get affected parent objects
+					std::shared_ptr<class OsmData> affectedParents = make_shared<class OsmData>();
+					pgCommon->GetAffectedParents(block, affectedParents);
+
+					//Ensure a copy of affected parents is in the active table
+					std::map<int64_t, int64_t> unusedNodeIds, unusedWayIds, unusedRelationIds;
+					bool ok = ::StoreObjects(c, work, tableModPrefix, *affectedParents.get(), 
+						unusedNodeIds, unusedWayIds, unusedRelationIds, errStr);
+
+					for(size_t j=0; j<affectedParents->ways.size(); j++)
+						waysToUpdate.insert(affectedParents->ways[j].objId);
+				}
+
+				//Update bboxes of modified and parent ways
+				int ret = ::UpdateWayBboxesById(c, work,
+					waysToUpdate,
+					0,
+					tableModPrefix, 
+					errStr);
 			}
 		}
 	}

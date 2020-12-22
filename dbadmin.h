@@ -3,6 +3,7 @@
 
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include <string>
+#include "pgcommon.h"
 
 bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tableActivePrefix, 
@@ -53,6 +54,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableModPrefix, 
 	const std::string &tableTestPrefix, 
 	const std::string &diffPath, 
+	class PgCommon *pgCommon,
 	std::string &errStr);
 
 void DbCheckNodesExistForAllWays(pqxx::connection &c, pqxx::transaction_base *work, 
