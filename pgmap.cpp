@@ -1774,13 +1774,13 @@ bool PgAdmin::CreateMapTables(int verbose, int targetVer, bool latest, class PgM
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, targetVer, latest, nativeErrStr);
+	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, "", this->tableStaticPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableModPrefix, targetVer, latest, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableModPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableTestPrefix, targetVer, latest, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableTestPrefix, targetVer, latest, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
@@ -1793,13 +1793,13 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, 0, false, nativeErrStr);
+	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, "", this->tableStaticPrefix, 0, false, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableModPrefix, 0, false, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableModPrefix, 0, false, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableTestPrefix, 0, false, nativeErrStr);
+	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableTestPrefix, 0, false, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
@@ -1968,7 +1968,14 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, this->tableStaticPrefix, 
+	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
+		this->tableStaticPrefix, 
+		reinterpret_cast<void *>(this),
+		nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+
+	ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
 		this->tableModPrefix, 
 		reinterpret_cast<void *>(this),
 		nativeErrStr);

@@ -142,7 +142,8 @@ bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work,
 
 bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
-	const string &tablePrefix, 
+	const std::string &parentPrefix, 
+	const std::string &tablePrefix, 
 	std::string &errStr)
 {
 	cout << "DbUpgradeTables11to12" << endl;
@@ -152,6 +153,22 @@ bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	string vn = c.quote_name(tablePrefix+"visiblenodes");
+	string nids = c.quote_name(tablePrefix+"nodeids");
+	string ln = c.quote_name(tablePrefix+"livenodes");
+	if(parentPrefix.size() > 0)
+	{
+		string pvn = c.quote_name(parentPrefix+"visiblenodes");
+
+		sql = "CREATE VIEW "+vn+" AS SELECT "+pvn+".* FROM "+pvn+" LEFT JOIN "+nids+" ON "+nids+".id = "+pvn+".id AND "+nids+".id IS NULL UNION SELECT * FROM "+ln+";";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+	else
+	{
+		sql = "CREATE VIEW "+vn+" AS SELECT * FROM "+ln+";";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
 
 	return ok;
 }
@@ -168,6 +185,9 @@ bool DbDowngradeTables12To11(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" DROP COLUMN bbox;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
+	sql = "DROP VIEW IF EXISTS "+c.quote_name(tablePrefix+"visiblenodes");
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
 	return ok;
 }
 
@@ -176,44 +196,44 @@ bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
-	string sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldnodes")+";";
+	string sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" CASCADE;";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldways")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldways")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldrelations")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"livenodes")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"liveways")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"liverelations")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"oldrelations")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"nodeids")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"livenodes")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayids")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"liveways")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relationids")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"way_mems")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relation_mems_n")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relation_mems_w")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relation_mems_r")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"liverelations")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"nextids")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"nodeids")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"meta")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"wayids")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"changesets")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relationids")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"way_mems")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relation_mems_n")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relation_mems_w")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"relation_mems_r")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"nextids")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"meta")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"changesets")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
-	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"usernames")+";";
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"usernames")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose);
 	return ok;	
 
@@ -221,7 +241,8 @@ bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work,
 
 bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
-	const string &tablePrefix, 
+	const std::string &parentPrefix, 
+	const std::string &tablePrefix, 
 	int targetVer, bool latest, std::string &errStr)
 {
 	cout << "DbSetSchemaVersion" << endl;
@@ -254,7 +275,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		ok = DbUpgradeTables11to12(c, work, 
 			verbose, 
-			tablePrefix, 
+			parentPrefix, tablePrefix, 
 			errStr);
 		if(!ok) return false;
 
@@ -277,6 +298,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 
 		schemaVersion = 11;
 	}
+	schemaVersion = 11;
 
 	if(targetVer < 11 and schemaVersion == 11)
 	{
@@ -958,8 +980,7 @@ void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
-	const std::string &staticTablePrefix, 
-	const std::string &activeTablePrefix,
+	const std::string &tablePrefix, 
 	void *adminObj,
 	std::string &errStr)
 {
@@ -977,7 +998,7 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 */
 
 	//Process static ways
-    string sql = "UPDATE "+staticTablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+staticTablePrefix+"livenodes WHERE "+staticTablePrefix+"livenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+staticTablePrefix+"liveways.members))::text[]::bigint[]))));";
+    string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[]))));";
 	cout << sql << endl;
 
 	work->exec(sql);

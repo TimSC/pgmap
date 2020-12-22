@@ -11,6 +11,7 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
+	const std::string &parentPrefix, 
 	const std::string &tablePrefix, 
 	int targetVer, bool latest, std::string &errStr);
 
@@ -65,8 +66,7 @@ void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 
 int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
-	const std::string &staticTablePrefix, 
-	const std::string &activeTablePrefix,
+	const std::string &tablePrefix, 
 	void *adminObj,
 	std::string &errStr);
 
