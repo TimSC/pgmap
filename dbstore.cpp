@@ -736,3 +736,45 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::set<int64_t> &wayIds,
+    int verbose,
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	stringstream sqlFrags;
+	int count = 0;
+	string wayTable = tablePrefix+"liveways";
+	for(std::set<int64_t>::const_iterator it = wayIds.begin(); it != wayIds.end(); it++)
+	{
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << wayTable << ".id = " << *it;
+		count ++;
+
+		if(count > 100)
+		{
+			string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
+			cout << sql << endl;
+
+			work->exec(sql);
+
+			work->commit();
+			sqlFrags.clear();
+			count = 0;
+		}
+	}
+
+	if(count > 0)
+	{
+		string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
+		cout << sql << endl;
+
+		work->exec(sql);
+
+		work->commit();
+	}
+
+	return 0;	
+}
+

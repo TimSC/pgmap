@@ -121,12 +121,18 @@ public:
 		std::map<int64_t, int64_t> &createdRelationsIds,
 		bool saveToStaticTables,
 		class PgMapError &errStr);
+	int UpdateWayBboxesById(const std::set<int64_t> &objectIds, int verbose, 
+		bool saveToStaticTables,
+		class PgMapError &errStr);
+
 	void GetWaysForNodes(const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);	
 	void GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);	
-	void GetAffectedObjects(std::shared_ptr<class OsmData> inputObjects,
+	void GetAffectedParents(std::shared_ptr<class OsmData> inputObjects,
 		std::shared_ptr<class OsmData> outputObjects);
+	//void GetAffectedChildren(std::shared_ptr<class OsmData> inputObjects,
+	//	std::shared_ptr<class OsmData> outputObjects);
 
 	bool ResetActiveTables(class PgMapError &errStr);
 	void GetReplicateDiff(int64_t timestampStart, int64_t timestampEnd,

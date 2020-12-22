@@ -1036,15 +1036,12 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
  Execution time: 721416787.111 ms
 */
 
-	//Process static ways
     string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[]))));";
 	cout << sql << endl;
 
 	work->exec(sql);
 
 	work->commit();
-
-	//Process static relations
 
 	return 0;	
 }
