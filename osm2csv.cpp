@@ -231,14 +231,14 @@ bool CsvStore::StoreWay(int64_t objId, const class MetaData &metaData,
 	if(metaData.current and metaData.visible)
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",NULL\n";
 		string row(ss.str());
 		this->livewayFileGzip->sputn(row.c_str(), row.size());
 	}
 	else
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\"\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",NULL\n";
 		string row(ss.str());
 		this->oldwayFileGzip->sputn(row.c_str(), row.size());
 	}
@@ -300,14 +300,14 @@ bool CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 	if(metaData.current and metaData.visible)
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\"\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\",NULL\n";
 		string row(ss.str());
 		this->liverelationFileGzip->sputn(row.c_str(), row.size());
 	}
 	else
 	{
 		ss << objId <<","<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< visibleStr <<","<<\
-			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\"\n";
+			timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\",NULL\n";
 		string row(ss.str());
 		this->oldrelationFileGzip->sputn(row.c_str(), row.size());
 	}
