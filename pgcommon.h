@@ -53,6 +53,8 @@ public:
 	//void GetAffectedChildren(std::shared_ptr<class OsmData> inputObjects,
 	//	std::shared_ptr<class OsmData> outputObjects);
 
+	void GetObjectBboxes(const std::string &type, const std::set<int64_t> &objectIds);
+
 };
 
 #endif //_PG_COMMON_H

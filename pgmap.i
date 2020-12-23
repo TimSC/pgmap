@@ -99,9 +99,13 @@ namespace std {
 };
 
 %shared_ptr(PgWork)
-%shared_ptr(PgMapQuery)
 %shared_ptr(PgCommon)
+
+%include "pgcommon.h"
+
+%shared_ptr(PgMapQuery)
 %shared_ptr(PgTransaction)
+%shared_ptr(PgAdmin)
 %shared_ptr(PgMap)
 
 %include "pgmap.h"

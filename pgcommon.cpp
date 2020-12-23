@@ -290,5 +290,20 @@ void PgCommon::GetAffectedChildren(std::shared_ptr<class OsmData> inputObjects,
 	GetObjectsById("node", memberNodeIds, outAffectedObjects);
 }*/
 
+void PgCommon::GetObjectBboxes(const std::string &type, const std::set<int64_t> &objectIds)
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	if (type=="way")
+	{
+		GetLiveWayBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableStaticPrefix, this->tableActivePrefix, objectIds);
+
+		GetLiveWayBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, "", objectIds);
+	}
+}
 
 // **********************************************

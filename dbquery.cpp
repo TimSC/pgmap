@@ -459,4 +459,67 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 	}
 }
 
+void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const string &tablePrefix, 
+	const std::string &excludeTablePrefix, 
+	const std::set<int64_t> &wayIds)
+{
+	string wayTable = c.quote_name(tablePrefix + "liveways");
+	string excludeTable;
+	if(excludeTablePrefix.size() > 0)
+		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
+
+	stringstream sqlFrags;
+	int count = 0;
+	for(std::set<int64_t>::const_iterator it=wayIds.begin(); it != wayIds.end(); it++)
+	{
+		if(count >= 1)
+			sqlFrags << " OR ";
+		sqlFrags << wayTable << ".id = " << *it;
+		count ++;
+	}
+
+	string sql = "SELECT *, ";
+	sql += "ST_XMin("+wayTable+".bbox) as lon1, ST_XMax("+wayTable+".bbox) as lon2, ";
+	sql += "ST_YMin("+wayTable+".bbox) AS lat1, ST_YMax("+wayTable+".bbox) AS lat2";
+	if(excludeTable.size() > 0)
+		sql += ", "+excludeTable+".id";
+
+	sql += " FROM "+ wayTable;
+	if(excludeTable.size() > 0)
+		sql += " LEFT JOIN "+excludeTable+" ON "+wayTable+".id = "+excludeTable+".id";
+
+	sql += " WHERE ("+sqlFrags.str()+")";
+	if(excludeTable.size() > 0)
+		sql += " AND "+excludeTable+".id IS NULL";
+	sql += ";";
+
+	pqxx::icursorstream cursor( *work, sql, "waycursor", 1000 );	
+
+	pqxx::result rows;
+	while (true)
+	{
+		cursor.get(rows);
+		if ( rows.empty() ) break; // nothing left to read
+
+		int idCol = rows.column_number("id");
+		int lat1Col = rows.column_number("lat1");
+		int lat2Col = rows.column_number("lat2");
+		int lon1Col = rows.column_number("lon2");
+		int lon2Col = rows.column_number("lon2");
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) 
+		{
+			int64_t objId = c[idCol].as<int64_t>();
+			double lat1 = c[lat1Col].as<double>();
+			double lat2 = c[lat2Col].as<double>();
+			double lon1 = c[lon1Col].as<double>();
+			double lon2 = c[lon2Col].as<double>();
+
+			cout << objId << "," << lat1 << "," << lat2 << endl;
+		}
+	}
+}
+
 
