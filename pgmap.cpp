@@ -1372,7 +1372,9 @@ PgAdmin::PgAdmin(shared_ptr<pqxx::connection> dbconnIn,
 		std::shared_ptr<class PgWork> sharedWorkIn,
 		const string &shareModeIn):
 
-	PgCommon(dbconnIn, tableStaticPrefixIn, tableModPrefixIn, sharedWorkIn, shareMode)
+	PgCommon(dbconnIn, tableStaticPrefixIn, tableModPrefixIn, sharedWorkIn, shareMode),
+	tableModPrefix(tableModPrefixIn),
+	tableTestPrefix(tableTestPrefixIn)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)

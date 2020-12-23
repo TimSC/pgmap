@@ -284,7 +284,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	int targetVer, bool latest, std::string &errStr)
 {
-	cout << "DbSetSchemaVersion" << endl;
+	cout << "DbSetSchemaVersion " << parentPrefix << "," << tablePrefix << "," << targetVer << endl;
 	int schemaVersion = 0;
 	try
 	{
