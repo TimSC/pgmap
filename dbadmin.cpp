@@ -821,7 +821,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				std::set<int64_t> waysToUpdate;
 				for(size_t j=0; j<block.ways.size(); j++)
 				{
-					if (block.ways[j].objId <= 0) throw runtime_error("Oops");
+					if (block.ways[j].objId <= 0) throw runtime_error("ID should not be zero or negative");
 					waysToUpdate.insert(block.ways[j].objId);
 				}
 
@@ -829,6 +829,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				{
 					//Get affected parent objects
 					std::shared_ptr<class OsmData> affectedParents = make_shared<class OsmData>();
+
 					pgCommon->GetAffectedParents(block, affectedParents);
 
 					//Ensure a copy of affected parents is in the active table

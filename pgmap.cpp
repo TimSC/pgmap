@@ -1399,6 +1399,11 @@ PgAdmin::~PgAdmin()
 	this->sharedWork.reset();
 }
 
+bool PgAdmin::IsAdminMode()
+{
+	return true;
+}
+
 bool PgAdmin::CreateMapTables(int verbose, int targetVer, bool latest, class PgMapError &errStr)
 {
 	std::string nativeErrStr;

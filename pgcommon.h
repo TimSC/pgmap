@@ -40,6 +40,8 @@ public:
 		const std::string &shareMode);
 	virtual ~PgCommon();
 
+	virtual bool IsAdminMode();
+
 	void GetWaysForNodes(const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);	
 	void GetRelationsForObjs(const std::string &type, const std::set<int64_t> &objectIds, 

@@ -755,12 +755,11 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		if(count > 100)
 		{
 			string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
-			cout << sql << endl;
+			//cout << sql << endl;
 
 			work->exec(sql);
 
-			work->commit();
-			sqlFrags.clear();
+			sqlFrags.str("");
 			count = 0;
 		}
 	}
@@ -768,11 +767,9 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	if(count > 0)
 	{
 		string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
-		cout << sql << endl;
+		//cout << sql << endl;
 
 		work->exec(sql);
-
-		work->commit();
 	}
 
 	return 0;	

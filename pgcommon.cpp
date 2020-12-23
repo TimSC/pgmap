@@ -1,6 +1,7 @@
 #include "pgcommon.h"
 #include "dbquery.h"
 #include <stdexcept>
+#include <iostream>
 using namespace std;
 
 // ************************************************
@@ -54,6 +55,11 @@ PgCommon::~PgCommon()
 
 }
 
+bool PgCommon::IsAdminMode()
+{
+	return false;
+}
+
 void PgCommon::GetWaysForNodes(const std::set<int64_t> &objectIds, 
 	std::shared_ptr<IDataStreamHandler> out)
 {
@@ -104,7 +110,7 @@ void PgCommon::GetAffectedParents(std::shared_ptr<class OsmData> inputObjects,
 void PgCommon::GetAffectedParents(const class OsmData &inputObjects,
 	std::shared_ptr<class OsmData> outAffectedObjects)
 {
-	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+	if(!IsAdminMode() && this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	//Get IDs of objects already known
