@@ -747,7 +747,9 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	return ok;
 }
 
-int PgTransaction::UpdateWayBboxesById(const std::set<int64_t> &objectIds, int verbose, 
+int PgTransaction::UpdateObjectBboxesById(
+	const std::string &objType,
+	const std::set<int64_t> &objectIds, int verbose, 
 	bool saveToStaticTables,
 	class PgMapError &errStr)
 {
@@ -767,11 +769,22 @@ int PgTransaction::UpdateWayBboxesById(const std::set<int64_t> &objectIds, int v
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	int ok = ::UpdateWayBboxesById(*dbconn, work.get(),
-		objectIds,
-    	verbose,
-		tablePrefix, 
-		nativeErrStr);
+	int ok = 1;
+	if(objType == "way")
+		ok = ::UpdateWayBboxesById(*dbconn, work.get(),
+			objectIds,
+			verbose,
+			tablePrefix, 
+			nativeErrStr);
+	else if (objType == "relation")
+	{
+		ok = ::UpdateRelationBboxesById(*dbconn, work.get(),
+			objectIds,
+			verbose,
+			tablePrefix, 
+			nativeErrStr);
+	}
+
 	errStr.errStr = nativeErrStr;
 
 	return ok;
@@ -1607,12 +1620,12 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
+	/*bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
 		this->tableStaticPrefix, 
 		this,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
+	if(!ok) return ok;*/
 
 	/*ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
 		this->tableModPrefix, 
@@ -1621,7 +1634,7 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;*/
 
-	ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
+	bool ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
 		this->tableStaticPrefix, 
 		this,
 		nativeErrStr);

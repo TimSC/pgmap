@@ -104,10 +104,10 @@ void PgCommon::GetRelationsForObjs(const std::string &type, const std::set<int64
 void PgCommon::GetAffectedParents(std::shared_ptr<class OsmData> inputObjects,
 	std::shared_ptr<class OsmData> outputObjects)
 {
-	GetAffectedParents(*inputObjects.get(), outputObjects);
+	GetAffectedParents2(*inputObjects.get(), outputObjects);
 }
 
-void PgCommon::GetAffectedParents(const class OsmData &inputObjects,
+void PgCommon::GetAffectedParents2(const class OsmData &inputObjects,
 	std::shared_ptr<class OsmData> outAffectedObjects)
 {
 	if(!IsAdminMode() && this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
@@ -297,11 +297,8 @@ void PgCommon::GetObjectBboxes(const std::string &type, const std::set<int64_t> 
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	GetLiveObjectBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableStaticPrefix, this->tableActivePrefix, type, objectIds, out);
-
-	GetLiveObjectBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
-		this->tableActivePrefix, "", type, objectIds, out);
+	GetVisibleObjectBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, type, objectIds, out);
 }
 
 // **********************************************

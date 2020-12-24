@@ -459,20 +459,16 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 	}
 }
 
-void GetLiveObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
+void GetVisibleObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
-	const string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
+	const string &tablePrefix,
 	const string &objType, 
 	const std::set<int64_t> &wayIds,
 	std::map<int64_t, vector<double> > &out)
 {
 	if(wayIds.size() == 0)
 		return;
-	string wayTable = c.quote_name(tablePrefix+"live"+objType+"s");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix+objType+"ids");
+	string objTable = c.quote_name(tablePrefix+"visible"+objType+"s");
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -480,31 +476,25 @@ void GetLiveObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << wayTable << ".id = " << *it;
+		sqlFrags << objTable << ".id = " << *it;
 		count ++;
 	}
 
 	string sql = "SELECT *, ";
 	if(objType == "node")
 	{
-		sql += "ST_XMin("+wayTable+".geom) AS lon1, ST_XMax("+wayTable+".geom) AS lon2, ";
-		sql += "ST_YMin("+wayTable+".geom) AS lat1, ST_YMax("+wayTable+".geom) AS lat2";
+		sql += "ST_XMin("+objTable+".geom) AS lon1, ST_XMax("+objTable+".geom) AS lon2, ";
+		sql += "ST_YMin("+objTable+".geom) AS lat1, ST_YMax("+objTable+".geom) AS lat2";
 	}
 	else
 	{
-		sql += "ST_XMin("+wayTable+".bbox) AS lon1, ST_XMax("+wayTable+".bbox) AS lon2, ";
-		sql += "ST_YMin("+wayTable+".bbox) AS lat1, ST_YMax("+wayTable+".bbox) AS lat2";
+		sql += "ST_XMin("+objTable+".bbox) AS lon1, ST_XMax("+objTable+".bbox) AS lon2, ";
+		sql += "ST_YMin("+objTable+".bbox) AS lat1, ST_YMax("+objTable+".bbox) AS lat2";
 	}
-	if(excludeTable.size() > 0)
-		sql += ", "+excludeTable+".id";
 
-	sql += " FROM "+ wayTable;
-	if(excludeTable.size() > 0)
-		sql += " LEFT JOIN "+excludeTable+" ON "+wayTable+".id = "+excludeTable+".id";
+	sql += " FROM "+ objTable;
 
 	sql += " WHERE ("+sqlFrags.str()+")";
-	if(excludeTable.size() > 0)
-		sql += " AND "+excludeTable+".id IS NULL";
 	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "waycursor", 1000 );	
@@ -524,6 +514,13 @@ void GetLiveObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) 
 		{
 			int64_t objId = c[idCol].as<int64_t>();
+			if(c[lat1Col].is_null())
+			{
+				std::vector<double> empty;
+				out[objId] = empty;
+				continue;
+			}
+
 			double lat1 = c[lat1Col].as<double>();
 			double lat2 = c[lat2Col].as<double>();
 			double lon1 = c[lon1Col].as<double>();

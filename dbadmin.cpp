@@ -818,11 +818,16 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				if(!ok)
 					cout << "Warning: " << errStr << endl;
 
-				std::set<int64_t> waysToUpdate;
+				std::set<int64_t> waysToUpdate, relsToUpdate;
 				for(size_t j=0; j<block.ways.size(); j++)
 				{
 					if (block.ways[j].objId <= 0) throw runtime_error("ID should not be zero or negative");
 					waysToUpdate.insert(block.ways[j].objId);
+				}
+				for(size_t j=0; j<block.relations.size(); j++)
+				{
+					if (block.relations[j].objId <= 0) throw runtime_error("ID should not be zero or negative");
+					relsToUpdate.insert(block.relations[j].objId);
 				}
 
 				if(!isCreate)
@@ -830,7 +835,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 					//Get affected parent objects
 					std::shared_ptr<class OsmData> affectedParents = make_shared<class OsmData>();
 
-					pgCommon->GetAffectedParents(block, affectedParents);
+					pgCommon->GetAffectedParents2(block, affectedParents);
 
 					//Ensure a copy of affected parents is in the active table
 					std::map<int64_t, int64_t> unusedNodeIds, unusedWayIds, unusedRelationIds;
@@ -839,11 +844,20 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 
 					for(size_t j=0; j<affectedParents->ways.size(); j++)
 						waysToUpdate.insert(affectedParents->ways[j].objId);
+					for(size_t j=0; j<affectedParents->relations.size(); j++)
+						relsToUpdate.insert(affectedParents->relations[j].objId);
 				}
 
 				//Update bboxes of modified and parent ways
 				int ret = ::UpdateWayBboxesById(c, work,
 					waysToUpdate,
+					0,
+					tableModPrefix, 
+					errStr);
+
+				//Update relation bboxes
+				ret = ::UpdateRelationBboxesById(c, work,
+					relsToUpdate,
 					0,
 					tableModPrefix, 
 					errStr);
@@ -1084,23 +1098,20 @@ int DbUpdateRelationBboxes(pqxx::connection &conn, pqxx::transaction_base *work,
 	std::string &errStr)
 {
 	string objTable = conn.quote_name(tablePrefix + "liverelations");
-	std::set<int64_t> processedRelIds;
+	std::set<int64_t> relIds;
 
-	size_t skippedRelations = 1;
-	for(int co=0; co<10 and skippedRelations; co++)
+	for(int co=0; co<10; co++)
 	{
 		stringstream sql;
 		sql << "SELECT " << objTable << ".* FROM ";
 		sql << objTable;
 		sql << ";";
 
-		cout << sql.str() << endl;
+		//cout << sql.str() << endl;
 
 		int step = 100;
 		pqxx::icursorstream cursor( *work, sql.str(), "relcursor", step );	
-		DbUsernameLookup *ul = nullptr;
 
-		skippedRelations = 0;
 		while(true)
 		{
 			pqxx::result rows;
@@ -1109,88 +1120,19 @@ int DbUpdateRelationBboxes(pqxx::connection &conn, pqxx::transaction_base *work,
 				break;
 
 			int idCol = rows.column_number("id");
-			int membersCol = rows.column_number("members");
-			int membersRolesCol = rows.column_number("memberroles");
 
 			for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
-
 				int64_t objId = c[idCol].as<int64_t>();
-				if(processedRelIds.find(objId) != processedRelIds.end())
-					continue;
-
-				if(verbose >= 2) cout << objId << "," << endl;
-
-				JsonToRelMembers relMemHandler;
-				JsonToRelMemberRoles relMemRolesHandler;
-				DecodeRelMembers(c, membersCol, membersRolesCol, 
-					relMemHandler, relMemRolesHandler);
-				
-				std::set<int64_t> memNodeIds, memWayIds, memRelIds;
-				for(size_t i=0; i<relMemHandler.refTypeStrs.size(); i++)
-				{
-					//cout << relMemHandler.refTypeStrs[i] << "," << relMemHandler.refIds[i] << endl;
-					string &memType = relMemHandler.refTypeStrs[i];
-					if(memType == "node") memNodeIds.insert(relMemHandler.refIds[i]);
-					if(memType == "way") memWayIds.insert(relMemHandler.refIds[i]);
-					if(memType == "relation") memRelIds.insert(relMemHandler.refIds[i]);
-				}
-
-				//Check of member relations have already been processed
-				bool allFound = true;
-				for(auto it=memRelIds.begin(); it!=memRelIds.end() && allFound; it++)
-				{
-					allFound = processedRelIds.find(*it) != processedRelIds.end();
-				}
-				if(!allFound)
-				{
-					skippedRelations += 1;
-					continue;
-				}
-
-				std::map<int64_t, vector<double> > memBboxesOfType;
-				std::vector<vector<double> > memBboxes;
-				GetLiveObjectBboxesById(conn, work, *ul,
-					tablePrefix, "", "node", memNodeIds, memBboxesOfType);
-				for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
-					memBboxes.push_back(it->second);
-				memBboxesOfType.clear();
-				GetLiveObjectBboxesById(conn, work, *ul,
-					tablePrefix, "", "way", memWayIds, memBboxesOfType);
-				for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
-					memBboxes.push_back(it->second);
-				memBboxesOfType.clear();
-				GetLiveObjectBboxesById(conn, work, *ul,
-					tablePrefix, "", "relation", memRelIds, memBboxesOfType);
-				for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
-					memBboxes.push_back(it->second);
-
-				if(memBboxes.size() > 0)
-				{
-					std::vector<double> outerBbox;
-					FindOuterBbox(memBboxes, outerBbox);
-
-					stringstream sql;
-					sql.precision(9);
-					sql << fixed << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope("<<outerBbox[0]<<", "\
-						<<outerBbox[1]<<", "<<outerBbox[2]<<", "<<outerBbox[3]<<", 4326) WHERE id = "<<objId<<";";
-					if(verbose >= 2) cout << sql.str() << endl;
-
-					work->exec(sql);
-				}
-				else
-				{
-					stringstream sql;
-					sql.precision(9);
-					sql << fixed << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<objId<<";";
-					if(verbose >= 2) cout << sql.str() << endl;
-
-					work->exec(sql);
-				}
-
-				processedRelIds.insert(objId);
+				relIds.insert(objId);
 			}
 		}
 	}
+
+	UpdateRelationBboxesById(conn, work,
+		relIds,
+		verbose,
+		tablePrefix, 
+		errStr);
 
 	return 1;	
 }

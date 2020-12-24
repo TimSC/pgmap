@@ -116,9 +116,12 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 		double lon = atof(c[lonCol].c_str());
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		string username = usernames.Find(metaData.uid);
-		if(username.length() > 0)
-			metaData.username = username;
+		if(&usernames != nullptr)
+		{
+			string username = usernames.Find(metaData.uid);
+			if(username.length() > 0)
+				metaData.username = username;
+		}
 	
 		DecodeTags(c, tagsCol, tagHandler);
 		count ++;
@@ -175,9 +178,12 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 		int64_t objId = c[idCol].as<int64_t>();
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		string username = usernames.Find(metaData.uid);
-		if(username.length() > 0)
-			metaData.username = username;
+		if(&usernames != nullptr)
+		{
+			string username = usernames.Find(metaData.uid);
+			if(username.length() > 0)
+				metaData.username = username;
+		}
 
 		DecodeTags(c, tagsCol, tagHandler);
 
@@ -242,9 +248,12 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 				continue;
 
 			DecodeMetadata(c, metaDataCols, metaData);
-			string username = usernames.Find(metaData.uid);
-			if(username.length() > 0)
-				metaData.username = username;
+			if(&usernames != nullptr)
+			{
+				string username = usernames.Find(metaData.uid);
+				if(username.length() > 0)
+					metaData.username = username;
+			}
 			
 			DecodeTags(c, tagsCol, tagHandler);
 

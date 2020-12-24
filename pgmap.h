@@ -104,7 +104,9 @@ public:
 		std::map<int64_t, int64_t> &createdRelationsIds,
 		bool saveToStaticTables,
 		class PgMapError &errStr);
-	int UpdateWayBboxesById(const std::set<int64_t> &objectIds, int verbose, 
+	int UpdateObjectBboxesById(
+		const std::string &objType,
+		const std::set<int64_t> &objectIds, int verbose, 
 		bool saveToStaticTables,
 		class PgMapError &errStr);
 

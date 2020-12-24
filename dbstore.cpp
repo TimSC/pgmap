@@ -2,6 +2,9 @@
 #include "dbids.h"
 #include "dbcommon.h"
 #include "dbjson.h"
+#include "dbusername.h"
+#include "dbquery.h"
+#include "util.h"
 using namespace std;
 
 #if PQXX_VERSION_MAJOR >= 6
@@ -774,4 +777,105 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 
 	return 0;	
 }
+
+int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *work,
+	const std::set<int64_t> &objectIds,
+    int verbose,
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	class DbUsernameLookup dbUsernameLookup(conn, work, "", ""); //Don't care about accurate usernames
+	std::set<int64_t> pendingRelIds = objectIds;
+	int passNum = 0;
+
+	while(pendingRelIds.size() > 0 and passNum < 10)
+	{
+		std::set<int64_t> nextPassIds;
+
+		for(auto it1 = pendingRelIds.begin(); it1 != pendingRelIds.end(); it1 ++)
+		{
+			std::set<int64_t> singleObjId;
+			singleObjId.insert(*it1);
+			auto firstRecord = singleObjId.begin();
+
+			std::shared_ptr<class OsmData> relObjs(new class OsmData());
+			GetLiveRelationsById(conn, work, dbUsernameLookup,
+				tablePrefix, "",
+				singleObjId, 
+				firstRecord, 1000, relObjs);
+			
+			if(relObjs->relations.size()==0)
+				continue;
+			OsmRelation &rel = relObjs->relations[0];
+	
+			std::set<int64_t> memNodeIds, memWayIds, memRelIds;
+			for(size_t i=0; i<rel.refTypeStrs.size(); i++)
+			{
+				string &memType = rel.refTypeStrs[i];
+				if(memType == "node") memNodeIds.insert(rel.refIds[i]);
+				if(memType == "way") memWayIds.insert(rel.refIds[i]);
+				if(memType == "relation") memRelIds.insert(rel.refIds[i]);
+			}
+
+			//Check of member relations have already been processed
+			bool dependsOnPending = false;
+			for(auto it2=memRelIds.begin(); it2!=memRelIds.end(); it2++)
+			{
+				dependsOnPending = pendingRelIds.find(*it2) != pendingRelIds.end();
+				if(dependsOnPending) break;
+			}
+			if(dependsOnPending)
+			{
+				nextPassIds.insert(rel.objId);
+				continue;
+			}
+
+			std::map<int64_t, vector<double> > memBboxesOfType;
+			std::vector<vector<double> > memBboxes;
+			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
+				tablePrefix, "node", memNodeIds, memBboxesOfType);
+			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
+				memBboxes.push_back(it->second);
+			memBboxesOfType.clear();
+			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
+				tablePrefix, "way", memWayIds, memBboxesOfType);
+			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
+				memBboxes.push_back(it->second);
+			memBboxesOfType.clear();
+			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
+				tablePrefix, "relation", memRelIds, memBboxesOfType);
+			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
+				memBboxes.push_back(it->second);
+
+			std::vector<double> outerBbox;
+			FindOuterBbox(memBboxes, outerBbox);
+
+			if(outerBbox.size() == 4)
+			{
+				stringstream sql;
+				sql.precision(9);
+				sql << fixed << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope("<<outerBbox[0]<<", "\
+					<<outerBbox[1]<<", "<<outerBbox[2]<<", "<<outerBbox[3]<<", 4326) WHERE id = "<<rel.objId<<";";
+				if(verbose >= 2) cout << sql.str() << endl;
+
+				work->exec(sql);
+			}
+			else
+			{
+				stringstream sql;
+				sql.precision(9);
+				sql << fixed << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<rel.objId<<";";
+				if(verbose >= 2) cout << sql.str() << endl;
+
+				work->exec(sql);
+			}
+		}
+
+		pendingRelIds = nextPassIds;
+		passNum ++;
+	}
+
+	return 0;
+}
+
 

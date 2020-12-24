@@ -22,4 +22,10 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
+int UpdateRelationBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::set<int64_t> &objectIds,
+    int verbose,
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
 #endif //_DB_STORE_H

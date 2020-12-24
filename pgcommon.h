@@ -48,7 +48,7 @@ public:
 		std::shared_ptr<IDataStreamHandler> out);
 	void GetAffectedParents(std::shared_ptr<class OsmData> inputObjects,
 		std::shared_ptr<class OsmData> outputObjects);	
-	void GetAffectedParents(const class OsmData &inputObjects,
+	void GetAffectedParents2(const class OsmData &inputObjects,
 		std::shared_ptr<class OsmData> outputObjects);
 	//void GetAffectedChildren(std::shared_ptr<class OsmData> inputObjects,
 	//	std::shared_ptr<class OsmData> outputObjects);

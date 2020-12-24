@@ -87,10 +87,9 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 	const std::string &tablePrefix, 
 	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut);
 
-void GetLiveObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
+void GetVisibleObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
 	const std::string &objType, 
 	const std::set<int64_t> &wayIds,
 	std::map<int64_t, std::vector<double> > &out);
