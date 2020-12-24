@@ -463,7 +463,8 @@ void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &wayIds)
+	const std::set<int64_t> &wayIds,
+	std::map<int64_t, vector<double> > &out)
 {
 	string wayTable = c.quote_name(tablePrefix + "liveways");
 	string excludeTable;
@@ -506,7 +507,7 @@ void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		int idCol = rows.column_number("id");
 		int lat1Col = rows.column_number("lat1");
 		int lat2Col = rows.column_number("lat2");
-		int lon1Col = rows.column_number("lon2");
+		int lon1Col = rows.column_number("lon1");
 		int lon2Col = rows.column_number("lon2");
 
 		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) 
@@ -517,7 +518,8 @@ void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 			double lon1 = c[lon1Col].as<double>();
 			double lon2 = c[lon2Col].as<double>();
 
-			cout << objId << "," << lat1 << "," << lat2 << endl;
+			std::vector<double> bbox = {lon1, lat1, lon2 , lat2}; 
+			out[objId] = bbox;
 		}
 	}
 }

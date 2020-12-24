@@ -91,7 +91,8 @@ void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &wayIds);
+	const std::set<int64_t> &wayIds,
+	std::map<int64_t, std::vector<double> > &out);
 
 #endif //_DB_QUERY_H
 

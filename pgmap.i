@@ -47,6 +47,7 @@ namespace std {
 
 	%template(mapstringstring) std::map<std::string, std::string>;
 	%template(mapi64i64) std::map<int64_t, int64_t>;
+	%template(mapi64vectord) std::map<int64_t, vector<double> >;
 
 	%template(seti64) std::set<int64_t>;
 	%template(setpairi64i64) std::set<std::pair<int64_t, int64_t> >;

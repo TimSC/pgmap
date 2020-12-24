@@ -290,7 +290,8 @@ void PgCommon::GetAffectedChildren(std::shared_ptr<class OsmData> inputObjects,
 	GetObjectsById("node", memberNodeIds, outAffectedObjects);
 }*/
 
-void PgCommon::GetObjectBboxes(const std::string &type, const std::set<int64_t> &objectIds)
+void PgCommon::GetObjectBboxes(const std::string &type, const std::set<int64_t> &objectIds,
+	std::map<int64_t, vector<double> > &out)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
@@ -299,10 +300,10 @@ void PgCommon::GetObjectBboxes(const std::string &type, const std::set<int64_t> 
 	if (type=="way")
 	{
 		GetLiveWayBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableStaticPrefix, this->tableActivePrefix, objectIds);
+			this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
 
 		GetLiveWayBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableActivePrefix, "", objectIds);
+			this->tableActivePrefix, "", objectIds, out);
 	}
 }
 
