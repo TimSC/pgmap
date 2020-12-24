@@ -297,14 +297,11 @@ void PgCommon::GetObjectBboxes(const std::string &type, const std::set<int64_t> 
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	if (type=="way")
-	{
-		GetLiveWayBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableStaticPrefix, this->tableActivePrefix, objectIds, out);
+	GetLiveObjectBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableStaticPrefix, this->tableActivePrefix, type, objectIds, out);
 
-		GetLiveWayBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableActivePrefix, "", objectIds, out);
-	}
+	GetLiveObjectBboxesById(*dbconn, work.get(), this->dbUsernameLookup,
+		this->tableActivePrefix, "", type, objectIds, out);
 }
 
 // **********************************************

@@ -1053,7 +1053,7 @@ void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
 	const std::string &tablePrefix, 
-	void *adminObj,
+	class PgCommon *adminObj,
 	std::string &errStr)
 {
 /*
@@ -1074,9 +1074,96 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 
 	work->exec(sql);
 
-	work->commit();
-
-	return 0;	
+	return 1;	
 }
 
+int DbUpdateRelationBboxes(pqxx::connection &conn, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &tablePrefix, 
+	class PgCommon *adminObj,
+	std::string &errStr)
+{
+	string objTable = conn.quote_name(tablePrefix + "visiblerelations");
+
+	stringstream sql;
+	sql << "SELECT " << objTable << ".* FROM ";
+	sql << objTable;
+	sql << ";";
+
+	cout << sql.str() << endl;
+
+	int step = 100;
+	pqxx::icursorstream cursor( *work, sql.str(), "relcursor", step );	
+	DbUsernameLookup *ul = nullptr;
+
+	while(true)
+	{
+		pqxx::result rows;
+		cursor.get(rows);
+		if ( rows.empty() )
+			break;
+
+		int idCol = rows.column_number("id");
+		int membersCol = rows.column_number("members");
+		int membersRolesCol = rows.column_number("memberroles");
+
+		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
+
+			int64_t objId = c[idCol].as<int64_t>();
+
+			cout << objId << "," << endl;
+
+			JsonToRelMembers relMemHandler;
+			JsonToRelMemberRoles relMemRolesHandler;
+			DecodeRelMembers(c, membersCol, membersRolesCol, 
+				relMemHandler, relMemRolesHandler);
+			
+			std::set<int64_t> memNodeIds, memWayIds, memRelIds;
+			for(size_t i=0; i<relMemHandler.refTypeStrs.size(); i++)
+			{
+				//cout << relMemHandler.refTypeStrs[i] << "," << relMemHandler.refIds[i] << endl;
+				string &memType = relMemHandler.refTypeStrs[i];
+				if(memType == "node") memNodeIds.insert(relMemHandler.refIds[i]);
+				if(memType == "way") memWayIds.insert(relMemHandler.refIds[i]);
+				if(memType == "relation") memRelIds.insert(relMemHandler.refIds[i]);
+			}
+
+			std::map<int64_t, vector<double> > memBboxesOfType;
+			std::vector<vector<double> > memBboxes;
+			GetLiveObjectBboxesById(conn, work, *ul,
+				tablePrefix, "", "node", memNodeIds, memBboxesOfType);
+			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
+				memBboxes.push_back(it->second);
+			memBboxesOfType.clear();
+			GetLiveObjectBboxesById(conn, work, *ul,
+				tablePrefix, "", "way", memWayIds, memBboxesOfType);
+			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
+				memBboxes.push_back(it->second);
+			cout << "bboxes " << memBboxes.size() << endl;
+
+			if(memBboxes.size() > 0)
+			{
+				std::vector<double> outerBbox;
+				FindOuterBbox(memBboxes, outerBbox);
+
+			    stringstream sql;
+				sql << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope("<<outerBbox[0]<<", "\
+					<<outerBbox[1]<<", "<<outerBbox[2]<<", "<<outerBbox[3]<<", 4326) WHERE id = "<<objId<<";";
+				cout << sql.str() << endl;
+
+				work->exec(sql);
+			}
+			else
+			{
+			    stringstream sql;
+				sql << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<objId<<";";
+				cout << sql.str() << endl;
+
+				work->exec(sql);
+			}
+		}
+	}
+
+	return 1;	
+}
 

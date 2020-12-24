@@ -252,5 +252,7 @@ double lat2tiley(double lat, int z);
 double tilex2long(int x, int z);
 double tiley2lat(int y, int z);
 
+void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vector<double> &bboxOut);
+
 #endif //_UTIL_H
 

@@ -69,7 +69,13 @@ void DbCheckObjectIdTables(pqxx::connection &c, pqxx::transaction_base *work,
 int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
 	const std::string &tablePrefix, 
-	void *adminObj,
+	class PgCommon *adminObj,
+	std::string &errStr);
+
+int DbUpdateRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+    int verbose,
+	const std::string &tablePrefix, 
+	class PgCommon *adminObj,
 	std::string &errStr);
 
 #endif //_DB_ADMIN_H

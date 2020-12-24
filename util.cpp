@@ -189,3 +189,22 @@ double tiley2lat(int y, int z)
 	return 180.0 / M_PI * atan(0.5 * (exp(n) - exp(-n)));
 }
 
+void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vector<double> &bboxOut)
+{
+	for(size_t i=0; i<bboxesIn.size(); i++)
+	{
+		const std::vector<double> &bi = bboxesIn[0];
+		if(i==0)
+		{
+			bboxOut = bi;
+		}
+		else
+		{
+			if(bi[0] < bboxOut[0]) bboxOut[0] = bi[0];
+			if(bi[1] < bboxOut[1]) bboxOut[1] = bi[1];
+			if(bi[2] > bboxOut[2]) bboxOut[2] = bi[2];
+			if(bi[3] > bboxOut[3]) bboxOut[3] = bi[3];
+		}
+	}	
+}
+

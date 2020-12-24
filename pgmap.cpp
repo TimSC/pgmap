@@ -1609,17 +1609,33 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 
 	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
 		this->tableStaticPrefix, 
-		reinterpret_cast<void *>(this),
+		this,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
 
-	ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
+	/*ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
 		this->tableModPrefix, 
-		reinterpret_cast<void *>(this),
+		this,
+		nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;*/
+
+	ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
+		this->tableStaticPrefix, 
+		this,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;
+
+	/*ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose,
+		this->tableModPrefix, 
+		this,
+		nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;*/
+
+	work->commit();
 
 	return true;
 }

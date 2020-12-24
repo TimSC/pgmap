@@ -459,17 +459,20 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 	}
 }
 
-void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
+void GetLiveObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
 	const std::string &excludeTablePrefix, 
+	const string &objType, 
 	const std::set<int64_t> &wayIds,
 	std::map<int64_t, vector<double> > &out)
 {
-	string wayTable = c.quote_name(tablePrefix + "liveways");
+	if(wayIds.size() == 0)
+		return;
+	string wayTable = c.quote_name(tablePrefix+"live"+objType+"s");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
+		excludeTable = c.quote_name(excludeTablePrefix+objType+"ids");
 
 	stringstream sqlFrags;
 	int count = 0;
@@ -482,8 +485,16 @@ void GetLiveWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 
 	string sql = "SELECT *, ";
-	sql += "ST_XMin("+wayTable+".bbox) as lon1, ST_XMax("+wayTable+".bbox) as lon2, ";
-	sql += "ST_YMin("+wayTable+".bbox) AS lat1, ST_YMax("+wayTable+".bbox) AS lat2";
+	if(objType == "node")
+	{
+		sql += "ST_XMin("+wayTable+".geom) AS lon1, ST_XMax("+wayTable+".geom) AS lon2, ";
+		sql += "ST_YMin("+wayTable+".geom) AS lat1, ST_YMax("+wayTable+".geom) AS lat2";
+	}
+	else
+	{
+		sql += "ST_XMin("+wayTable+".bbox) AS lon1, ST_XMax("+wayTable+".bbox) AS lon2, ";
+		sql += "ST_YMin("+wayTable+".bbox) AS lat1, ST_YMax("+wayTable+".bbox) AS lat2";
+	}
 	if(excludeTable.size() > 0)
 		sql += ", "+excludeTable+".id";
 
