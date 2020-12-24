@@ -194,6 +194,7 @@ void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vecto
 	for(size_t i=0; i<bboxesIn.size(); i++)
 	{
 		const std::vector<double> &bi = bboxesIn[0];
+		if(bi.size() != 4) continue;
 		if(i==0)
 		{
 			bboxOut = bi;
