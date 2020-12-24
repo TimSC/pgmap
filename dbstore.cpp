@@ -830,22 +830,31 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 				continue;
 			}
 
-			std::map<int64_t, vector<double> > memBboxesOfType;
+			std::map<int64_t, vector<double> > memBboxesOfType1, memBboxesOfType2, memBboxesOfType3;
 			std::vector<vector<double> > memBboxes;
 			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-				tablePrefix, "node", memNodeIds, memBboxesOfType);
-			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
-				memBboxes.push_back(it->second);
-			memBboxesOfType.clear();
+				tablePrefix, "node", memNodeIds, memBboxesOfType1);
+			for(auto it=memBboxesOfType1.begin(); it!=memBboxesOfType1.end(); it++)
+			{
+				vector<double> &bb = it->second; 
+				memBboxes.push_back(bb);
+			}
+
 			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-				tablePrefix, "way", memWayIds, memBboxesOfType);
-			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
-				memBboxes.push_back(it->second);
-			memBboxesOfType.clear();
+				tablePrefix, "way", memWayIds, memBboxesOfType2);
+			for(auto it=memBboxesOfType2.begin(); it!=memBboxesOfType2.end(); it++)
+			{
+				vector<double> &bb = it->second; 
+				memBboxes.push_back(bb);
+			}
+
 			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-				tablePrefix, "relation", memRelIds, memBboxesOfType);
-			for(auto it=memBboxesOfType.begin(); it!=memBboxesOfType.end(); it++)
-				memBboxes.push_back(it->second);
+				tablePrefix, "relation", memRelIds, memBboxesOfType3);
+			for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
+			{
+				vector<double> &bb = it->second; 
+				memBboxes.push_back(bb);
+			}
 
 			std::vector<double> outerBbox;
 			FindOuterBbox(memBboxes, outerBbox);
