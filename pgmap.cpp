@@ -1620,12 +1620,12 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	/*bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
+	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
 		this->tableStaticPrefix, 
 		this,
 		nativeErrStr);
 	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;*/
+	if(!ok) return ok;
 
 	/*ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
 		this->tableModPrefix, 

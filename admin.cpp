@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 		cout << "b. Reset test tables" << endl;
 		cout << "c. Check nodes exist for ways" << endl;
 		cout << "d. Check object ID tables" << endl;
-		cout << "e. Update way bboxes" << endl;
+		cout << "e. Update way/relation bboxes" << endl;
 		cout << "g. Upgrade/downgrade db schema" << endl;
 
 		cout << endl << "q. Quit" << endl;
