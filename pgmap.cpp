@@ -1619,8 +1619,9 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
+	bool ok = true;
 
-	bool ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
+	ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
 		this->tableStaticPrefix, 
 		this,
 		nativeErrStr);
@@ -1634,7 +1635,7 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	errStr.errStr = nativeErrStr;
 	if(!ok) return ok;*/
 
-	bool ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
+	ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
 		this->tableStaticPrefix, 
 		this,
 		nativeErrStr);
