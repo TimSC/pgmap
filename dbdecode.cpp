@@ -281,3 +281,31 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 	}
 }
 
+int ObjectResultsToListIdVer(pqxx::icursorstream &cursor,
+	std::vector<int64_t> *idsOut,
+	std::vector<int64_t> *verOut)
+{
+	int records = 0;
+	pqxx::result rows;
+	cursor.get(rows);
+	if ( rows.empty() )
+	{
+		// nothing left to read
+		return 0;
+	}
+
+	int idCol = rows.column_number("id");
+	int verCol = rows.column_number("version");
+
+	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c)
+	{
+		int64_t objId = c[idCol].as<int64_t>();
+		int64_t objVer = c[verCol].as<int64_t>();
+		if(idsOut != nullptr) idsOut->push_back(objId);
+		if(verOut != nullptr) verOut->push_back(objVer);
+		records ++;
+	}
+
+	return records;
+}
+

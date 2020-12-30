@@ -31,4 +31,9 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &usernames, 
 	const std::set<int64_t> &skipIds, std::shared_ptr<IDataStreamHandler> enc);
 
+int ObjectResultsToListIdVer(pqxx::icursorstream &cursor,
+	std::vector<int64_t> *idsOut = nullptr,
+	std::vector<int64_t> *verOut = nullptr
+	);
+
 #endif //_DB_DECODE_H

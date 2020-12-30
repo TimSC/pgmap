@@ -1,5 +1,5 @@
-#ifndef _DB_XAPI_H
-#define _DB_XAPI_H
+#ifndef _DB_OVERPASS_H
+#define _DB_OVERPASS_H
 
 #include <pqxx/pqxx>
 #include "cppo5m/o5m.h"
@@ -15,4 +15,4 @@ void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::vector<double> &bbox, 
 	std::shared_ptr<IDataStreamHandler> enc);
 
-#endif //_DB_XAPI_H
+#endif //_DB_OVERPASS_H

@@ -1005,20 +1005,9 @@ size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work,
 	class DbUsernameLookup dbUsernameLookup(c, work, "", ""); //Don't care about accurate usernames
 	while(it != nodeIds.end())
 	{
-		GetLiveNodesById(c, work, dbUsernameLookup,
-			nodeStaticPrefix, 
+		GetVisibleObjectsById(c, work, dbUsernameLookup,
 			nodeActivePrefix, 
-			nodeIds, it, 
-			1000, data);
-	}
-
-	it = nodeIds.begin();
-	while(it != nodeIds.end())
-	{
-		GetLiveNodesById(c, work, dbUsernameLookup,
-			nodeActivePrefix, 
-			"", 
-			nodeIds, it, 
+			"node", nodeIds, it, 
 			1000, data);
 	}
 

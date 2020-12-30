@@ -265,7 +265,7 @@ int PgMapQuery::Continue()
 		//Get node objects to complete these ways
 		this->setIterator = this->extraNodes.begin();
 
-		this->mapQueryPhase ++;
+		this->mapQueryPhase = 7;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
@@ -273,7 +273,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 6)
 	{
-		if(this->setIterator != this->extraNodes.end())
+/*		if(this->setIterator != this->extraNodes.end())
 		{
 			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
 				this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
@@ -286,15 +286,15 @@ int PgMapQuery::Continue()
 		this->mapQueryPhase ++;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
+		return 0;*/
 	}
 
 	if(this->mapQueryPhase == 7)
 	{
 		if(this->setIterator != this->extraNodes.end())
 		{
-			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "", this->extraNodes, 
+			GetVisibleObjectsById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "node", this->extraNodes, 
 				this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -304,7 +304,7 @@ int PgMapQuery::Continue()
 		//Write ways to output
 		this->mapQueryEnc->Reset();
 
-		this->mapQueryPhase ++;
+		this->mapQueryPhase = 9;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
@@ -312,7 +312,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 8)
 	{		
-		if(this->setIterator != this->retainWayIds->wayIds.end())
+		/*if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
 			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
 				this->tableStaticPrefix, this->tableActivePrefix, 
@@ -325,15 +325,15 @@ int PgMapQuery::Continue()
 		this->mapQueryPhase ++;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
+		return 0;*/
 	}
 
 	if(this->mapQueryPhase == 9)
 	{		
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
-			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "",
+			GetVisibleObjectsById(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "way",
 				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
 			return 0;
 		}
@@ -342,7 +342,7 @@ int PgMapQuery::Continue()
 		this->mapQueryEnc->Reset();
 		this->setIterator = this->retainNodeIds->nodeIds.begin();
 
-		this->mapQueryPhase ++;
+		this->mapQueryPhase = 11;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
@@ -538,49 +538,11 @@ void PgTransaction::GetObjectsById(const std::string &type, const std::set<int64
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	if(type == "node")
-	{
-		std::set<int64_t>::const_iterator it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
-				it, 1000, out);
-		it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "", objectIds, 
-				it, 1000, out);
-	}
-	else if(type == "way")
-	{
-		std::set<int64_t>::const_iterator it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, this->tableActivePrefix, objectIds, 
-				it, 1000, out);
-		it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "", objectIds, 
-				it, 1000, out);
-	}
-	else if(type == "relation")
-	{
-		std::set<int64_t>::const_iterator it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveRelationsById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, this->tableActivePrefix,
-				objectIds, 
-				it, 1000, out);
-		it = objectIds.begin();
-		while(it != objectIds.end())
-			GetLiveRelationsById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "",
-				objectIds, 
-				it, 1000, out);
-	}
-	else
-		throw invalid_argument("Known object type");
+	std::set<int64_t>::const_iterator it = objectIds.begin();
+	while(it != objectIds.end())
+		GetVisibleObjectsById(*dbconn, work.get(), this->dbUsernameLookup,
+			this->tableActivePrefix, type, objectIds, 
+			it, 1000, out);
 
 }
 

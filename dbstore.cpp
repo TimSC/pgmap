@@ -800,8 +800,9 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 			auto firstRecord = singleObjId.begin();
 
 			std::shared_ptr<class OsmData> relObjs(new class OsmData());
-			GetLiveRelationsById(conn, work, dbUsernameLookup,
-				tablePrefix, "",
+			GetVisibleObjectsById(conn, work, dbUsernameLookup,
+				tablePrefix,
+				"relation",
 				singleObjId, 
 				firstRecord, 1000, relObjs);
 			

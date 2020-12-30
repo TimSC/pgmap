@@ -36,25 +36,11 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 	const std::set<int64_t> &skipIds, 
 	std::shared_ptr<IDataStreamHandler> enc);
 
-void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, 
+void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
-	size_t step, std::shared_ptr<IDataStreamHandler> enc);
-
-void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
-	size_t step, std::shared_ptr<IDataStreamHandler> enc);
-
-void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const std::string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
+	const std::string &objType,
+	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
 
 // Query old versions

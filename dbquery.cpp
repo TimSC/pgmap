@@ -115,48 +115,6 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 	}
 }
 
-void GetLiveNodesById(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const string &tablePrefix, 
-	const string &excludeTablePrefix, 
-	const std::set<int64_t> &nodeIds, std::set<int64_t>::const_iterator &it, 
-	size_t step, std::shared_ptr<IDataStreamHandler> enc)
-{
-	string nodeTable = c.quote_name(tablePrefix + "livenodes");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
-
-	stringstream sqlFrags;
-	int count = 0;
-	for(; it != nodeIds.end() && count < step; it++)
-	{
-		if(count >= 1)
-			sqlFrags << " OR ";
-		sqlFrags << nodeTable << ".id = " << *it;
-		count ++;
-	}
-
-	string sql = "SELECT *, ST_X(geom) as lon, ST_Y(geom) AS lat";
-	if(excludeTable.size() > 0)
-		sql += ", "+excludeTable+".id";
-
-	sql += " FROM "+ nodeTable;
-	if(excludeTable.size() > 0)
-		sql += " LEFT JOIN "+excludeTable+" ON "+nodeTable+".id = "+excludeTable+".id";
-
-	sql += " WHERE ("+sqlFrags.str()+")";
-	if(excludeTable.size() > 0)
-		sql += " AND "+excludeTable+".id IS NULL";
-	sql += ";";
-
-	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );	
-
-	count = 1;
-	while(count > 0)
-		count = NodeResultsToEncoder(cursor, usernames, enc);
-}
-
 void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
@@ -201,90 +159,48 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 	RelationResultsToEncoder(cursor, usernames, skipIds, encUnique);
 }
 
-//Can this be combined into GetLiveNodesById?
-void GetLiveWaysById(pqxx::connection &c, pqxx::transaction_base *work, 
+void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &wayIds, std::set<int64_t>::const_iterator &it, 
+	const std::string &objType,
+	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string wayTable = c.quote_name(tablePrefix + "liveways");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "wayids");
+	string nodeTable = c.quote_name(tablePrefix + "visible" +objType+ "s");
 
 	stringstream sqlFrags;
 	int count = 0;
-	for(; it != wayIds.end() && count < step; it++)
+	for(; it != objIds.end() && count < step; it++)
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << wayTable << ".id = " << *it;
+		sqlFrags << nodeTable << ".id = " << *it;
 		count ++;
 	}
+	if(count == 0) return;
 
-	string sql = "SELECT *";
-	if(excludeTable.size() > 0)
-		sql += ", "+excludeTable+".id";
+	std::string sql = "SELECT *";
+	if(objType == "node")
+		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
 
-	sql += " FROM "+ wayTable;
-	if(excludeTable.size() > 0)
-		sql += " LEFT JOIN "+excludeTable+" ON "+wayTable+".id = "+excludeTable+".id";
-
+	sql += " FROM "+ nodeTable;
 	sql += " WHERE ("+sqlFrags.str()+")";
-	if(excludeTable.size() > 0)
-		sql += " AND "+excludeTable+".id IS NULL";
 	sql += ";";
 
-	pqxx::icursorstream cursor( *work, sql, "waycursor", 1000 );	
+	pqxx::icursorstream cursor( *work, sql, "objcursor", 1000 );	
 
-	set<int64_t> empty;
-	int records = 1;
-	while(records > 0)
-		records = WayResultsToEncoder(cursor, usernames, enc);
-}
-
-//Can this be combined into GetLiveNodesById?
-void GetLiveRelationsById(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const string &tablePrefix, 
-	const std::string &excludeTablePrefix, 
-	const std::set<int64_t> &relationIds, std::set<int64_t>::const_iterator &it, 
-	size_t step, std::shared_ptr<IDataStreamHandler> enc)
-{
-	string relationTable = c.quote_name(tablePrefix + "liverelations");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
-
-	stringstream sqlFrags;
-	int count = 0;
-	for(; it != relationIds.end() && count < step; it++)
+	count = 1;
+	if(objType == "node")
+		while(count > 0)
+			count = NodeResultsToEncoder(cursor, usernames, enc);
+	if(objType == "way")
+		while(count > 0)
+			count = WayResultsToEncoder(cursor, usernames, enc);
+	if(objType == "relation")
 	{
-		if(count >= 1)
-			sqlFrags << " OR ";
-		sqlFrags << relationTable << ".id = " << *it;
-		count ++;
+		std::set<int64_t> skipIds;
+		RelationResultsToEncoder(cursor, usernames, skipIds, enc);
 	}
-
-	string sql = "SELECT *";
-	if(excludeTable.size() > 0)
-		sql += ", "+excludeTable+".id";
-
-	sql += " FROM "+ relationTable;
-	if(excludeTable.size() > 0)
-		sql += " LEFT JOIN "+excludeTable+" ON "+relationTable+".id = "+excludeTable+".id";
-
-	sql += " WHERE ("+sqlFrags.str()+")";
-	if(excludeTable.size() > 0)
-		sql += " AND "+excludeTable+".id IS NULL";
-	sql += ";";
-
-	pqxx::icursorstream cursor( *work, sql, "relationcursor", 1000 );	
-
-	set<int64_t> empty;
-	RelationResultsToEncoder(cursor, usernames, empty, enc);
 }
 
 void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work, 
@@ -434,25 +350,15 @@ void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *w
 		int records = 1;
 		while (records>0)
 		{
-			records = 0;
-			pqxx::result rows;
-			cursor.get(rows);
-			if ( rows.empty() )
-			{
-				// nothing left to read
-				continue;
-			}
+			std::vector<int64_t> idsList, verList;
+			records = ObjectResultsToListIdVer(cursor,
+				&idsList,
+				&verList);
 
-			int idCol = rows.column_number("id");
-			int verCol = rows.column_number("version");
-
-			for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c)
+			for (size_t i=0; i<idsList.size(); i++)
 			{
-				int64_t objId = c[idCol].as<int64_t>();
-				int64_t objVer = c[verCol].as<int64_t>();
-				std::pair<int64_t, int64_t> idVer(objId, objVer);
+				std::pair<int64_t, int64_t> idVer(idsList[i], verList[i]);
 				wayIdVersOut.insert(wayIdVersOut.begin(), idVer);
-				records ++;
 			}
 		}
 	}
