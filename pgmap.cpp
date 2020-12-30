@@ -246,7 +246,7 @@ int PgMapQuery::Continue()
 	if(this->mapQueryPhase == 5)
 	{
 		//Get way objects that reference these nodes
-		//Keep the way objects in memory until we have finished encoding nodes
+		//Keep the way object IDs in memory until we have finished encoding nodes
 		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
 			this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
 
