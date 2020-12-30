@@ -10,6 +10,7 @@
 #include "dbchangeset.h"
 #include "dbmeta.h"
 #include "dbcommon.h"
+#include "dboverpass.h"
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
@@ -1357,6 +1358,28 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 		uid, username);
 
 	return true;
+}
+
+void PgTransaction::XapiQuery(const std::string &objType,
+	const std::string &tagKey,
+	const std::string &tagValue,
+	const std::vector<double> &bbox, 
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	DbXapiQueryVisible(*dbconn, work.get(), 
+		this->dbUsernameLookup, 
+		this->tableActivePrefix, 
+		objType,
+		tagKey,
+		tagValue,
+		bbox, 
+		enc);
 }
 
 void PgTransaction::Commit()

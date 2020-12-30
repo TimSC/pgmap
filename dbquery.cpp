@@ -19,7 +19,7 @@ std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c
 
 	stringstream sql;
 	sql.precision(9);
-	sql << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
+	sql << fixed << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
 	sql << " FROM ";
 	sql << vNodeTable;
 	if(excludeTable.size() > 0)
@@ -45,7 +45,6 @@ std::shared_ptr<pqxx::icursorstream> VisibleNodesInWktStart(pqxx::connection &c,
 		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
 
 	stringstream sql;
-	sql.precision(9);
 	sql << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
 	sql << " FROM ";
 	sql << vNodeTable;
@@ -531,5 +530,4 @@ void GetVisibleObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *wor
 		}
 	}
 }
-
 

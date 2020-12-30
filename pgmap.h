@@ -151,6 +151,12 @@ public:
 	bool UpdateUsername(int uid, const std::string &username,
 		class PgMapError &errStr);
 
+	void XapiQuery(const std::string &objType,
+		const std::string &tagKey,
+		const std::string &tagValue,
+		const std::vector<double> &bbox, 
+		std::shared_ptr<IDataStreamHandler> enc);
+
 	void Commit();
 	void Abort();
 };
