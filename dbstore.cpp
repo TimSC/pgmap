@@ -791,6 +791,7 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 	while(pendingRelIds.size() > 0 and passNum < 10)
 	{
 		std::set<int64_t> nextPassIds;
+		//cout << "UpdateRelationBboxesById pass " << passNum << ", pending " << pendingRelIds.size() << endl;
 
 		for(auto it1 = pendingRelIds.begin(); it1 != pendingRelIds.end(); it1 ++)
 		{

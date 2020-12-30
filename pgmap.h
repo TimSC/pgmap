@@ -183,6 +183,8 @@ public:
 	bool GenerateUsernameTable(int verbose, class PgMapError &errStr);
 
 	bool UpdateBboxes(int verbose, class PgMapError &errStr);
+	bool CreateBboxIndices(int verbose, class PgMapError &errStr);
+	bool DropBboxIndices(int verbose, class PgMapError &errStr);
 
 	bool CheckNodesExistForWays(class PgMapError &errStr);
 	bool CheckObjectIdTables(class PgMapError &errStr);

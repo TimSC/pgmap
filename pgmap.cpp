@@ -1654,6 +1654,44 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 	return true;
 }
 
+bool PgAdmin::CreateBboxIndices(int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbCreateBboxIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateBboxIndices(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbCreateBboxIndices(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
+bool PgAdmin::DropBboxIndices(int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbDropBboxIndices(*dbconn, work.get(), verbose, this->tableStaticPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbDropBboxIndices(*dbconn, work.get(), verbose, this->tableModPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	if(!ok) return ok;
+	ok = DbDropBboxIndices(*dbconn, work.get(), verbose, this->tableTestPrefix, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
 bool PgAdmin::CheckNodesExistForWays(class PgMapError &errStr)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

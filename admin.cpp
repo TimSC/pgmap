@@ -65,6 +65,7 @@ int main(int argc, char **argv)
 		cout << "d. Check object ID tables" << endl;
 		cout << "e. Update way/relation bboxes" << endl;
 		cout << "g. Upgrade/downgrade db schema" << endl;
+		cout << "h. Create/drop bbox indices" << endl;
 
 		cout << endl << "q. Quit" << endl;
 
@@ -319,6 +320,27 @@ int main(int argc, char **argv)
 
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
 			bool ok = admin->CreateMapTables(verbose, atoi(schemaVer.c_str()), false, errStr);
+			admin->Commit();
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
+			continue;
+		}
+
+		if(inputStr == "h")
+		{
+			cout << "Create or delete (c/d)?" << endl;
+			std::string action;
+			cin >> action;
+			bool ok = true;
+
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			if(action == "c")
+				ok = admin->CreateBboxIndices(verbose, errStr);
+			else if(action == "d") 
+				ok = admin->DropBboxIndices(verbose, errStr);
 			admin->Commit();
 
 			if(ok)

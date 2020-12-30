@@ -78,5 +78,15 @@ int DbUpdateRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	class PgCommon *adminObj,
 	std::string &errStr);
 
+bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
+bool DbDropBboxIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &tablePrefix, 
+	std::string &errStr);
+
 #endif //_DB_ADMIN_H
 
