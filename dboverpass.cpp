@@ -1,6 +1,8 @@
 
 #include "dboverpass.h"
 #include "dbdecode.h"
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h> //rapidjson-dev
 
 /*
 Example queries :
@@ -37,15 +39,21 @@ void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work,
 
 		if(tagKey.size() > 0)
 		{
-			if(tagKey.size() > 0)
+			if(tagValue.size() > 0)
 			{
-				//TODO escape inputs!!
-				sql += " tags @> '{\""+tagKey+"\":\""+tagValue+"\"}'::jsonb";
+				StringBuffer buffer;
+				Writer<StringBuffer> writer(buffer);
+
+				writer.StartObject();
+				writer.Key(tagKey.c_str(), tagKey.size(), true);
+				writer.String(tagValue.c_str(), tagValue.size(), true);
+				writer.EndObject(1);
+
+				sql += " tags @> "+work->quote(buffer.GetString())+"::jsonb";
 			}
 			else
 			{
-				//TODO escape inputs!!
-				sql += " tags ? '"+tagKey+"'";
+				sql += " tags ? "+work->quote(tagKey);
 			}
 		}
 
