@@ -150,61 +150,145 @@ void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::vector<double> &bbox, 
 	std::shared_ptr<IDataStreamHandler> enc)
 {
-	if(objType == "relation")
+	std::set<int64_t> relationIdsSet, wayIdsSet, nodeIdsSet;
+
+	if(objType == "relation" or objType == "*")
 	{
+		std::shared_ptr<class OsmData> relationObjs(new class OsmData());
 		DbXapiQueryObjVisible(c, work, 
 			usernames, 
 			tablePrefix, 
-			objType,
+			"relation",
 			tagKey,
 			tagValue,
 			bbox, 
-			enc);
+			relationObjs);
+
+		//Get object Ids needed to complete relations
+		for(size_t i=0; i<relationObjs->relations.size(); i++)
+		{
+			OsmRelation &rel = relationObjs->relations[i];
+			for(size_t j=0; j<rel.refTypeStrs.size(); j++)
+			{	
+				const std::string &refType = rel.refTypeStrs[j];
+				if(refType == "node")
+					nodeIdsSet.insert(rel.refIds[j]);
+				else if(refType == "way")
+					wayIdsSet.insert(rel.refIds[j]);
+				else if(refType == "relation")
+					relationIdsSet.insert(rel.refIds[j]);
+			}
+		}
+		relationObjs.reset();
+
+		//Recursively get child relations
+		std::set<int64_t> pendingRelationIds = relationIdsSet;
+		int depth = 0;
+		while(pendingRelationIds.size() > 0 and depth < 10)
+		{
+			std::set<int64_t>::const_iterator it = pendingRelationIds.begin();
+			std::shared_ptr<class OsmData> childRelationObjs(new class OsmData());
+			while(it != pendingRelationIds.end())
+				GetVisibleObjectsById(c, work, 
+					usernames, 
+					tablePrefix, 
+					"relation",
+					pendingRelationIds, it, 
+					1000, childRelationObjs);
+
+			pendingRelationIds.clear();
+			for(size_t i=0; i<childRelationObjs->relations.size(); i++)
+			{
+				OsmRelation &rel = childRelationObjs->relations[i];
+				for(size_t j=0; j<rel.refTypeStrs.size(); j++)
+				{	
+					const std::string &refType = rel.refTypeStrs[j];
+					if(refType == "node")
+						nodeIdsSet.insert(rel.refIds[j]);
+					else if(refType == "way")
+						wayIdsSet.insert(rel.refIds[j]);
+					else if(refType == "relation")
+					{
+						if (relationIdsSet.find(rel.refIds[j]) == relationIdsSet.end())
+						{
+							relationIdsSet.insert(rel.refIds[j]);
+							pendingRelationIds.insert(rel.refIds[j]);
+						}					
+					}
+				}
+			}
+
+			depth += 1;
+		}
 	}
-	if(objType == "way")
+
+	if(objType == "way" or objType == "*")
 	{
 		//Get way IDs
 		std::shared_ptr<class OsmData> wayObjs(new class OsmData());
 		DbXapiQueryObjVisible(c, work, 
 			usernames, 
 			tablePrefix, 
-			objType,
+			"way",
 			tagKey,
 			tagValue,
 			bbox, 
 			wayObjs);
 
 		//Get nodes to complete ways
-		std::set<int64_t> nodeIdsSet;
 		for(size_t i=0; i<wayObjs->ways.size(); i++)
 		{
 			OsmWay &way = wayObjs->ways[i];
+			wayIdsSet.insert(way.objId);
 			for(size_t j=0; j<way.refs.size(); j++)
 			{	
 				nodeIdsSet.insert(way.refs[j]);
 			}
 		}
-
-		std::set<int64_t>::const_iterator it = nodeIdsSet.begin();
-		while(it != nodeIdsSet.end())
-			GetVisibleObjectsById(c, work, usernames,
-				tablePrefix, "node", nodeIdsSet, 
-				it, 1000, enc);
-
-		//Output ways
-		wayObjs->StreamTo(*enc);
-
 	}
-	if(objType == "node")
+
+	if(objType == "node" or objType == "*")
 	{
+		std::shared_ptr<class OsmData> nodeObjs(new class OsmData());
 		DbXapiQueryObjVisible(c, work, 
 			usernames, 
 			tablePrefix, 
-			objType,
+			"node",
 			tagKey,
 			tagValue,
 			bbox, 
-			enc);
+			nodeObjs);
+
+		if(objType == "*")
+		{
+			//Merge node ids with previously found data
+			for(size_t i=0; i<nodeObjs->nodes.size(); i++)
+			{
+				OsmNode &node = nodeObjs->nodes[i];
+				nodeIdsSet.insert(node.objId);
+			}
+		}
+		else
+			nodeObjs->StreamTo(*enc);
 	}
+
+	//Output final objects
+	std::set<int64_t>::const_iterator it = nodeIdsSet.begin();
+	while(it != nodeIdsSet.end())
+		GetVisibleObjectsById(c, work, usernames,
+			tablePrefix, "node", nodeIdsSet, 
+			it, 1000, enc);
+
+	it = wayIdsSet.begin();
+	while(it != wayIdsSet.end())
+		GetVisibleObjectsById(c, work, usernames,
+			tablePrefix, "way", wayIdsSet, 
+			it, 1000, enc);
+
+	it = relationIdsSet.begin();
+	while(it != relationIdsSet.end())
+		GetVisibleObjectsById(c, work, usernames,
+			tablePrefix, "relation", relationIdsSet, 
+			it, 1000, enc);
 }
 
