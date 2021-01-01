@@ -134,6 +134,7 @@ PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn,
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
+	useBboxInQuery = 0;
 }
 
 PgMapQuery::~PgMapQuery()
@@ -144,6 +145,36 @@ PgMapQuery::~PgMapQuery()
 PgMapQuery& PgMapQuery::operator=(const PgMapQuery&)
 {
 	return *this;
+}
+
+int PgMapQuery::StartCommon(std::shared_ptr<IDataStreamHandler> &enc)
+{
+	this->mapQueryEnc = enc;
+	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
+	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
+	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
+	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
+
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	//Check if bbox data has been enabled for ways and relations
+	string errStrNative;
+	string useBboxInQueryStr;
+	try
+	{
+		useBboxInQueryStr = DbGetMetaValue(*dbconn, work.get(),
+			"useBboxInQuery", 
+			this->tableActivePrefix,
+			errStrNative);
+	}
+	catch(runtime_error &err)
+	{		
+	}
+	this->useBboxInQuery = atoi(useBboxInQueryStr.c_str()) == 1;
+
+	return 0;
 }
 
 int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc)
@@ -159,13 +190,7 @@ int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHan
 	this->mapQueryPhase = 0;
 	this->mapQueryBbox = bbox;
 
-	this->mapQueryEnc = enc;
-	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
-	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
-	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
-	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
-
-	return 0;
+	return this->StartCommon(enc);
 }
 
 int PgMapQuery::Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler> &enc)
@@ -178,13 +203,7 @@ int PgMapQuery::Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler
 	this->mapQueryPhase = 0;
 	this->mapQueryWkt = wkt;
 
-	this->mapQueryEnc = enc;
-	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
-	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
-	this->retainWayMemIds.reset(new class DataStreamRetainMemIds(*this->retainWayIds));
-	this->retainRelationIds.reset(new class DataStreamRetainIds(*this->mapQueryEnc));
-
-	return 0;
+	return this->StartCommon(enc);
 }
 
 int PgMapQuery::Continue()
@@ -195,7 +214,7 @@ int PgMapQuery::Continue()
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 	int verbose = 1;
-
+	
 	if(this->mapQueryPhase == 0)
 	{
 		this->mapQueryEnc->StoreIsDiff(false);
@@ -248,11 +267,26 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way object IDs in memory until we have finished encoding nodes
-		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
+		if(!useBboxInQuery)
+		{
+			GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
 
-		GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
-			this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
+			GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
+				this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
+		}
+		else
+		{
+			DbXapiQueryObjVisible(*dbconn, work.get(), 
+				this->dbUsernameLookup, 
+				this->tableActivePrefix, 
+				"way",
+				"",
+				"",
+				this->mapQueryBbox, 
+				retainWayMemIds);
+		}
+
 		cout << "Found " << this->retainWayIds->wayIds.size() << " ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
 		//Identify extra node IDs to complete ways
@@ -271,23 +305,7 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 6)
-	{
-/*		if(this->setIterator != this->extraNodes.end())
-		{
-			GetLiveNodesById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, this->tableActivePrefix, this->extraNodes, 
-				this->setIterator, 1000, this->mapQueryEnc);
-			return 0;
-		}
-
-		this->setIterator = this->extraNodes.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;*/
-	}
+	//Step 6 simplified out
 
 	if(this->mapQueryPhase == 7)
 	{
@@ -310,23 +328,7 @@ int PgMapQuery::Continue()
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 8)
-	{		
-		/*if(this->setIterator != this->retainWayIds->wayIds.end())
-		{
-			GetLiveWaysById(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, this->tableActivePrefix, 
-				this->retainWayIds->wayIds, this->setIterator, 1000, this->mapQueryEnc);
-			return 0;
-		}
-
-		this->setIterator = this->retainWayIds->wayIds.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;*/
-	}
+	//Step 8 simplified out
 
 	if(this->mapQueryPhase == 9)
 	{		
@@ -338,130 +340,157 @@ int PgMapQuery::Continue()
 			return 0;
 		}
 
-		//Get relations that reference any of the above nodes
 		this->mapQueryEnc->Reset();
 		this->setIterator = this->retainNodeIds->nodeIds.begin();
 
-		this->mapQueryPhase = 11;
+		this->mapQueryPhase = 10;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 		return 0;
 	}
 
-	if(this->mapQueryPhase == 10)
+	if(!useBboxInQuery)
 	{
-		if(this->setIterator != retainNodeIds->nodeIds.end())
+		if(this->mapQueryPhase == 10)
 		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, 
+			//Get relations that reference any of the above nodes within bbox
+			if(this->setIterator != retainNodeIds->nodeIds.end())
+			{
+				GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+					this->tableStaticPrefix, 
+					this->tableActivePrefix, 
+					'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+				return 0;
+			}
+			this->setIterator = this->retainNodeIds->nodeIds.begin();
+
+			this->mapQueryPhase ++;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
+			return 0;
+		}
+
+		if(this->mapQueryPhase == 11)
+		{
+			if(this->setIterator != retainNodeIds->nodeIds.end())
+			{
+				GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+					this->tableActivePrefix, "",
+					'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+				return 0;
+			}
+
+			this->setIterator = this->extraNodes.begin();
+
+			this->mapQueryPhase ++;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
+			return 0;
+		}
+
+		if(this->mapQueryPhase == 12)
+		{
+			//Get relations that reference any of the "extra nodes"
+			if(this->setIterator != this->extraNodes.end())
+			{
+				GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+					this->tableStaticPrefix, 
+					this->tableActivePrefix, 
+					'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+				return 0;
+			}
+
+			this->setIterator = this->extraNodes.begin();
+
+			this->mapQueryPhase ++;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
+			return 0;
+		}
+
+		if(this->mapQueryPhase == 13)
+		{
+			if(this->setIterator != this->extraNodes.end())
+			{
+				GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+					this->tableActivePrefix, "",
+					'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+				return 0;
+			}
+
+			this->extraNodes.clear();
+
+			//Get relations that reference any of the above ways
+			this->setIterator = this->retainWayIds->wayIds.begin();
+
+			this->mapQueryPhase ++;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
+			return 0;
+		}
+
+		if(this->mapQueryPhase == 14)
+		{
+			//Get relations that reference any of the above ways
+			if(this->setIterator != this->retainWayIds->wayIds.end())
+			{
+				GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
+					this->tableStaticPrefix, 
+					this->tableActivePrefix, 
+					'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
+					retainRelationIds->relationIds, retainRelationIds);
+				return 0;
+			}
+
+			this->setIterator = this->retainWayIds->wayIds.begin();
+
+			this->mapQueryPhase ++;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
+			return 0;
+		}
+
+		if(this->mapQueryPhase == 15)
+		{
+			if(this->setIterator != this->retainWayIds->wayIds.end())
+			{
+				GetLiveRelationsForObjects(*dbconn, work.get(),
+					this->dbUsernameLookup,
+					this->tableActivePrefix, "",
+					'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
+					retainRelationIds->relationIds, retainRelationIds);
+				return 0;
+			}
+
+			cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
+
+			this->mapQueryPhase ++;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
+			return 0;
+		}
+	}
+	else
+	{
+		if(this->mapQueryPhase == 10)
+		{
+			//Get relations that overlap bbox
+			DbXapiQueryObjVisible(*dbconn, work.get(), 
+				this->dbUsernameLookup, 
 				this->tableActivePrefix, 
-				'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
+				"relation",
+				"",
+				"",
+				this->mapQueryBbox, 
+				retainRelationIds);
+
+			cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
+
+			this->mapQueryPhase = 16;
+			if(verbose >= 1)
+				cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
 			return 0;
 		}
-		this->setIterator = this->retainNodeIds->nodeIds.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-	}
-
-	if(this->mapQueryPhase == 11)
-	{
-		if(this->setIterator != retainNodeIds->nodeIds.end())
-		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "",
-				'n', retainNodeIds->nodeIds, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
-			return 0;
-		}
-
-		this->setIterator = this->extraNodes.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-	}
-
-	if(this->mapQueryPhase == 12)
-	{
-		if(this->setIterator != this->extraNodes.end())
-		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, 
-				this->tableActivePrefix, 
-				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
-			return 0;
-		}
-
-		this->setIterator = this->extraNodes.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-	}
-
-	if(this->mapQueryPhase == 13)
-	{
-		if(this->setIterator != this->extraNodes.end())
-		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableActivePrefix, "",
-				'n', this->extraNodes, this->setIterator, 1000, retainRelationIds->relationIds, retainRelationIds);
-			return 0;
-		}
-
-		this->extraNodes.clear();
-
-		//Get relations that reference any of the above ways
-		this->setIterator = this->retainWayIds->wayIds.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-	}
-
-	if(this->mapQueryPhase == 14)
-	{
-		if(this->setIterator != this->retainWayIds->wayIds.end())
-		{
-			GetLiveRelationsForObjects(*dbconn, work.get(), this->dbUsernameLookup,
-				this->tableStaticPrefix, 
-				this->tableActivePrefix, 
-				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
-				retainRelationIds->relationIds, retainRelationIds);
-			return 0;
-		}
-
-		this->setIterator = this->retainWayIds->wayIds.begin();
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
-	}
-
-	if(this->mapQueryPhase == 15)
-	{
-		if(this->setIterator != this->retainWayIds->wayIds.end())
-		{
-			GetLiveRelationsForObjects(*dbconn, work.get(),
-				this->dbUsernameLookup,
-				this->tableActivePrefix, "",
-				'w', this->retainWayIds->wayIds, this->setIterator, 1000, 
-				retainRelationIds->relationIds, retainRelationIds);
-			return 0;
-		}
-
-		cout << "found " << retainRelationIds->relationIds.size() << " relations" << endl;
-
-		this->mapQueryPhase ++;
-		if(verbose >= 1)
-			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
-		return 0;
 	}
 
 	if(this->mapQueryPhase == 16)

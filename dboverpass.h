@@ -6,7 +6,18 @@
 #include "cppo5m/OsmData.h"
 #include "dbusername.h"
 
+//Returns complete objects
 void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work, 
+	class DbUsernameLookup &usernames, 
+	const std::string &tablePrefix, 
+	const std::string &objType,
+	const std::string &tagKey,
+	const std::string &tagValue,
+	const std::vector<double> &bbox, 
+	std::shared_ptr<IDataStreamHandler> enc);
+
+//Returns only objects of specified type
+void DbXapiQueryObjVisible(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 
 	const std::string &objType,

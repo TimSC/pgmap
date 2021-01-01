@@ -58,6 +58,9 @@ private:
 	std::set<int64_t>::const_iterator setIterator;
 	IDataStreamHandler nullEncoder;
 	class DbUsernameLookup &dbUsernameLookup;
+	bool useBboxInQuery;
+
+	int StartCommon(std::shared_ptr<IDataStreamHandler> &enc);
 
 public:
 	PgMapQuery(const std::string &tableStaticPrefixIn, 

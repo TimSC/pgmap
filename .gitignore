@@ -4,6 +4,7 @@ osm2csv
 admin
 applydiffs
 checkdata
+quickinit
 *.o5m.gz
 config.cfg
 __pycache__/
