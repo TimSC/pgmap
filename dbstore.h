@@ -28,4 +28,24 @@ int UpdateRelationBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
+bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
+	int64_t changeset,
+	int64_t timestamp,
+	int64_t uid,
+	const std::vector<double> &bbox,
+	const std::string &action,
+	int nodes,
+	int ways,
+	int relations,
+	std::string &errStr,
+	int verbose);
+
+bool DbInsertQueryActivity(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
+	int64_t timestamp,
+	const std::vector<double> &bbox,
+	std::string &errStr,
+	int verbose);
+
 #endif //_DB_STORE_H

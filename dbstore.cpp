@@ -889,4 +889,78 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 	return 0;
 }
 
+bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	int64_t changeset,
+	int64_t timestamp,
+	int64_t uid,
+	const std::vector<double> &bbox,
+	const std::string &action,
+	int nodes,
+	int ways,
+	int relations,
+	std::string &errStr,
+	int verbose)
+{
+	stringstream sql;
+	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, bbox, action, nodes, ways, relations) VALUES ";
+	sql << "("<<changeset<<","<<timestamp<<","<<uid<<",";
+	if(bbox.size() == 4)
+		sql << "ST_MakeEnvelope("<<bbox[0]<<", "<<bbox[1]<<", "<<bbox[2]<<", "<<bbox[3]<<", 4326)";
+	else
+		sql << "null";
+	sql << ","<<c.quote(action)<<","<<nodes<<","<<ways<<","<<relations<<");";
+
+	try
+	{
+		if(verbose >= 1)
+			cout << sql.str() << endl;
+		work->exec(sql.str());
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
+bool DbInsertQueryActivity(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
+	int64_t timestamp,
+	const std::vector<double> &bbox,
+	std::string &errStr,
+	int verbose)
+{
+
+	stringstream sql;
+	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"query_activity") << " (timestamp, bbox, metrics) VALUES ";
+	sql << "("<<timestamp<<",";
+	if(bbox.size() == 4)
+		sql << "ST_MakeEnvelope("<<bbox[0]<<", "<<bbox[1]<<", "<<bbox[2]<<", "<<bbox[3]<<", 4326)";
+	else
+		sql << "null";
+	sql << ",null);";
+
+	try
+	{
+		if(verbose >= 1)
+			cout << sql.str() << endl;
+		work->exec(sql.str());
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
 

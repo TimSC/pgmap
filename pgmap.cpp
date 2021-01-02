@@ -147,7 +147,7 @@ PgMapQuery& PgMapQuery::operator=(const PgMapQuery&)
 	return *this;
 }
 
-int PgMapQuery::StartCommon(std::shared_ptr<IDataStreamHandler> &enc)
+int PgMapQuery::StartCommon(const vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	this->mapQueryEnc = enc;
 	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
@@ -174,10 +174,19 @@ int PgMapQuery::StartCommon(std::shared_ptr<IDataStreamHandler> &enc)
 	}
 	this->useBboxInQuery = atoi(useBboxInQueryStr.c_str()) == 1;
 
+	string errStr;
+	bool ok = DbInsertQueryActivity(*dbconn, work.get(), this->tableActivePrefix,
+		timestamp,
+		bbox,
+		errStr,
+		0);
+	if (!ok)
+		cout << errStr << endl;
+
 	return 0;
 }
 
-int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc)
+int PgMapQuery::Start(const vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(mapQueryActive)
 		throw runtime_error("Query already active");
@@ -190,10 +199,10 @@ int PgMapQuery::Start(const vector<double> &bbox, std::shared_ptr<IDataStreamHan
 	this->mapQueryPhase = 0;
 	this->mapQueryBbox = bbox;
 
-	return this->StartCommon(enc);
+	return this->StartCommon(bbox, timestamp, enc);
 }
 
-int PgMapQuery::Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler> &enc)
+int PgMapQuery::Start(const std::string &wkt, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(mapQueryActive)
 		throw runtime_error("Query already active");
@@ -203,7 +212,8 @@ int PgMapQuery::Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler
 	this->mapQueryPhase = 0;
 	this->mapQueryWkt = wkt;
 
-	return this->StartCommon(enc);
+	std::vector<double> emptyBbox;
+	return this->StartCommon(emptyBbox, timestamp, enc);
 }
 
 int PgMapQuery::Continue()
@@ -776,6 +786,40 @@ int PgTransaction::UpdateObjectBboxesById(
 			tablePrefix, 
 			nativeErrStr);
 	}
+
+	errStr.errStr = nativeErrStr;
+
+	return ok;
+}
+
+bool PgTransaction::InsertEditActivity(int64_t changeset,
+		int64_t timestamp,
+		int64_t uid,
+		const std::vector<double> &bbox,
+		const std::string &action,
+		int nodes,
+		int ways,
+		int relations,
+		class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	bool ok = DbInsertEditActivity(*dbconn, work.get(), this->tableActivePrefix, 
+		changeset,
+		timestamp,
+		uid,
+		bbox,
+		action,
+		nodes,
+		ways,
+		relations,
+		nativeErrStr,
+		1);
 
 	errStr.errStr = nativeErrStr;
 

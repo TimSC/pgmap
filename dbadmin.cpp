@@ -206,6 +206,58 @@ bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;
 }
 
+bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const std::string &parentPrefix, 
+	const std::string &tablePrefix, 
+	std::string &errStr)
+{
+	cout << "DbUpgradeTables12to13" << endl;
+	bool ok = true;
+	string sql;
+
+	int majorVer=0, minorVer=0;
+	DbGetVersion(c, work, majorVer, minorVer);
+	string ine = "IF NOT EXISTS ";
+	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
+	{
+		ine = "";
+	}
+
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"edit_activity")+" (id SERIAL PRIMARY KEY, changeset BIGINT, timestamp BIGINT, uid INTEGER, bbox GEOMETRY(Geometry, 4326), action VARCHAR(16), nodes INT, ways INT, relations INT);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"activity_ts")+" ON "+c.quote_name(tablePrefix+"edit_activity")+" (timestamp);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"query_activity")+" (id SERIAL PRIMARY KEY, timestamp BIGINT, bbox GEOMETRY(Geometry, 4326), metrics JSONB);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"query_activity_ts")+" ON "+c.quote_name(tablePrefix+"query_activity")+" (timestamp);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+
+	return ok;
+}
+
+bool DbDowngradeTables13To12(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	cout << "DbDowngradeTables13To12" << endl;
+	string sql;
+	bool ok = true;
+
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"edit_activity")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"query_activity")+" CASCADE;";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+
+	return ok;
+}
+
+
 bool DbDowngradeTables12To11(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
@@ -291,9 +343,10 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		schemaVersion = std::stoi(DbGetMetaValue(c, work, "schema_version", tablePrefix, errStr));
 	}
 	catch (runtime_error &err) {}
+	cout << "Starting schema version" << schemaVersion << endl;
 
 	if(latest)
-		targetVer = 12;
+		targetVer = 13;
 	bool ok = true;
 
 	//Upgrading
@@ -323,7 +376,34 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		schemaVersion = 12;
 	}
 
+	if(schemaVersion == 12 and targetVer>schemaVersion)
+	{
+		ok = DbUpgradeTables12to13(c, work, 
+			verbose, 
+			parentPrefix, tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(13), tablePrefix, errStr);
+		if(!ok) return false;
+		schemaVersion = 13;
+	}
+
 	//Downgrading
+	if(targetVer < 13 and schemaVersion == 13)
+	{
+		ok = DbDowngradeTables13To12(c, work, 
+			verbose, 
+			tablePrefix, 
+			errStr);
+		if(!ok) return false;
+
+		ok = DbSetMetaValue(c, work, "schema_version", to_string(12), tablePrefix, errStr);
+		if(!ok) return false;
+
+		schemaVersion = 12;
+	}
+
 	if(targetVer < 12 and schemaVersion == 12)
 	{
 		ok = DbDowngradeTables12To11(c, work, 
@@ -337,7 +417,6 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 
 		schemaVersion = 11;
 	}
-	schemaVersion = 11;
 
 	if(targetVer < 11 and schemaVersion == 11)
 	{

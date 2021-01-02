@@ -60,7 +60,7 @@ private:
 	class DbUsernameLookup &dbUsernameLookup;
 	bool useBboxInQuery;
 
-	int StartCommon(std::shared_ptr<IDataStreamHandler> &enc);
+	int StartCommon(const std::vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
 
 public:
 	PgMapQuery(const std::string &tableStaticPrefixIn, 
@@ -71,8 +71,8 @@ public:
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
-	int Start(const std::vector<double> &bbox, std::shared_ptr<IDataStreamHandler> &enc);
-	int Start(const std::string &wkt, std::shared_ptr<IDataStreamHandler> &enc);
+	int Start(const std::vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
+	int Start(const std::string &wkt, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();
 	void Reset();
 };
@@ -111,6 +111,15 @@ public:
 		const std::string &objType,
 		const std::set<int64_t> &objectIds, int verbose, 
 		bool saveToStaticTables,
+		class PgMapError &errStr);
+	bool InsertEditActivity(int64_t changeset,
+		int64_t timestamp,
+		int64_t uid,
+		const std::vector<double> &bbox,
+		const std::string &action,
+		int nodes,
+		int ways,
+		int relations,
 		class PgMapError &errStr);
 
 	bool ResetActiveTables(class PgMapError &errStr);
