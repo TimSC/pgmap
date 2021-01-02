@@ -1417,6 +1417,23 @@ void PgTransaction::XapiQuery(const std::string &objType,
 		enc);
 }
 
+void PgTransaction::GetMostActiveUsers(int64_t startTimestamp,
+	std::vector<int64_t> &uidOut,
+	std::vector<std::vector<int64_t> > &objectCountOut)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	DbGetMostActiveUsers(*dbconn, work.get(), 
+		this->tableActivePrefix, 
+		startTimestamp,
+		uidOut,
+		objectCountOut);
+}
+
 void PgTransaction::Commit()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

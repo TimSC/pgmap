@@ -964,3 +964,34 @@ bool DbInsertQueryActivity(pqxx::connection &c, pqxx::transaction_base *work, co
 	return true;
 }
 
+void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, 
+	int64_t startTimestamp,
+	std::vector<int64_t> &uidOut,
+	std::vector<std::vector<int64_t> > &objectCountOut)
+{
+	stringstream sql;
+	sql << "SELECT uid, SUM(nodes) as nodes, SUM(ways) as ways, SUM(relations) as relations, SUM(nodes)+SUM(ways)+SUM(relations) as objects";
+	sql << " FROM " << c.quote_name(tablePrefix+"edit_activity") << " WHERE timestamp>=$1 GROUP BY uid ORDER BY objects DESC LIMIT 10;";
+
+	c.prepare(tablePrefix+"get_most_active_users", sql.str());
+	pqxx::result r = work->prepared(tablePrefix+"get_most_active_users")(startTimestamp).exec();
+	
+	int uidCol = r.column_number("uid");
+	int nodesCol = r.column_number("nodes");
+	int waysCol = r.column_number("ways");
+	int relationsCol = r.column_number("relations");
+
+	for (pqxx::result::const_iterator c = r.begin(); c != r.end(); ++c) 
+	{
+		int64_t uid = c[uidCol].as<int64_t>();
+		int64_t nodes = c[nodesCol].as<int64_t>();
+		int64_t ways = c[nodesCol].as<int64_t>();
+		int64_t relations = c[relationsCol].as<int64_t>();
+
+		uidOut.push_back(uid);
+		std::vector<int64_t> oc = {nodes, ways, relations};
+		objectCountOut.push_back(oc);
+	}
+}
+

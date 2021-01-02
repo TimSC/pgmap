@@ -168,6 +168,9 @@ public:
 		const std::string &tagValue,
 		const std::vector<double> &bbox, 
 		std::shared_ptr<IDataStreamHandler> enc);
+	void GetMostActiveUsers(int64_t startTimestamp,
+		std::vector<int64_t> &uidOut,
+		std::vector<std::vector<int64_t> > &objectCountOut);
 
 	void Commit();
 	void Abort();

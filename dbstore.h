@@ -48,4 +48,10 @@ bool DbInsertQueryActivity(pqxx::connection &c, pqxx::transaction_base *work,
 	std::string &errStr,
 	int verbose);
 
+void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, 
+	int64_t startTimestamp,
+	std::vector<int64_t> &uidOut,
+	std::vector<std::vector<int64_t> > &objectCountOut);
+
 #endif //_DB_STORE_H
