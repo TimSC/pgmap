@@ -778,6 +778,86 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	return 0;	
 }
 
+void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work, 
+	const std::string &tablePrefix, 
+	OsmRelation &rel,
+	const std::set<int64_t> &pendingRelIds,
+	const std::set<int64_t> &skipRelIds,  
+	std::set<int64_t> &nextPassIds, int verbose)
+{
+	class DbUsernameLookup dbUsernameLookup(conn, work, "", ""); //Don't care about accurate usernames
+
+	std::set<int64_t> memNodeIds, memWayIds, memRelIds;
+	for(size_t i=0; i<rel.refTypeStrs.size(); i++)
+	{
+		string &memType = rel.refTypeStrs[i];
+		if(memType == "node") memNodeIds.insert(rel.refIds[i]);
+		if(memType == "way") memWayIds.insert(rel.refIds[i]);
+		if(memType == "relation" and skipRelIds.find(rel.refIds[i]) == skipRelIds.end()) 
+			memRelIds.insert(rel.refIds[i]);
+	}
+
+	//Check of member relations have already been processed
+	bool dependsOnPending = false;
+	for(auto it2=memRelIds.begin(); it2!=memRelIds.end(); it2++)
+	{
+		dependsOnPending = pendingRelIds.find(*it2) != pendingRelIds.end();
+		if(dependsOnPending) break;
+	}
+	if(dependsOnPending)
+	{
+		nextPassIds.insert(rel.objId);
+		return;
+	}
+
+	std::map<int64_t, vector<double> > memBboxesOfType1, memBboxesOfType2, memBboxesOfType3;
+	std::vector<vector<double> > memBboxes;
+	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
+		tablePrefix, "node", memNodeIds, memBboxesOfType1);
+	for(auto it=memBboxesOfType1.begin(); it!=memBboxesOfType1.end(); it++)
+	{
+		vector<double> &bb = it->second; 
+		memBboxes.push_back(bb);
+	}
+
+	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
+		tablePrefix, "way", memWayIds, memBboxesOfType2);
+	for(auto it=memBboxesOfType2.begin(); it!=memBboxesOfType2.end(); it++)
+	{
+		vector<double> &bb = it->second; 
+		memBboxes.push_back(bb);
+	}
+
+	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
+		tablePrefix, "relation", memRelIds, memBboxesOfType3);
+	for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
+	{
+		vector<double> &bb = it->second; 
+		memBboxes.push_back(bb);
+	}
+
+	std::vector<double> outerBbox;
+	FindOuterBbox(memBboxes, outerBbox);
+
+	if(outerBbox.size() == 4)
+	{
+		stringstream sql;
+		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope($1,$2,$3,$4, 4326) WHERE (id = $5);";
+		if(verbose >= 2) cout << sql.str() << endl;
+
+		conn.prepare(tablePrefix+"update_relation_bbox", sql.str());
+		work->prepared(tablePrefix+"update_relation_bbox")(outerBbox[0])(outerBbox[1])(outerBbox[2])(outerBbox[3])(rel.objId).exec();
+	}
+	else
+	{
+		stringstream sql;
+		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<rel.objId<<";";
+		if(verbose >= 2) cout << sql.str() << endl;
+
+		work->exec(sql);
+	}
+}
+
 int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *work,
 	const std::set<int64_t> &objectIds,
     int verbose,
@@ -787,6 +867,7 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 	class DbUsernameLookup dbUsernameLookup(conn, work, "", ""); //Don't care about accurate usernames
 	std::set<int64_t> pendingRelIds = objectIds;
 	int passNum = 0;
+	std::set<int64_t> emptySet;
 
 	while(pendingRelIds.size() > 0 and passNum < 10)
 	{
@@ -810,80 +891,52 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 				continue;
 			OsmRelation &rel = relObjs->relations[0];
 	
-			std::set<int64_t> memNodeIds, memWayIds, memRelIds;
-			for(size_t i=0; i<rel.refTypeStrs.size(); i++)
-			{
-				string &memType = rel.refTypeStrs[i];
-				if(memType == "node") memNodeIds.insert(rel.refIds[i]);
-				if(memType == "way") memWayIds.insert(rel.refIds[i]);
-				if(memType == "relation") memRelIds.insert(rel.refIds[i]);
-			}
-
-			//Check of member relations have already been processed
-			bool dependsOnPending = false;
-			for(auto it2=memRelIds.begin(); it2!=memRelIds.end(); it2++)
-			{
-				dependsOnPending = pendingRelIds.find(*it2) != pendingRelIds.end();
-				if(dependsOnPending) break;
-			}
-			if(dependsOnPending)
-			{
-				nextPassIds.insert(rel.objId);
-				continue;
-			}
-
-			std::map<int64_t, vector<double> > memBboxesOfType1, memBboxesOfType2, memBboxesOfType3;
-			std::vector<vector<double> > memBboxes;
-			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-				tablePrefix, "node", memNodeIds, memBboxesOfType1);
-			for(auto it=memBboxesOfType1.begin(); it!=memBboxesOfType1.end(); it++)
-			{
-				vector<double> &bb = it->second; 
-				memBboxes.push_back(bb);
-			}
-
-			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-				tablePrefix, "way", memWayIds, memBboxesOfType2);
-			for(auto it=memBboxesOfType2.begin(); it!=memBboxesOfType2.end(); it++)
-			{
-				vector<double> &bb = it->second; 
-				memBboxes.push_back(bb);
-			}
-
-			GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-				tablePrefix, "relation", memRelIds, memBboxesOfType3);
-			for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
-			{
-				vector<double> &bb = it->second; 
-				memBboxes.push_back(bb);
-			}
-
-			std::vector<double> outerBbox;
-			FindOuterBbox(memBboxes, outerBbox);
-
-			if(outerBbox.size() == 4)
-			{
-				stringstream sql;
-				sql.precision(9);
-				sql << fixed << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope("<<outerBbox[0]<<", "\
-					<<outerBbox[1]<<", "<<outerBbox[2]<<", "<<outerBbox[3]<<", 4326) WHERE id = "<<rel.objId<<";";
-				if(verbose >= 2) cout << sql.str() << endl;
-
-				work->exec(sql);
-			}
-			else
-			{
-				stringstream sql;
-				sql.precision(9);
-				sql << fixed << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<rel.objId<<";";
-				if(verbose >= 2) cout << sql.str() << endl;
-
-				work->exec(sql);
-			}
+			UpdateSingleRelation(conn, work, tablePrefix, rel, 
+				pendingRelIds, emptySet, 
+				nextPassIds, verbose);
+		}
+		
+		if(pendingRelIds.size() == nextPassIds.size())
+		{
+			pendingRelIds = nextPassIds;
+			break; //Stop if we are not making progress
 		}
 
 		pendingRelIds = nextPassIds;
 		passNum ++;
+	}
+
+	//The remaining relations probably have circular dependencies
+	//Process them ignoring circular dependencies at first
+	//Then rerun circular dependencies again with minimal bbox assumption
+	for(int pass=0; pass<10; pass++)
+	{
+		std::set<int64_t> unused;
+
+		for(auto it1 = pendingRelIds.begin(); it1 != pendingRelIds.end(); it1 ++)
+		{
+			std::set<int64_t> singleObjId;
+			singleObjId.insert(*it1);
+			auto firstRecord = singleObjId.begin();
+
+			std::shared_ptr<class OsmData> relObjs(new class OsmData());
+			GetVisibleObjectsById(conn, work, dbUsernameLookup,
+				tablePrefix,
+				"relation",
+				singleObjId, 
+				firstRecord, 1000, relObjs);
+			
+			if(relObjs->relations.size()==0)
+				continue;
+			OsmRelation &rel = relObjs->relations[0];
+
+			std::set<int64_t> skipRelIds;
+			if(pass == 0) skipRelIds = pendingRelIds;
+
+			UpdateSingleRelation(conn, work, tablePrefix, rel, 
+				emptySet, skipRelIds, 
+				unused, verbose);
+		}
 	}
 
 	return 0;

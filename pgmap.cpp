@@ -819,7 +819,7 @@ bool PgTransaction::InsertEditActivity(int64_t changeset,
 		ways,
 		relations,
 		nativeErrStr,
-		1);
+		0);
 
 	errStr.errStr = nativeErrStr;
 
