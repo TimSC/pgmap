@@ -55,6 +55,13 @@ int UpdateChangesetInDb(pqxx::connection &c,
 	const class PgChangeset &changeset,
 	std::string &errStr);
 
+int DbExpandChangesetBbox(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t cid,
+	const std::vector<double> &bbox,
+	std::string &errStr);
+
 bool CloseChangesetInDb(pqxx::connection &c, 
 	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
@@ -110,6 +117,7 @@ bool DbGetEditActivity(pqxx::connection &c,
 	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t editActivityId,
+	std::string &actionOut,
 	std::vector<std::string> &existingTypeOut,
 	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
 	std::vector<std::string> &updatedTypeOut,

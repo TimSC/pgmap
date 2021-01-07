@@ -445,6 +445,49 @@ int UpdateChangesetInDb(pqxx::connection &c,
 	return rowsAffected;
 }
 
+int DbExpandChangesetBbox(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t cid,
+	const std::vector<double> &bbox,
+	std::string &errStr)
+{
+	if (bbox.size() != 4)
+		throw runtime_error("bbox should have size of 4");
+
+	stringstream ss;
+	ss << "UPDATE "<< c.quote_name(tablePrefix+"changesets")+" SET geom=";
+	ss << "CASE ST_IsValid(geom) WHEN TRUE THEN ST_Envelope(ST_Union(ST_MakeEnvelope($1, $2, $3, $4, 4326), geom)) ELSE ST_MakeEnvelope($1, $2, $3, $4, 4326) END";
+	ss << " WHERE id = $5;";
+	int rowsAffected = 0;
+
+	try
+	{
+		c.prepare(tablePrefix+"expandchangeset", ss.str());
+
+		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"expandchangeset");
+		invoc(bbox[0]);
+		invoc(bbox[1]);
+		invoc(bbox[2]);
+		invoc(bbox[3]);
+		invoc(cid);
+
+		pqxx::result result = invoc.exec();
+		rowsAffected = result.affected_rows();
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return -1;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return -1;
+	}
+	return rowsAffected;
+}
+
 bool CloseChangesetInDb(pqxx::connection &c, 
 	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
@@ -728,6 +771,7 @@ bool DbGetEditActivity(pqxx::connection &c,
 	pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	int64_t editActivityId,
+	std::string &actionOut,
 	std::vector<std::string> &existingTypeOut,
 	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
 	std::vector<std::string> &updatedTypeOut,
@@ -748,6 +792,7 @@ bool DbGetEditActivity(pqxx::connection &c,
 	pqxx::result r = work->exec(sql.str());
 
 	int idCol = r.column_number("id");
+	int actionCol = r.column_number("action");
 	int existingCol = r.column_number("existing");
 	int updatedCol = r.column_number("updated");
 	int affectedParentsCol = r.column_number("affectedparents");
@@ -757,6 +802,7 @@ bool DbGetEditActivity(pqxx::connection &c,
 	{
 		const pqxxrow row = r[rownum];
 
+		actionOut = row[actionCol].as<string>();
 		string existingJson = row[existingCol].as<string>();
 		string updatedJson = row[updatedCol].as<string>();
 		string affectedParentsJson = row[affectedParentsCol].as<string>();

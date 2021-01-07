@@ -156,6 +156,9 @@ public:
 		class PgMapError &errStr);
 	bool UpdateChangeset(const class PgChangeset &changeset,
 		class PgMapError &errStr);
+	bool ExpandChangesetBbox(int64_t cid,
+		const std::vector<double> &bbox,
+		class PgMapError &errStr);
 	bool CloseChangeset(int64_t changesetId,
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
@@ -164,6 +167,7 @@ public:
 		class PgMapError &errStr);
 
 	void GetEditActivity(int64_t editActivityId,
+		std::vector<std::string> &actionOut,
 		std::vector<std::string> &existingTypeOut,
 		std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
 		std::vector<std::string> &updatedTypeOut,

@@ -1208,6 +1208,38 @@ bool PgTransaction::UpdateChangeset(const class PgChangeset &changeset,
 	return rowsAffected2 > 0;
 }
 
+bool PgTransaction::ExpandChangesetBbox(int64_t cid,
+	const std::vector<double> &bbox,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	string errStrNative;	
+	if(atoi(this->GetMetaValue("readonly", errStr).c_str()) == 1)
+	{
+		errStr.errStr = "Database is in READ ONLY mode";
+		return false;
+	}
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	//Attempt to update in active table
+	int rowsAffected = DbExpandChangesetBbox(*dbconn, work.get(),
+		this->tableActivePrefix,
+		cid,
+		bbox,
+		errStrNative);
+
+	if(rowsAffected < 0)
+	{
+		errStr.errStr = errStrNative;
+		return false;
+	}
+
+	return rowsAffected > 0;
+}
+
 bool PgTransaction::CloseChangeset(int64_t changesetId,
 	int64_t closedTimestamp,
 	class PgMapError &errStr)
@@ -1343,6 +1375,7 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 }
 
 void PgTransaction::GetEditActivity(int64_t editActivityId,
+	std::vector<std::string> &actionOut,
 	std::vector<std::string> &existingTypeOut,
 	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
 	std::vector<std::string> &updatedTypeOut,
@@ -1361,9 +1394,11 @@ void PgTransaction::GetEditActivity(int64_t editActivityId,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
+	string action;
 	DbGetEditActivity(*dbconn, work.get(),
 		this->tableActivePrefix,
 		editActivityId,
+		action,
 		existingTypeOut,
 		existingIdVerOut,
 		updatedTypeOut,
@@ -1373,6 +1408,8 @@ void PgTransaction::GetEditActivity(int64_t editActivityId,
 		relatedTypeOut,
 		relatedIdVerOut,
 		errStrNative);
+
+	actionOut.push_back(action);
 }
 
 std::string PgTransaction::GetMetaValue(const std::string &key, 
