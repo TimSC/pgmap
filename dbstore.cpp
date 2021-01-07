@@ -951,23 +951,51 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work, con
 	int nodes,
 	int ways,
 	int relations,
+	const std::vector<std::string> &existingType,
+	const std::vector<std::pair<int64_t, int64_t> > &existingIdVer,
+	const std::vector<std::string> &updatedType,
+	const std::vector<std::pair<int64_t, int64_t> > &updatedIdVer,
+	const std::vector<std::string> &affectedparentsType,
+	const std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVer,
+	const std::vector<std::string> &relatedType,
+	const std::vector<std::pair<int64_t, int64_t> > &relatedIdVer,
 	std::string &errStr,
 	int verbose)
 {
+	string existingEnc, updatedEnc, affectedParentsEnc, relatedEnc;
+	EncodeObjTypeIdVers(existingType, existingIdVer, existingEnc);
+	EncodeObjTypeIdVers(updatedType, updatedIdVer, updatedEnc);
+	EncodeObjTypeIdVers(affectedparentsType, affectedparentsIdVer, affectedParentsEnc);
+	EncodeObjTypeIdVers(relatedType, relatedIdVer, relatedEnc);
+
 	stringstream sql;
-	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, bbox, action, nodes, ways, relations) VALUES ";
-	sql << "("<<changeset<<","<<timestamp<<","<<uid<<",";
+	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, action, nodes, ways, relations, existing, updated, affectedparents, related, bbox) VALUES ";
+	sql << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,";
 	if(bbox.size() == 4)
-		sql << "ST_MakeEnvelope("<<bbox[0]<<", "<<bbox[1]<<", "<<bbox[2]<<", "<<bbox[3]<<", 4326)";
+		sql << "ST_MakeEnvelope($12,$13,$14,$15,4326)";
 	else
 		sql << "null";
-	sql << ","<<c.quote(action)<<","<<nodes<<","<<ways<<","<<relations<<");";
+	sql << ");";
 
 	try
 	{
 		if(verbose >= 1)
 			cout << sql.str() << endl;
-		work->exec(sql.str());
+
+		if(bbox.size() == 4)
+		{
+			c.prepare(tablePrefix+"insert_edit_activity1", sql.str());
+			work->prepared(tablePrefix+"insert_edit_activity1")(changeset)(timestamp)
+				(uid)(action)(nodes)(ways)(relations)(existingEnc)(updatedEnc)
+				(affectedParentsEnc)(relatedEnc)(bbox[0])(bbox[1])(bbox[2])(bbox[3]).exec();
+		}
+		else
+		{
+			c.prepare(tablePrefix+"insert_edit_activity2", sql.str());
+			work->prepared(tablePrefix+"insert_edit_activity2")(changeset)(timestamp)
+				(uid)(action)(nodes)(ways)(relations)(existingEnc)(updatedEnc)
+				(affectedParentsEnc)(relatedEnc).exec();
+		}
 	}
 	catch (const pqxx::sql_error &e)
 	{

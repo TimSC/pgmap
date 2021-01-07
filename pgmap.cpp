@@ -63,6 +63,8 @@ bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &pr
 		sql += ","+prefix+ "changesets";
 		sql += ","+prefix+ "meta";
 		sql += ","+prefix+ "usernames";
+		sql += ","+prefix+ "query_activity";
+		sql += ","+prefix+ "edit_activity";
 		sql += " IN "+accessMode+" MODE;";
 
 		work->exec(sql);
@@ -800,6 +802,14 @@ bool PgTransaction::InsertEditActivity(int64_t changeset,
 		int nodes,
 		int ways,
 		int relations,
+		const std::vector<std::string> &existingType,
+		const std::vector<std::pair<int64_t, int64_t> > &existingIdVer,
+		const std::vector<std::string> &updatedType,
+		const std::vector<std::pair<int64_t, int64_t> > &updatedIdVer,
+		const std::vector<std::string> &affectedparentsType,
+		const std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVer,
+		const std::vector<std::string> &relatedType,
+		const std::vector<std::pair<int64_t, int64_t> > &relatedIdVer,
 		class PgMapError &errStr)
 {
 	std::string nativeErrStr;
@@ -818,6 +828,10 @@ bool PgTransaction::InsertEditActivity(int64_t changeset,
 		nodes,
 		ways,
 		relations,
+		existingType, existingIdVer,
+		updatedType, updatedIdVer,
+		affectedparentsType, affectedparentsIdVer,
+		relatedType, relatedIdVer,
 		nativeErrStr,
 		0);
 

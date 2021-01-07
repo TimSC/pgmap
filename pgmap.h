@@ -120,6 +120,14 @@ public:
 		int nodes,
 		int ways,
 		int relations,
+		const std::vector<std::string> &existingType,
+		const std::vector<std::pair<int64_t, int64_t> > &existingIdVer,
+		const std::vector<std::string> &updatedType,
+		const std::vector<std::pair<int64_t, int64_t> > &updatedIdVer,
+		const std::vector<std::string> &affectedparentsType,
+		const std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVer,
+		const std::vector<std::string> &relatedType,
+		const std::vector<std::pair<int64_t, int64_t> > &relatedIdVer,
 		class PgMapError &errStr);
 
 	bool ResetActiveTables(class PgMapError &errStr);

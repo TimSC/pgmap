@@ -62,3 +62,25 @@ void EncodeRelationMems(const std::vector<std::string> &objTypes, const std::vec
 	out = buffer.GetString();
 }
 
+void EncodeObjTypeIdVers(const std::vector<std::string> &types, 
+	const std::vector<std::pair<int64_t, int64_t> > &idVers, 
+	std::string &out)
+{
+	if(types.size() != idVers.size())
+		throw runtime_error("Input vector lengths must match.");
+
+	rapidjson::StringBuffer buffer;
+	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+	writer.StartArray();
+	for(size_t i=0; i<types.size(); i++)
+	{
+		writer.StartArray();
+		writer.String(types[i].c_str());
+		writer.Int64(idVers[i].first);
+		writer.Int64(idVers[i].second);
+		writer.EndArray();
+	}
+	writer.EndArray();
+	out = buffer.GetString();
+}
+

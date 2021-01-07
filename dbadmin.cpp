@@ -224,7 +224,7 @@ bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work,
 		ine = "";
 	}
 
-	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"edit_activity")+" (id SERIAL PRIMARY KEY, changeset BIGINT, timestamp BIGINT, uid INTEGER, bbox GEOMETRY(Geometry, 4326), action VARCHAR(16), nodes INT, ways INT, relations INT);";
+	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"edit_activity")+" (id SERIAL PRIMARY KEY, changeset BIGINT, timestamp BIGINT, uid INTEGER, bbox GEOMETRY(Geometry, 4326), action VARCHAR(16), nodes INT, ways INT, relations INT, existing JSONB, updated JSONB, affectedparents JSONB, related JSONB);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"activity_ts")+" ON "+c.quote_name(tablePrefix+"edit_activity")+" (timestamp);";
