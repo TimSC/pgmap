@@ -437,3 +437,5 @@ void GetVisibleObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *wor
 	}
 }
 
+
+

@@ -3,6 +3,7 @@
 #include "dbstore.h"
 #include "dbcommon.h"
 #include "dbdecode.h"
+#include "dbjson.h"
 extern "C" {
 #include "cppo5m/iso8601lib/iso8601.h"
 }
@@ -720,4 +721,63 @@ void OsmChangesetsDecodeString::XmlAttsToMap(const XML_Char **atts, std::map<std
 		i += 2;
 	}
 }
+
+// ****************************************************************
+
+bool DbGetEditActivity(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t editActivityId,
+	std::vector<std::string> &existingTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
+	std::vector<std::string> &updatedTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &updatedIdVerOut,
+	std::vector<std::string> &affectedparentsTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVerOut,
+	std::vector<std::string> &relatedTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &relatedIdVerOut,
+	std::string &errStr)
+{
+	string table = c.quote_name(tablePrefix + "edit_activity");
+
+	stringstream sql;
+	sql << "SELECT "<<table<<".*, ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
+	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
+	sql << " FROM " << table << " WHERE id="<<editActivityId<<";" ;
+
+	pqxx::result r = work->exec(sql.str());
+
+	int idCol = r.column_number("id");
+	int existingCol = r.column_number("existing");
+	int updatedCol = r.column_number("updated");
+	int affectedParentsCol = r.column_number("affectedparents");
+	int relatedCol = r.column_number("related");
+
+	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+	{
+		const pqxxrow row = r[rownum];
+
+		string existingJson = row[existingCol].as<string>();
+		string updatedJson = row[updatedCol].as<string>();
+		string affectedParentsJson = row[affectedParentsCol].as<string>();
+		string relatedJson = row[relatedCol].as<string>();
+
+		DecodeObjTypeIdVers(existingJson,
+			existingTypeOut, 
+			existingIdVerOut);
+		DecodeObjTypeIdVers(updatedJson,
+			updatedTypeOut, 
+			updatedIdVerOut);
+		DecodeObjTypeIdVers(affectedParentsJson,
+			affectedparentsTypeOut, 
+			affectedparentsIdVerOut);
+		DecodeObjTypeIdVers(relatedJson,
+			relatedTypeOut, 
+			relatedIdVerOut);
+
+		return true;
+	}
+
+	return false;
+}	
 

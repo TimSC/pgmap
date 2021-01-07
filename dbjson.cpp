@@ -1,5 +1,6 @@
 #include <rapidjson/writer.h> //rapidjson-dev
 #include <rapidjson/stringbuffer.h>
+#include <rapidjson/document.h>
 #include "dbjson.h"
 using namespace std;
 
@@ -84,3 +85,21 @@ void EncodeObjTypeIdVers(const std::vector<std::string> &types,
 	out = buffer.GetString();
 }
 
+void DecodeObjTypeIdVers(std::string &json,
+	std::vector<std::string> &typesOut, 
+	std::vector<std::pair<int64_t, int64_t> > &idVersOut)
+{
+	rapidjson::Document doc;
+	doc.Parse(json.c_str());
+
+	for (rapidjson::Value::ConstValueIterator itr = doc.Begin(); itr != doc.End(); ++itr)
+	{
+		const rapidjson::Value& a = *itr;
+		if (!a.IsArray()) continue;
+		if (a.Size() < 3) continue;
+
+		typesOut.push_back(a[0].GetString());
+		std::pair<int64_t, int64_t> idVer(a[1].GetInt64(), a[2].GetInt64());
+		idVersOut.push_back(idVer);
+	}
+}

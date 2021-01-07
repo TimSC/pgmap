@@ -163,6 +163,17 @@ public:
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
 
+	void GetEditActivity(int64_t editActivityId,
+		std::vector<std::string> &existingTypeOut,
+		std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
+		std::vector<std::string> &updatedTypeOut,
+		std::vector<std::pair<int64_t, int64_t> > &updatedIdVerOut,
+		std::vector<std::string> &affectedparentsTypeOut,
+		std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVerOut,
+		std::vector<std::string> &relatedTypeOut,
+		std::vector<std::pair<int64_t, int64_t> > &relatedIdVerOut,
+		class PgMapError &errStr);
+
 	std::string GetMetaValue(const std::string &key, 
 		class PgMapError &errStr);
 	bool SetMetaValue(const std::string &key, 

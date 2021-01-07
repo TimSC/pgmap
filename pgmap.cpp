@@ -1342,6 +1342,39 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 	return ok;
 }
 
+void PgTransaction::GetEditActivity(int64_t editActivityId,
+	std::vector<std::string> &existingTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
+	std::vector<std::string> &updatedTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &updatedIdVerOut,
+	std::vector<std::string> &affectedparentsTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVerOut,
+	std::vector<std::string> &relatedTypeOut,
+	std::vector<std::pair<int64_t, int64_t> > &relatedIdVerOut,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	string errStrNative;
+	std::string val;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	DbGetEditActivity(*dbconn, work.get(),
+		this->tableActivePrefix,
+		editActivityId,
+		existingTypeOut,
+		existingIdVerOut,
+		updatedTypeOut,
+		updatedIdVerOut,
+		affectedparentsTypeOut,
+		affectedparentsIdVerOut,
+		relatedTypeOut,
+		relatedIdVerOut,
+		errStrNative);
+}
+
 std::string PgTransaction::GetMetaValue(const std::string &key, 
 	class PgMapError &errStr)
 {

@@ -11,5 +11,8 @@ void EncodeRelationMems(const std::vector<std::string> &objTypes, const std::vec
 void EncodeObjTypeIdVers(const std::vector<std::string> &types, 
 	const std::vector<std::pair<int64_t, int64_t> > &idVers, 
 	std::string &out);
+void DecodeObjTypeIdVers(std::string &json,
+	std::vector<std::string> &typesOut, 
+	std::vector<std::pair<int64_t, int64_t> > &idVersOut);
 
 #endif //_DB_JSON_H
