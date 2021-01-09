@@ -101,6 +101,7 @@ namespace std {
 	%template(vectorchangeset) vector<class PgChangeset>;
 };
 
+%shared_ptr(EditActivity)
 %shared_ptr(PgWork)
 %shared_ptr(PgCommon)
 
@@ -113,6 +114,7 @@ namespace std {
 
 %include "pgmap.h"
 %include "cppo5m/utils.h"
+%include "dbeditactivity.h"
 
 /*
 %shared_ptr(PbfDecode)

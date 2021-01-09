@@ -794,22 +794,7 @@ int PgTransaction::UpdateObjectBboxesById(
 	return ok;
 }
 
-bool PgTransaction::InsertEditActivity(int64_t changeset,
-		int64_t timestamp,
-		int64_t uid,
-		const std::vector<double> &bbox,
-		const std::string &action,
-		int nodes,
-		int ways,
-		int relations,
-		const std::vector<std::string> &existingType,
-		const std::vector<std::pair<int64_t, int64_t> > &existingIdVer,
-		const std::vector<std::string> &updatedType,
-		const std::vector<std::pair<int64_t, int64_t> > &updatedIdVer,
-		const std::vector<std::string> &affectedparentsType,
-		const std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVer,
-		const std::vector<std::string> &relatedType,
-		const std::vector<std::pair<int64_t, int64_t> > &relatedIdVer,
+bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 		class PgMapError &errStr)
 {
 	std::string nativeErrStr;
@@ -820,18 +805,7 @@ bool PgTransaction::InsertEditActivity(int64_t changeset,
 		throw runtime_error("Transaction has been deleted");
 
 	bool ok = DbInsertEditActivity(*dbconn, work.get(), this->tableActivePrefix, 
-		changeset,
-		timestamp,
-		uid,
-		bbox,
-		action,
-		nodes,
-		ways,
-		relations,
-		existingType, existingIdVer,
-		updatedType, updatedIdVer,
-		affectedparentsType, affectedparentsIdVer,
-		relatedType, relatedIdVer,
+		activity,
 		nativeErrStr,
 		0);
 
@@ -1374,16 +1348,8 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 	return ok;
 }
 
-void PgTransaction::GetEditActivity(int64_t editActivityId,
-	std::vector<std::string> &actionOut,
-	std::vector<std::string> &existingTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
-	std::vector<std::string> &updatedTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &updatedIdVerOut,
-	std::vector<std::string> &affectedparentsTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVerOut,
-	std::vector<std::string> &relatedTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &relatedIdVerOut,
+void PgTransaction::GetEditActivityById(int64_t editActivityId,
+	class EditActivity &editActivity,
 	class PgMapError &errStr)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
@@ -1394,22 +1360,11 @@ void PgTransaction::GetEditActivity(int64_t editActivityId,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	string action;
-	DbGetEditActivity(*dbconn, work.get(),
+	DbGetEditActivityById(*dbconn, work.get(),
 		this->tableActivePrefix,
 		editActivityId,
-		action,
-		existingTypeOut,
-		existingIdVerOut,
-		updatedTypeOut,
-		updatedIdVerOut,
-		affectedparentsTypeOut,
-		affectedparentsIdVerOut,
-		relatedTypeOut,
-		relatedIdVerOut,
+		editActivity,
 		errStrNative);
-
-	actionOut.push_back(action);
 }
 
 std::string PgTransaction::GetMetaValue(const std::string &key, 

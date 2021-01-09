@@ -28,38 +28,11 @@ int UpdateRelationBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
-bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work, 
-	const std::string &tablePrefix, 
-	int64_t changeset,
-	int64_t timestamp,
-	int64_t uid,
-	const std::vector<double> &bbox,
-	const std::string &action,
-	int nodes,
-	int ways,
-	int relations,
-	const std::vector<std::string> &existingType,
-	const std::vector<std::pair<int64_t, int64_t> > &existingIdVer,
-	const std::vector<std::string> &updatedType,
-	const std::vector<std::pair<int64_t, int64_t> > &updatedIdVer,
-	const std::vector<std::string> &affectedparentsType,
-	const std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVer,
-	const std::vector<std::string> &relatedType,
-	const std::vector<std::pair<int64_t, int64_t> > &relatedIdVer,
-	std::string &errStr,
-	int verbose);
-
 bool DbInsertQueryActivity(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
 	int64_t timestamp,
 	const std::vector<double> &bbox,
 	std::string &errStr,
 	int verbose);
-
-void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
-	const std::string &tablePrefix, 
-	int64_t startTimestamp,
-	std::vector<int64_t> &uidOut,
-	std::vector<std::vector<int64_t> > &objectCountOut);
 
 #endif //_DB_STORE_H

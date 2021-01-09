@@ -113,19 +113,4 @@ public:
 	void XmlAttsToMap(const XML_Char **atts, std::map<std::string, std::string> &attribs);
 };
 
-bool DbGetEditActivity(pqxx::connection &c, 
-	pqxx::transaction_base *work, 
-	const std::string &tablePrefix,
-	int64_t editActivityId,
-	std::string &actionOut,
-	std::vector<std::string> &existingTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &existingIdVerOut,
-	std::vector<std::string> &updatedTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &updatedIdVerOut,
-	std::vector<std::string> &affectedparentsTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &affectedparentsIdVerOut,
-	std::vector<std::string> &relatedTypeOut,
-	std::vector<std::pair<int64_t, int64_t> > &relatedIdVerOut,
-	std::string &errStr);
-
 #endif //_DB_CHANGESET_H
