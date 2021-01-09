@@ -1370,6 +1370,28 @@ bool PgTransaction::GetEditActivityById(int64_t editActivityId,
 	return found;
 }
 
+void PgTransaction::QueryEditActivityByTimestamp(int64_t sinceTimestamp,
+	int64_t untilTimestamp,
+	std::vector<std::shared_ptr<class EditActivity> > &editActivity,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	string errStrNative;
+	std::string val;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	DbQueryEditActivityByTimestamp(*dbconn, work.get(),
+		this->tableActivePrefix,
+		sinceTimestamp, untilTimestamp,
+		editActivity,
+		errStrNative);
+
+	errStr.errStr = errStrNative;
+}
+
 std::string PgTransaction::GetMetaValue(const std::string &key, 
 	class PgMapError &errStr)
 {

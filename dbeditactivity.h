@@ -31,6 +31,9 @@ public:
 
 	EditActivity();
 	virtual ~EditActivity();
+
+	EditActivity( const EditActivity &obj);
+	EditActivity& operator=(const EditActivity &arg);
 };
 
 bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work, 
@@ -50,6 +53,14 @@ bool DbGetEditActivityById(pqxx::connection &c,
 	const std::string &tablePrefix,
 	int64_t editActivityId,
 	class EditActivity &out,
+	std::string &errStr);
+
+void DbQueryEditActivityByTimestamp(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t sinceTimestamp,
+	int64_t untilTimestamp,
+	std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr);
 
 #endif //_EDIT_ACTIVITY_H

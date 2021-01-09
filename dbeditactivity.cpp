@@ -10,6 +10,33 @@ using namespace std;
 #define pqxxrow pqxx::result::tuple
 #endif 
 
+class EditActivityCols
+{
+public:
+	int idCol;
+	int actionCol;
+	int changesetCol;
+
+	int existingCol;
+	int updatedCol;
+	int affectedParentsCol;
+	int relatedCol;
+
+	EditActivityCols(pqxx::result &r);
+};
+
+EditActivityCols::EditActivityCols(pqxx::result &r)
+{
+	idCol = r.column_number("id");
+	actionCol = r.column_number("action");
+	changesetCol = r.column_number("changeset");
+
+	existingCol = r.column_number("existing");
+	updatedCol = r.column_number("updated");
+	affectedParentsCol = r.column_number("affectedparents");
+	relatedCol = r.column_number("related");
+}
+
 //*******************************************************
 
 EditActivity::EditActivity()
@@ -28,7 +55,64 @@ EditActivity::~EditActivity()
 
 }
 
+EditActivity::EditActivity( const EditActivity &obj)
+{
+	operator=(obj);
+}
+
+EditActivity& EditActivity::operator=(const EditActivity &arg)
+{
+	objId = arg.objId;
+
+	nodes = arg.nodes;
+	ways = arg.ways;
+	relations = arg.relations;
+	action = arg.action;
+	bbox = arg.bbox;
+	changeset = arg.changeset;
+	timestamp = arg.timestamp;
+	uid = arg.uid;
+
+	existingType = arg.existingType;
+	existingIdVer = arg.existingIdVer;
+	updatedType = arg.updatedType;
+	updatedIdVer = arg.updatedIdVer;
+	affectedparentsType = arg.affectedparentsType;
+	affectedparentsIdVer = arg.affectedparentsIdVer;
+	relatedType = arg.relatedType;
+	relatedIdVer = arg.relatedIdVer;
+
+	return *this;
+}
+
 // ****************************************************************
+
+void DecodeEditActivityRow(const class EditActivityCols &cols,
+	const pqxxrow row,
+	class EditActivity &out)
+{
+	out.objId = row[cols.idCol].as<int64_t>();
+	out.action = row[cols.actionCol].as<string>();
+	out.changeset = row[cols.changesetCol].as<int64_t>();
+
+	string existingJson = row[cols.existingCol].as<string>();
+	string updatedJson = row[cols.updatedCol].as<string>();
+	string affectedParentsJson = row[cols.affectedParentsCol].as<string>();
+	string relatedJson = row[cols.relatedCol].as<string>();
+
+	DecodeObjTypeIdVers(existingJson,
+		out.existingType, 
+		out.existingIdVer);
+	DecodeObjTypeIdVers(updatedJson,
+		out.updatedType, 
+		out.updatedIdVer);
+	DecodeObjTypeIdVers(affectedParentsJson,
+		out.affectedparentsType, 
+		out.affectedparentsIdVer);
+	DecodeObjTypeIdVers(relatedJson,
+		out.relatedType, 
+		out.relatedIdVer);
+}
 
 bool DbGetEditActivityById(pqxx::connection &c, 
 	pqxx::transaction_base *work, 
@@ -44,47 +128,73 @@ bool DbGetEditActivityById(pqxx::connection &c,
 	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
 	sql << " FROM " << table << " WHERE id="<<editActivityId<<";" ;
 
-	pqxx::result r = work->exec(sql.str());
-
-	int idCol = r.column_number("id");
-	int actionCol = r.column_number("action");
-	int changesetCol = r.column_number("changeset");
-
-	int existingCol = r.column_number("existing");
-	int updatedCol = r.column_number("updated");
-	int affectedParentsCol = r.column_number("affectedparents");
-	int relatedCol = r.column_number("related");
-
-	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+	try
 	{
-		const pqxxrow row = r[rownum];
+		pqxx::result r = work->exec(sql.str());
+		class EditActivityCols cols(r);
 
-		out.objId = row[idCol].as<int64_t>();
-		out.action = row[actionCol].as<string>();
-		out.changeset = row[changesetCol].as<int64_t>();
+		for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+		{
+			const pqxxrow row = r[rownum];
+			DecodeEditActivityRow(cols, row, out);
 
-		string existingJson = row[existingCol].as<string>();
-		string updatedJson = row[updatedCol].as<string>();
-		string affectedParentsJson = row[affectedParentsCol].as<string>();
-		string relatedJson = row[relatedCol].as<string>();
-
-		DecodeObjTypeIdVers(existingJson,
-			out.existingType, 
-			out.existingIdVer);
-		DecodeObjTypeIdVers(updatedJson,
-			out.updatedType, 
-			out.updatedIdVer);
-		DecodeObjTypeIdVers(affectedParentsJson,
-			out.affectedparentsType, 
-			out.affectedparentsIdVer);
-		DecodeObjTypeIdVers(relatedJson,
-			out.relatedType, 
-			out.relatedIdVer);
-
-		return true;
+			return true; //Only expecting one row
+		}
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
 	}
 
 	return false;
+}	
+
+void DbQueryEditActivityByTimestamp(pqxx::connection &c, 
+	pqxx::transaction_base *work, 
+	const std::string &tablePrefix,
+	int64_t sinceTimestamp,
+	int64_t untilTimestamp,
+	std::vector<std::shared_ptr<class EditActivity> > &out,
+	std::string &errStr)
+{
+	string table = c.quote_name(tablePrefix + "edit_activity");
+
+	stringstream sql;
+	sql << "SELECT "<<table<<".*, ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
+	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
+	sql << " FROM " << table << " WHERE timestamp>="<<sinceTimestamp;
+	if (untilTimestamp > 0)
+		sql << " AND timestamp<"<<untilTimestamp<<endl;
+	sql <<";" ;
+
+	try
+	{
+		pqxx::result r = work->exec(sql.str());
+		class EditActivityCols cols(r);
+		out.resize(r.size());
+
+		for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+		{
+			const pqxxrow row = r[rownum];
+			auto activity = make_shared<class EditActivity>();
+			DecodeEditActivityRow(cols, row, *activity);
+			out[rownum] = activity;
+		}
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+	}
 }	
 
 bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work, 

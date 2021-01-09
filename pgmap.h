@@ -155,6 +155,10 @@ public:
 	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,
 		class PgMapError &errStr);
+	void QueryEditActivityByTimestamp(int64_t sinceTimestamp,
+		int64_t untilTimestamp,
+		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
+		class PgMapError &errStr);
 
 	std::string GetMetaValue(const std::string &key, 
 		class PgMapError &errStr);

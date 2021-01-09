@@ -99,6 +99,7 @@ namespace std {
 
 namespace std {
 	%template(vectorchangeset) vector<class PgChangeset>;
+	%template(vectorsharedptreditactivity) vector<shared_ptr<class EditActivity> >;
 };
 
 %shared_ptr(EditActivity)
