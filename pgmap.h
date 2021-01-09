@@ -152,7 +152,7 @@ public:
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
 
-	void GetEditActivityById(int64_t editActivityId,
+	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,
 		class PgMapError &errStr);
 

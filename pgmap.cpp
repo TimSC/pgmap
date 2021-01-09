@@ -1348,7 +1348,7 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 	return ok;
 }
 
-void PgTransaction::GetEditActivityById(int64_t editActivityId,
+bool PgTransaction::GetEditActivityById(int64_t editActivityId,
 	class EditActivity &editActivity,
 	class PgMapError &errStr)
 {
@@ -1360,11 +1360,14 @@ void PgTransaction::GetEditActivityById(int64_t editActivityId,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	DbGetEditActivityById(*dbconn, work.get(),
+	bool found = DbGetEditActivityById(*dbconn, work.get(),
 		this->tableActivePrefix,
 		editActivityId,
 		editActivity,
 		errStrNative);
+
+	errStr.errStr = errStrNative;
+	return found;
 }
 
 std::string PgTransaction::GetMetaValue(const std::string &key, 
