@@ -236,6 +236,8 @@ bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"query_activity_ts")+" ON "+c.quote_name(tablePrefix+"query_activity")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"changesets")+" ALTER COLUMN geom TYPE GEOMETRY(Geometry, 4326);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	return ok;
 }
@@ -253,6 +255,8 @@ bool DbDowngradeTables13To12(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 	sql = "DROP TABLE IF EXISTS "+c.quote_name(tablePrefix+"query_activity")+" CASCADE;";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
+	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"changesets")+" ALTER COLUMN geom TYPE GEOMETRY(Polygon, 4326);";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	return ok;
 }

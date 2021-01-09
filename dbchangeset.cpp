@@ -457,7 +457,7 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 
 	stringstream ss;
 	ss << "UPDATE "<< c.quote_name(tablePrefix+"changesets")+" SET geom=";
-	ss << "CASE ST_IsValid(geom) WHEN TRUE THEN ST_Envelope(ST_Union(ST_MakeEnvelope($1, $2, $3, $4, 4326), geom)) ELSE ST_MakeEnvelope($1, $2, $3, $4, 4326) END";
+	ss << "CASE ST_IsValid(geom) WHEN TRUE THEN ST_MakeValid(ST_Envelope(ST_Collect(ST_MakeEnvelope($1, $2, $3, $4, 4326), geom))) ELSE ST_MakeValid(ST_MakeEnvelope($1, $2, $3, $4, 4326)) END";
 	ss << " WHERE id = $5;";
 	int rowsAffected = 0;
 
