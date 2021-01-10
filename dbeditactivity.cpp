@@ -13,14 +13,18 @@ using namespace std;
 class EditActivityCols
 {
 public:
-	int idCol;
-	int actionCol;
-	int changesetCol;
 
-	int existingCol;
-	int updatedCol;
-	int affectedParentsCol;
-	int relatedCol;
+	int idCol;
+	int nodesCol;
+	int waysCol;
+	int relationsCol;
+	int actionCol;
+	int bboxCol;
+	int changesetCol;
+	int timestampCol;
+	int uidCol;
+	
+	int existingCol, updatedCol, affectedParentsCol, relatedCol;
 
 	EditActivityCols(pqxx::result &r);
 };
@@ -28,8 +32,14 @@ public:
 EditActivityCols::EditActivityCols(pqxx::result &r)
 {
 	idCol = r.column_number("id");
+	nodesCol = r.column_number("nodes");
+	waysCol = r.column_number("ways");
+	relationsCol = r.column_number("relations");
 	actionCol = r.column_number("action");
+	bboxCol = r.column_number("bbox");
 	changesetCol = r.column_number("changeset");
+	timestampCol = r.column_number("timestamp");
+	uidCol = r.column_number("uid");
 
 	existingCol = r.column_number("existing");
 	updatedCol = r.column_number("updated");
@@ -92,8 +102,14 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 	class EditActivity &out)
 {
 	out.objId = row[cols.idCol].as<int64_t>();
+
+	out.nodes = row[cols.nodesCol].as<int64_t>();
+	out.ways = row[cols.waysCol].as<int64_t>();
+	out.relations = row[cols.relationsCol].as<int64_t>();
 	out.action = row[cols.actionCol].as<string>();
 	out.changeset = row[cols.changesetCol].as<int64_t>();
+	out.timestamp = row[cols.timestampCol].as<int64_t>();
+	out.uid = row[cols.uidCol].as<int64_t>();
 
 	string existingJson = row[cols.existingCol].as<string>();
 	string updatedJson = row[cols.updatedCol].as<string>();
