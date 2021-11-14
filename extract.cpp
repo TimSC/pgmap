@@ -114,9 +114,9 @@ int main(int argc, char **argv)
 	std::shared_ptr<class PgMapQuery> mapQuery = transaction->GetQueryMgr();
 	int ret = 0;
 	if(bbox.size() > 0)
-		ret = mapQuery->Start(bbox, enc);
+		ret = mapQuery->Start(bbox, time(nullptr), enc);
 	else
-		ret = mapQuery->Start(wkt, enc);
+		ret = mapQuery->Start(wkt, time(nullptr), enc);
 	while(ret == 0)
 	{
 		ret = mapQuery->Continue();

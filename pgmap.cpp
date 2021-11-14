@@ -151,6 +151,11 @@ PgMapQuery& PgMapQuery::operator=(const PgMapQuery&)
 
 int PgMapQuery::StartCommon(const vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc)
 {
+	/**
+	\param area being queried
+	\param timestamp the timestamp right now (0 if we don't care about logging accurate query times)
+	\param enc output object to receive the query result
+	*/
 	this->mapQueryEnc = enc;
 	this->retainNodeIds.reset(new class DataStreamRetainIds(*enc.get()));
 	this->retainWayIds.reset(new class DataStreamRetainIds(this->nullEncoder));
