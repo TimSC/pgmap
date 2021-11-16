@@ -25,18 +25,18 @@ int ReadFileContents(const char *filename, int binaryMode, std::string &contentO
 
 //http://stackoverflow.com/a/236803/4288232
 void split2(const string &s, char delim, vector<string> &elems) {
-    stringstream ss;
-    ss.str(s);
-    string item;
-    while (getline(ss, item, delim)) {
-        elems.push_back(item);
-    }
+	stringstream ss;
+	ss.str(s);
+	string item;
+	while (getline(ss, item, delim)) {
+		elems.push_back(item);
+	}
 }
 
 vector<string> split(const string &s, char delim) {
-    vector<string> elems;
-    split2(s, delim, elems);
-    return elems;
+	vector<string> elems;
+	split2(s, delim, elems);
+	return elems;
 }
 
 // Inspired by PHP's implode and Python's join
@@ -83,14 +83,14 @@ void WriteSettingsFile(const std::string &settingsPath, const std::map<std::stri
 
 //https://stackoverflow.com/a/15372760/4288232
 void StrReplaceAll( string &s, const string &search, const string &replace ) {
-    for( size_t pos = 0; ; pos += replace.length() ) {
-        // Locate the substring to replace
-        pos = s.find( search, pos );
-        if( pos == string::npos ) break;
-        // Replace by erasing and inserting
-        s.erase( pos, search.length() );
-        s.insert( pos, replace );
-    }
+	for( size_t pos = 0; ; pos += replace.length() ) {
+		// Locate the substring to replace
+		pos = s.find( search, pos );
+		if( pos == string::npos ) break;
+		// Replace by erasing and inserting
+		s.erase( pos, search.length() );
+		s.insert( pos, replace );
+	}
 }
 
 // Connection strings should have escaped quotes
@@ -191,13 +191,15 @@ double tiley2lat(int y, int z)
 
 void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vector<double> &bboxOut)
 {
+	bool bboxSet = false;
 	for(size_t i=0; i<bboxesIn.size(); i++)
 	{
 		const std::vector<double> &bi = bboxesIn[i];
 		if(bi.size() != 4) continue;
-		if(i==0)
+		if(not bboxSet)
 		{
 			bboxOut = bi;
+			bboxSet = true;
 		}
 		else
 		{
