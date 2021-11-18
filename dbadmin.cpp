@@ -657,30 +657,30 @@ bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	DbGetVersion(c, work, majorVer, minorVer);
 	string ine = "IF NOT EXISTS ";
 
-	if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_gix2"))
+	if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_gix_tags"))
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_gix")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom, to_tsvector('english', tags));";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_gix_tags")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom, to_tsvector('english', tags));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"livenodes")+"(geom, tags);";
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"livenodes_gix_tags")+"(geom, tags);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
-	if(!DbCheckIndexExists(c, work, tablePrefix+"liveways_gix"))
+	if(!DbCheckIndexExists(c, work, tablePrefix+"liveways_gix_tags"))
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_gix")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIST (bbox, to_tsvector('english', tags));";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_gix_tags")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIST (bbox, to_tsvector('english', tags));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liveways")+"(bbox, tags);";
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liveways_gix_tags")+"(bbox, tags);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
-	if(!DbCheckIndexExists(c, work, tablePrefix+"liverelations_gix"))
+	if(!DbCheckIndexExists(c, work, tablePrefix+"liverelations_gix_tags"))
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_gix")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIST (bbox, to_tsvector('english', tags));";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_gix_tags")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIST (bbox, to_tsvector('english', tags));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liverelations")+"(bbox, tags);";
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liverelations_gix_tags")+"(bbox, tags);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 

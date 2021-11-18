@@ -302,15 +302,21 @@ int main(int argc, char **argv)
 
 		if(inputStr == "e")
 		{
+			cout << "Update static tables (1/0)?" << endl;
+			std::string updateStaticStr;
+			cin >> updateStaticStr;
+			cout << "Update active tables (1/0)?" << endl;
+			std::string updateActiveStr;
+			cin >> updateActiveStr;
+
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
-			bool ok = admin->UpdateBboxes(verbose, errStr);
+			bool ok = admin->UpdateBboxes(verbose, atoi(updateStaticStr.c_str()), atoi(updateActiveStr.c_str()), errStr);
 
 			cout << "All done!" << ok << endl;
 			admin->Commit();
 
 			continue;
 		}
-
 
 		if(inputStr == "g")
 		{

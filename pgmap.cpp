@@ -1757,7 +1757,7 @@ bool PgAdmin::GenerateUsernameTable(int verbose, class PgMapError &errStr)
 	return true;
 }
 
-bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
+bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
@@ -1765,33 +1765,47 @@ bool PgAdmin::UpdateBboxes(int verbose, class PgMapError &errStr)
 		throw runtime_error("Transaction has been deleted");
 	bool ok = true;
 
-	ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
-		this->tableStaticPrefix, 
-		this,
-		nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
+    if(updateStatic)
+    {
+		ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
+			this->tableStaticPrefix, 
+			this,
+			nativeErrStr);
+		errStr.errStr = nativeErrStr;
+		if(!ok) return ok;
+	}
 
-	/*ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
-		this->tableModPrefix, 
-		this,
-		nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;*/
+	if (updateActive)
+	{
+		//Update way bboxes
+		ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
+			this->tableModPrefix, 
+			this,
+			nativeErrStr);
+		errStr.errStr = nativeErrStr;
+		if(!ok) return ok;
+	}
 
-	ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
-		this->tableStaticPrefix, 
-		this,
-		nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
+    if(updateStatic)
+	{
+		ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose, 
+			this->tableStaticPrefix, 
+			this,
+			nativeErrStr);
+		errStr.errStr = nativeErrStr;
+		if(!ok) return ok;
+	}
 
-	/*ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose,
-		this->tableModPrefix, 
-		this,
-		nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;*/
+	if (updateActive)
+	{
+		//Update relation bboxes
+		ok = DbUpdateRelationBboxes(*dbconn, work.get(), verbose,
+			this->tableModPrefix, 
+			this,
+			nativeErrStr);
+		errStr.errStr = nativeErrStr;
+		if(!ok) return ok;
+	}
 
 	work->commit();
 

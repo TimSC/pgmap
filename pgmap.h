@@ -208,7 +208,7 @@ public:
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 	bool GenerateUsernameTable(int verbose, class PgMapError &errStr);
 
-	bool UpdateBboxes(int verbose, class PgMapError &errStr);
+	bool UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr);
 	bool CreateBboxIndices(int verbose, class PgMapError &errStr);
 	bool DropBboxIndices(int verbose, class PgMapError &errStr);
 

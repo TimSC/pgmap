@@ -191,15 +191,13 @@ double tiley2lat(int y, int z)
 
 void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vector<double> &bboxOut)
 {
-	bool bboxSet = false;
 	for(size_t i=0; i<bboxesIn.size(); i++)
 	{
 		const std::vector<double> &bi = bboxesIn[i];
 		if(bi.size() != 4) continue;
-		if(not bboxSet)
+		if(bboxOut.size() == 0)
 		{
 			bboxOut = bi;
-			bboxSet = true;
 		}
 		else
 		{
