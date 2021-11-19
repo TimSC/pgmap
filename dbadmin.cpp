@@ -684,6 +684,24 @@ bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
+	/*if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_tags"))
+	{
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_tags")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIN(tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	if(!DbCheckIndexExists(c, work, tablePrefix+"liveways_tags"))
+	{
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_tags")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIN(tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}
+
+	if(!DbCheckIndexExists(c, work, tablePrefix+"liverelations_tags"))
+	{
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_tags")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIN(tags);";
+		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+	}*/
+
 	return ok;
 }
 
@@ -698,13 +716,22 @@ bool DbDropBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	DbGetVersion(c, work, majorVer, minorVer);
 	string ie = "IF EXISTS ";
 
-	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"livenodex_gix2")+";";
+	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"livenodes_gix_tags")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liveways_gix")+";";
+	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liveways_gix_tags")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liverelations_gix")+";";
+	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liverelations_gix_tags")+";";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"livenodes_tags")+";";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liveways_tags")+";";
+	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
+
+	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liverelations_tags")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	return ok;

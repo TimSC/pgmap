@@ -48,11 +48,11 @@ std::string DbXapiQueryGenerateSql(pqxx::connection &c, pqxx::transaction_base *
 				writer.String(tagValue.c_str(), tagValue.size(), true);
 				writer.EndObject(1);
 
-				sql += " tags @> "+work->quote(buffer.GetString())+"::jsonb";
+				sql += "to_tsvector('english', tags) @@ to_tsquery('english', "+work->quote(tagValue)+") AND tags @> "+work->quote(buffer.GetString())+"::jsonb";
 			}
 			else
 			{
-				sql += " tags ? "+work->quote(tagKey);
+				sql += "tags ? "+work->quote(tagKey);
 			}
 		}
 
