@@ -6,52 +6,6 @@ C++ SWIG module for accessing microcosm's postgis OSM map GIS schema. It also pr
 Installation
 ------------
 
-### Installing with Python 2
-
-To use this library using Python 2:
-
-	sudo apt install libpqxx-dev rapidjson-dev libexpat1-dev python-pip python-dev swig libboost-filesystem-dev libboost-program-options-dev libprotobuf-dev zlib1g-dev libboost-iostreams-dev protobuf-compiler
-
-If you have not already, create a virtual environment:
-
-	sudo pip install virtualenv
-
-	cd <src>
-
-	virtualenv --python=/usr/bin/python pgmapenv
-
-	source pgmapenv/bin/activate	
-
-	sudo pip install --upgrade pip
-
-Go to the <src>/pycrocosm/pgmap folder or clone a new copy:
-
-	git clone https://github.com/TimSC/pgmap.git --recursive
-
-	cd pgmap
-
-You may or may need to rebuild to protobuf files:
-
-	cd cppo5m
-
-    protoc -I=proto proto/osmformat.proto --cpp_out=pbf
-
-    protoc -I=proto proto/fileformat.proto --cpp_out=pbf
-
-    cd ..
-
-If you have not already, install the python module and build the tools:
-
-	python setup.py build
-
-	python setup.py install
-
-	make
-
-	cp config.cfg.template config.cfg
-
-The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. See https://github.com/swig/swig/issues/568
-
 ### Installing with Python 3
 
 To use this library using Python 3:
