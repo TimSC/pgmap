@@ -659,7 +659,7 @@ bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 
 	if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_gix_tags"))
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_gix_tags")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom, to_tsvector('english', tags));";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_gix_tags")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIST (geom, jsonb_to_tsvector('english', tags, '\"all\"'));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"livenodes_gix_tags")+"(geom, tags);";
@@ -668,39 +668,21 @@ bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 
 	if(!DbCheckIndexExists(c, work, tablePrefix+"liveways_gix_tags"))
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_gix_tags")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIST (bbox, to_tsvector('english', tags));";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_gix_tags")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIST (bbox, jsonb_to_tsvector('english', tags, '\"all\"'));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liveways_gix_tags")+"(bbox, tags);";
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liveways_gix_tags")+"(geom, tags);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
 
 	if(!DbCheckIndexExists(c, work, tablePrefix+"liverelations_gix_tags"))
 	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_gix_tags")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIST (bbox, to_tsvector('english', tags));";
+		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_gix_tags")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIST (bbox, jsonb_to_tsvector('english', tags, '\"all\"'));";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liverelations_gix_tags")+"(bbox, tags);";
+		sql = "VACUUM ANALYZE "+c.quote_name(tablePrefix+"liverelations_gix_tags")+"(geom, tags);";
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 	}
-
-	/*if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_tags"))
-	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"livenodes_tags")+" ON "+c.quote_name(tablePrefix+"livenodes")+" USING GIN(tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-
-	if(!DbCheckIndexExists(c, work, tablePrefix+"liveways_tags"))
-	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liveways_tags")+" ON "+c.quote_name(tablePrefix+"liveways")+" USING GIN(tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-
-	if(!DbCheckIndexExists(c, work, tablePrefix+"liverelations_tags"))
-	{
-		sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_tags")+" ON "+c.quote_name(tablePrefix+"liverelations")+" USING GIN(tags);";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}*/
 
 	return ok;
 }
@@ -723,15 +705,6 @@ bool DbDropBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liverelations_gix_tags")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"livenodes_tags")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liveways_tags")+";";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-
-	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"liverelations_tags")+";";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
 	return ok;
