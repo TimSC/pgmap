@@ -200,7 +200,8 @@ int main(int argc, char **argv)
 
 			std::shared_ptr<class PgMapQuery> mapQuery = transaction->GetQueryMgr();
 			int ret = 0;
-			ret = mapQuery->Start(tileBbox, outputFileAndEncoder->enc);
+			int64_t timestamp = 0;
+			ret = mapQuery->Start(tileBbox, timestamp, outputFileAndEncoder->enc);
 			while(ret == 0)
 			{
 				ret = mapQuery->Continue();
