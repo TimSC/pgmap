@@ -80,6 +80,7 @@ int main(int argc, char **argv)
 		("extension", po::value<string>()->default_value(".osm.gz"), "output file extension")
 		("out", po::value<string>()->default_value("."), "path to output")
 	;
+	bool skipExisting = true;
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -193,6 +194,10 @@ int main(int argc, char **argv)
 		for(int y=miny; y <= maxy; y++)
 		{
 			cout << "Tile " << x << "," << y << endl;
+			string outFina = to_string(y)+vm["extension"].as<string>();
+			fs::path outPth = pth2 / outFina;
+			if(skipExisting and fs::exists(outPth))
+				continue;
 
 			shared_ptr<OutputFileAndEncoder> outputFileAndEncoder = CreateOutEncoder(vm["extension"].as<string>(), pth2, zoom, x, y);
 
