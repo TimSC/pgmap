@@ -1,4 +1,5 @@
 #include "dbfilters.h"
+#include <stdexcept>
 using namespace std;
 
 DataStreamRetainIds::DataStreamRetainIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
