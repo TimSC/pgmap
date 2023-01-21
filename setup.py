@@ -49,7 +49,7 @@ pgmap_module = Extension('_pgmap',
 				swig_opts=['-c++', '-DPYTHON_AWARE', '-DSWIGWORDSIZE64'],
 				libraries = ['pqxx', 'expat', 'z', 'boost_filesystem', 'boost_system', 'protobuf', 'boost_iostreams'],
 				language = "c++",
-				extra_compile_args = ["-std=c++11"],
+				extra_compile_args = ["-std=c++11", '-DPY_SSIZE_T_CLEAN'],
 			)
 
 setup (name = 'pgmap',
