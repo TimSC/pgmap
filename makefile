@@ -1,4 +1,4 @@
-cppflags= -std=c++11 -Wall
+cppflags= -std=c++11 -Wall -DPY_SSIZE_T_CLEAN
 
 all: dump extract admin applydiffs osm2csv checkdata
 
@@ -44,11 +44,11 @@ checkdata: checkdata.cpp dbjson.o util.o $(osmdata) $(common)
 
 swigpy2: pgmap.i $(common)
 	swig -python -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
-	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE pgmap_wrap.cxx $(common) ${shell python2-config --includes --libs} $(libs) -o _pgmap.so
+	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE -DPY_SSIZE_T_CLEAN pgmap_wrap.cxx $(common) ${shell python2-config --includes --libs} $(libs) -o _pgmap.so
 
 swigpy3: pgmap.i $(common)
 	swig -python -py3 -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
-	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE pgmap_wrap.cxx $(common) ${shell python3-config --includes --libs} $(libs) -o _pgmap.so
+	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE -DPY_SSIZE_T_CLEAN pgmap_wrap.cxx $(common) ${shell python3-config --includes --libs} $(libs) -o _pgmap.so
 
 quickinit: quickinit.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
