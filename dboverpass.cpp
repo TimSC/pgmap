@@ -29,6 +29,8 @@ std::string DbXapiQueryGenerateSql(pqxx::connection &c, pqxx::transaction_base *
 
 	if(objType == "node")
 		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	else
+		sql += ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
 
 	sql += " FROM "+ objTable;
 

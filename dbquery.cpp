@@ -92,7 +92,7 @@ void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *wo
 			count ++;
 		}
 
-		string sql = "SELECT "+wayTable+".*";
+		string sql = "SELECT "+wayTable+".*, ST_XMin("+wayTable+".bbox) AS bbox_xmin, ST_XMax("+wayTable+".bbox) AS bbox_xmax, ST_YMin("+wayTable+".bbox) AS bbox_ymin, ST_YMax("+wayTable+".bbox) AS bbox_ymax";
 		if(excludeTable.size() > 0)
 			sql += ", "+excludeTable+".id";
 
@@ -140,7 +140,7 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 		count ++;
 	}
 
-	string sql = "SELECT "+relTable+".*";
+	string sql = "SELECT "+relTable+".*, ST_XMin("+relTable+".bbox) AS bbox_xmin, ST_XMax("+relTable+".bbox) AS bbox_xmax, ST_YMin("+relTable+".bbox) AS bbox_ymin, ST_YMax("+relTable+".bbox) AS bbox_ymax";
 	if(excludeTable.size() > 0)
 		sql += ", "+excludeTable+".id";
 
@@ -182,6 +182,8 @@ void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 	std::string sql = "SELECT *";
 	if(objType == "node")
 		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	else
+		sql += ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
 
 	sql += " FROM "+ nodeTable;
 	sql += " WHERE ("+sqlFrags.str()+")";
@@ -227,6 +229,8 @@ void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work,
 	string sql = "SELECT *";
 	if(objType == "node")
 		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	else
+		sql += ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
 	sql += " FROM "+ objTable;
 	sql += " WHERE "+sqlFrags.str();
 	sql += ";";
@@ -271,6 +275,8 @@ void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work,
 	string sql = "SELECT *";
 	if(objType == "node")
 		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	else
+		sql += ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
 	sql += " FROM "+ objTable;
 	sql += " WHERE "+sqlFrags.str();
 	sql += ";";

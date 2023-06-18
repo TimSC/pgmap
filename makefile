@@ -30,6 +30,9 @@ extract: extract.cpp $(common)
 downloadtiles: downloadtiles.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
+downloaddbm: downloaddbm.cpp $(common)
+	g++ $^ $(cppflags) $(libs) -o $@
+
 admin: admin.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 

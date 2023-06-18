@@ -16,6 +16,9 @@ public:
 
 	bool StoreIsDiff(bool);
 	bool StoreBounds(double x1, double y1, double x2, double y2);
+
+	bool StoreBbox(const std::vector<double> &bbox);
+
 	bool StoreNode(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, double lat, double lon);
 	bool StoreWay(int64_t objId, const class MetaData &metaData, 
@@ -37,6 +40,9 @@ public:
 
 	bool StoreIsDiff(bool);
 	bool StoreBounds(double x1, double y1, double x2, double y2);
+
+	bool StoreBbox(const std::vector<double> &bbox);
+
 	bool StoreNode(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, double lat, double lon);
 	bool StoreWay(int64_t objId, const class MetaData &metaData, 
@@ -58,6 +64,9 @@ public:
 
 	virtual bool StoreIsDiff(bool isDiff);
 	virtual bool StoreBounds(double x1, double y1, double x2, double y2);
+
+	virtual bool StoreBbox(const std::vector<double> &bbox);
+
 	virtual bool StoreNode(int64_t objId, const class MetaData &metaData, 
 		const TagMap &tags, double lat, double lon);
 	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 

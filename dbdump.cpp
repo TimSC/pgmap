@@ -58,7 +58,7 @@ void DumpWays(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernam
 	work->exec("set enable_seqscan to off;");
 
 	stringstream sql;
-	sql << "SELECT " << wayTable << ".* FROM ";
+	sql << "SELECT " << wayTable << ".*, ST_XMin(" << wayTable << ".bbox) AS bbox_xmin, ST_XMax(" << wayTable << ".bbox) AS bbox_xmax, ST_YMin(" << wayTable << ".bbox) AS bbox_ymin, ST_YMax(" << wayTable << ".bbox) AS bbox_ymax FROM ";
 	sql << wayTable;
 	if(excludeTable.size() > 0)
 	{
@@ -88,7 +88,7 @@ void DumpRelations(pqxx::connection &c, pqxx::transaction_base *work, class DbUs
 	work->exec("set enable_seqscan to off;");
 
 	stringstream sql;
-	sql << "SELECT " << relationTable << ".* FROM ";
+	sql << "SELECT " << relationTable << ".*, ST_XMin(" << relationTable << ".bbox) AS bbox_xmin, ST_XMax(" << relationTable << ".bbox) AS bbox_xmax, ST_YMin(" << relationTable << ".bbox) AS bbox_ymin, ST_YMax(" << relationTable << ".bbox) AS bbox_ymax FROM ";
 	sql << relationTable;
 	if(excludeTable.size() > 0)
 	{

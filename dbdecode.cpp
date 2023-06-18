@@ -172,6 +172,10 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 
 	int tagsCol = rows.column_number("tags");
 	int membersCol = rows.column_number("members");
+	int bboxXminCol = rows.column_number("bbox_xmin");
+	int bboxXmaxCol = rows.column_number("bbox_xmax");
+	int bboxYminCol = rows.column_number("bbox_ymin");
+	int bboxYmaxCol = rows.column_number("bbox_ymax");
 
 	for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
 
@@ -197,8 +201,22 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 			lastUpdateTime = timeNow;
 		}
 
-		if(enc)
+		vector<double> bbox;
+		try {
+			double bbox_xmin = c[bboxXminCol].as<double>();
+			double bbox_xmax = c[bboxXmaxCol].as<double>();
+			double bbox_ymin = c[bboxYminCol].as<double>();
+			double bbox_ymax = c[bboxYmaxCol].as<double>();
+			bbox = {bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax};
+		}
+		catch (pqxx::conversion_error &err) {
+
+		}
+
+		if(enc) {
+			enc->StoreBbox(bbox);
 			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
+		}
 	}
 	return count;
 }
@@ -240,6 +258,10 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 		int tagsCol = rows.column_number("tags");
 		int membersCol = rows.column_number("members");
 		int membersRolesCol = rows.column_number("memberroles");
+		int bboxXminCol = rows.column_number("bbox_xmin");
+		int bboxXmaxCol = rows.column_number("bbox_xmax");
+		int bboxYminCol = rows.column_number("bbox_ymin");
+		int bboxYmaxCol = rows.column_number("bbox_ymax");
 
 		for (pqxx::result::const_iterator c = rows.begin(); c != rows.end(); ++c) {
 
@@ -274,9 +296,23 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 				lastUpdateTime = timeNow;
 			}
 
-			if(enc)
+			vector<double> bbox;
+			try {
+				double bbox_xmin = c[bboxXminCol].as<double>();
+				double bbox_xmax = c[bboxXmaxCol].as<double>();
+				double bbox_ymin = c[bboxYminCol].as<double>();
+				double bbox_ymax = c[bboxYmaxCol].as<double>();
+				bbox = {bbox_xmin, bbox_ymin, bbox_xmax, bbox_ymax};
+			}
+			catch (pqxx::conversion_error &err) {
+
+			}
+
+			if(enc) {
+				enc->StoreBbox(bbox);
 				enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
 					relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
+			}
 		}
 	}
 }
