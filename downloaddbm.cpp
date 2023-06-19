@@ -5,16 +5,25 @@
 #include "cppo5m/OsmData.h"
 #include "cppo5m/osmxml.h"
 #include "pgmap.h"
+#include "dbjson.h"
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 namespace po = boost::program_options;
 namespace fs = boost::filesystem;
+
+inline string Int64ToStr(int64_t val)
+{
+	stringstream ss;
+	ss << val;
+	return ss.str();
+}
 
 class OutputFileAndEncoder : public IDataStreamHandler
 {
 public:
 	EncodeGzip *gzipEnc;
 	std::filebuf outfi;
+	vector<double> prevBbox;
 
 	OutputFileAndEncoder() : IDataStreamHandler()
 	{
@@ -23,46 +32,181 @@ public:
 
 	virtual ~OutputFileAndEncoder()
 	{
-		if(gzipEnc != nullptr)
-			delete gzipEnc;
-		gzipEnc = nullptr;
-		outfi.close();
+		Finish();
 	}
 
-	virtual bool StoreIsDiff(bool) {
-		cout << "d" << endl;
-		return false;
-	}
-
-	virtual bool StoreBounds(double x1, double y1, double x2, double y2) {
-		cout << "b" << endl;
-		return false;
-	}
-
-	virtual bool StoreBbox(const std::vector<double> &bbox) {
-		if (bbox.size() == 4)
-			cout << "bbox " << bbox[0] << "," << bbox[1] << "," << bbox[2] << "," << bbox[3] << endl;
-		else
-			cout << "null bbox" << endl;
+	virtual bool StoreBbox(const std::vector<double> &bbox) 
+	{
+		prevBbox = bbox;
 		return false;
 	}
 
 	virtual bool StoreNode(int64_t objId, const class MetaData &metaData, 
-		const TagMap &tags, double lat, double lon) {
-		//cout << "n" << endl;
+		const TagMap &tags, double lat, double lon) 
+	{
+		string tagsJson;
+		EncodeTags(tags, tagsJson);
+		StrReplaceAll(tagsJson, "\"", "\"\"");
+		
+		string usernameStr = metaData.username;
+		if(metaData.username.size() > 0)
+		{
+			StrReplaceAll(usernameStr, "\"", "\"\"");
+			usernameStr = "\""+usernameStr+"\"";
+		}
+		else
+			usernameStr = "NULL";
+		string uidStr;
+		if(metaData.uid!=0)
+			uidStr = Int64ToStr(metaData.uid);
+		else
+			uidStr = "NULL";
+		string changesetStr = Int64ToStr(metaData.changeset);
+		if(metaData.changeset==0)
+			changesetStr="NULL";
+		string timestampStr = Int64ToStr(metaData.timestamp);
+		if(metaData.timestamp==0)
+			timestampStr="NULL";
+		string visibleStr = metaData.visible ? "true" : "false";
+		std::string changesetIndex="NULL";
+
+		stringstream ss;
+		ss.precision(9);
+		if(metaData.current and metaData.visible)
+		{
+			ss << "n," << objId <<",1,NULL,"<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
+				timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",NULL,NULL,SRID=4326;POINT("<< fixed << lon<<" "<<lat<<")\n";
+			string row(ss.str());
+			this->gzipEnc->sputn(row.c_str(), row.size());
+		}
+
+		prevBbox.empty();
 		return false;
 	}
 
 	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 
-		const TagMap &tags, const std::vector<int64_t> &refs) {
-		cout << "w" << endl;
+		const TagMap &tags, const std::vector<int64_t> &refs) 
+	{
+		string tagsJson;
+		EncodeTags(tags, tagsJson);
+		StrReplaceAll(tagsJson, "\"", "\"\"");
+		
+		string refsJson;
+		EncodeInt64Vec(refs, refsJson);
+		StrReplaceAll(refsJson, "\"", "\"\"");
+
+		string usernameStr = metaData.username;
+		if(metaData.username.size() > 0)
+		{
+			StrReplaceAll(usernameStr, "\"", "\"\"");
+			usernameStr = "\""+usernameStr+"\"";
+		}
+		else
+			usernameStr = "NULL";
+		string uidStr;
+		if(metaData.uid!=0)
+			uidStr = Int64ToStr(metaData.uid);
+		else
+			uidStr = "NULL";
+		string changesetStr = Int64ToStr(metaData.changeset);
+		if(metaData.changeset==0)
+			changesetStr="NULL";
+		string timestampStr = Int64ToStr(metaData.timestamp);
+		if(metaData.timestamp==0)
+			timestampStr="NULL";
+		string visibleStr = metaData.visible ? "true" : "false";
+		std::string changesetIndex="NULL";
+
+		stringstream ss;
+		if(metaData.current and metaData.visible)
+		{
+			ss << "w," << objId <<",1,NULL,"<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
+				timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",NULL,";
+		
+			if (prevBbox.size() == 4)
+			{
+				ss << "\"SRID=4326;POLYGON((" << fixed << prevBbox[0] << " " << prevBbox[1] << "," << prevBbox[2] << " " << prevBbox[1] << ","; 
+				ss << prevBbox[2] << " " << prevBbox[3] << "," << prevBbox[0] << " " << prevBbox[3] << "," << prevBbox[0] << " " << prevBbox[1] << "))\"\n";
+			}
+			else
+				ss << "NULL\n";
+
+			string row(ss.str());
+			this->gzipEnc->sputn(row.c_str(), row.size());
+		}
+
+		prevBbox.empty();
 		return false;
 	}
 
 	virtual bool StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
 		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-		const std::vector<std::string> &refRoles) {
-		cout << "r" << endl;
+		const std::vector<std::string> &refRoles) 
+	{
+
+		string tagsJson;
+		EncodeTags(tags, tagsJson);
+		StrReplaceAll(tagsJson, "\"", "\"\"");
+		
+		string refsJson;
+		EncodeRelationMems(refTypeStrs, refIds, refsJson);
+		StrReplaceAll(refsJson, "\"", "\"\"");
+
+		string refRolesJson;
+		EncodeStringVec(refRoles, refRolesJson);
+		StrReplaceAll(refRolesJson, "\"", "\"\"");
+
+		string usernameStr = metaData.username;
+		if(metaData.username.size() > 0)
+		{
+			StrReplaceAll(usernameStr, "\"", "\"\"");
+			usernameStr = "\""+usernameStr+"\"";
+		}
+		else
+			usernameStr = "NULL";
+		string uidStr;
+		if(metaData.uid!=0)
+			uidStr = Int64ToStr(metaData.uid);
+		else
+			uidStr = "NULL";
+		string changesetStr = Int64ToStr(metaData.changeset);
+		if(metaData.changeset==0)
+			changesetStr="NULL";
+		string timestampStr = Int64ToStr(metaData.timestamp);
+		if(metaData.timestamp==0)
+			timestampStr="NULL";
+		string visibleStr = metaData.visible ? "true" : "false";
+		std::string changesetIndex="NULL";
+		
+		stringstream ss;
+		if(metaData.current and metaData.visible)
+		{
+			ss << "r," << objId <<",1,NULL,"<< changesetStr <<","<< changesetIndex <<","<< usernameStr <<","<< uidStr <<","<< \
+				timestampStr <<","<< metaData.version <<",\"" << tagsJson << "\",\""<<refsJson<<"\",\""<<refRolesJson<<"\",";
+		
+			if (prevBbox.size() == 4)
+			{
+				ss << "\"SRID=4326;POLYGON((" << fixed << prevBbox[0] << " " << prevBbox[1] << "," << prevBbox[2] << " " << prevBbox[1] << ","; 
+				ss << prevBbox[2] << " " << prevBbox[3] << "," << prevBbox[0] << " " << prevBbox[3] << "," << prevBbox[0] << " " << prevBbox[1] << "))\"\n";
+			}
+			else
+				ss << "NULL\n";
+
+			string row(ss.str());
+			this->gzipEnc->sputn(row.c_str(), row.size());
+		}
+
+		prevBbox.empty();
+		return false;
+	}
+
+	virtual bool Finish()
+	{
+		if(gzipEnc != nullptr)
+			delete gzipEnc;
+		gzipEnc = nullptr;
+		outfi.close();
+
 		return false;
 	}
 };
