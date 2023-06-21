@@ -50,7 +50,9 @@ void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, cla
 	work->exec("set enable_seqscan to off;");
 
 	stringstream sql;
-	sql << "SELECT " << wayTable << ".* FROM ";
+	sql << "SELECT " << wayTable << ".*";
+	sql << ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
+	sql << " FROM ";
 	sql << wayTable;
 	sql << " WHERE timestamp > " << timestampStart << " AND timestamp <= " << timestampEnd;
 	sql << " ORDER BY " << wayTable << ".timestamp;";
@@ -83,7 +85,9 @@ void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work
 	work->exec("set enable_seqscan to off;");
 
 	stringstream sql;
-	sql << "SELECT " << relationTable << ".* FROM ";
+	sql << "SELECT " << relationTable << ".*";
+	sql << ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
+	sql << " FROM ";
 	sql << relationTable;
 	sql << " WHERE timestamp > " << timestampStart << " AND timestamp <= " << timestampEnd;
 	sql << " ORDER BY " << relationTable << ".timestamp;";
