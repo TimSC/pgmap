@@ -12,7 +12,7 @@ std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c
 {
 	if(bbox.size() != 4)
 		throw invalid_argument("Bbox has wrong length");
-	string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
+	/*string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
@@ -31,6 +31,16 @@ std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c
 	if(existsAtTimestamp != 0)
 		sql << " AND timestamp <= " << existsAtTimestamp;
 	sql <<";";
+
+	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));*/
+
+	stringstream sql;
+	sql.precision(9);
+	sql << "SELECT live.*, ST_X(live.geom) as lon, ST_Y(live.geom) AS lat";
+	sql << " FROM live";
+	sql << " WHERE live.geom && ST_MakeEnvelope(";
+	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
+	sql << " AND type='n'";
 
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
 }
@@ -166,15 +176,13 @@ void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc)
 {
-	string nodeTable = c.quote_name(tablePrefix + "visible" +objType+ "s");
-
 	stringstream sqlFrags;
 	int count = 0;
 	for(; it != objIds.end() && count < step; it++)
 	{
 		if(count >= 1)
 			sqlFrags << " OR ";
-		sqlFrags << nodeTable << ".id = " << *it;
+		sqlFrags << "id = " << *it;
 		count ++;
 	}
 	if(count == 0) return;
@@ -183,10 +191,10 @@ void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 	if(objType == "node")
 		sql += ", ST_X(geom) as lon, ST_Y(geom) AS lat";
 	else
-		sql += ", ST_XMin(bbox) AS bbox_xmin, ST_XMax(bbox) AS bbox_xmax, ST_YMin(bbox) AS bbox_ymin, ST_YMax(bbox) AS bbox_ymax";
+		sql += ", ST_XMin(geom) AS bbox_xmin, ST_XMax(geom) AS bbox_xmax, ST_YMin(geom) AS bbox_ymin, ST_YMax(geom) AS bbox_ymax";
 
-	sql += " FROM "+ nodeTable;
-	sql += " WHERE ("+sqlFrags.str()+")";
+	sql += " FROM live";
+	sql += " WHERE type='" + string(objType[0], 1) + "' AND ("+sqlFrags.str()+")";
 	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "objcursor", 1000 );	

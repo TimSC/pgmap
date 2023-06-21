@@ -23,7 +23,7 @@ std::string DbXapiQueryGenerateSql(pqxx::connection &c, pqxx::transaction_base *
 	const std::string &tagValue,
 	const std::vector<double> &bbox)
 {
-	string objTable = c.quote_name(tablePrefix+"visible"+objType+"s");
+/*&	string objTable = c.quote_name(tablePrefix+"visible"+objType+"s");
 
 	string sql = "SELECT *";
 
@@ -75,9 +75,24 @@ std::string DbXapiQueryGenerateSql(pqxx::connection &c, pqxx::transaction_base *
 		sql += ")";
 	}
 
-	sql += ";";
+	sql += ";";*/
 
-	return sql;
+	stringstream sql;
+	sql.precision(9);
+	sql << "SELECT live.*";
+	if(objType == "node")
+		sql << ", ST_X(geom) as lon, ST_Y(geom) AS lat";
+	else
+		sql << ", ST_XMin(geom) AS bbox_xmin, ST_XMax(geom) AS bbox_xmax, ST_YMin(geom) AS bbox_ymin, ST_YMax(geom) AS bbox_ymax";
+	sql << " FROM live";
+	if(bbox.size() == 4) 
+	{
+		sql << " WHERE live.geom && ST_MakeEnvelope(";
+		sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
+	}
+	sql << " AND type='" << objType[0] << "'";
+
+	return sql.str();
 }
 
 

@@ -95,7 +95,7 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 	int idCol = rows.column_number("id");
 	metaDataCols.changesetCol = rows.column_number("changeset");
 	metaDataCols.usernameCol = rows.column_number("username");
-	metaDataCols.uidCol = rows.column_number("uid");
+	metaDataCols.uidCol = rows.column_number("userid");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
 	metaDataCols.visibleCol = -1;
@@ -116,12 +116,12 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 		double lon = atof(c[lonCol].c_str());
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		if(&usernames != nullptr)
+		/*if(&usernames != nullptr)
 		{
 			string username = usernames.Find(metaData.uid);
 			if(username.length() > 0)
 				metaData.username = username;
-		}
+		}*/
 	
 		DecodeTags(c, tagsCol, tagHandler);
 		count ++;
@@ -160,7 +160,7 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 	int idCol = rows.column_number("id");
 	metaDataCols.changesetCol = rows.column_number("changeset");
 	metaDataCols.usernameCol = rows.column_number("username");
-	metaDataCols.uidCol = rows.column_number("uid");
+	metaDataCols.uidCol = rows.column_number("userid");
 	metaDataCols.timestampCol = rows.column_number("timestamp");
 	metaDataCols.versionCol = rows.column_number("version");
 	metaDataCols.visibleCol = -1;
@@ -182,12 +182,12 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 		int64_t objId = c[idCol].as<int64_t>();
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		if(&usernames != nullptr)
+		/*if(&usernames != nullptr)
 		{
 			string username = usernames.Find(metaData.uid);
 			if(username.length() > 0)
 				metaData.username = username;
-		}
+		}*/
 
 		DecodeTags(c, tagsCol, tagHandler);
 
@@ -245,7 +245,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 		int idCol = rows.column_number("id");
 		metaDataCols.changesetCol = rows.column_number("changeset");
 		metaDataCols.usernameCol = rows.column_number("username");
-		metaDataCols.uidCol = rows.column_number("uid");
+		metaDataCols.uidCol = rows.column_number("userid");
 		metaDataCols.timestampCol = rows.column_number("timestamp");
 		metaDataCols.versionCol = rows.column_number("version");
 		metaDataCols.visibleCol = -1;
@@ -270,12 +270,12 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 				continue;
 
 			DecodeMetadata(c, metaDataCols, metaData);
-			if(&usernames != nullptr)
+			/*if(&usernames != nullptr)
 			{
 				string username = usernames.Find(metaData.uid);
 				if(username.length() > 0)
 					metaData.username = username;
-			}
+			}*/
 			
 			DecodeTags(c, tagsCol, tagHandler);
 

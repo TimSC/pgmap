@@ -44,8 +44,9 @@ bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &pr
 	{
 		//It is important resources are locked in a consistent order to avoid deadlock
 		//Also, lock everything in one command to get a consistent view of the data.
-		string sql = "LOCK TABLE "+prefix+ "oldnodes";
-		sql += ","+prefix+ "oldways";
+
+		string sql = "LOCK TABLE live";
+		/*sql += ","+prefix+ "oldways";
 		sql += ","+prefix+ "oldrelations";
 		sql += ","+prefix+ "livenodes";
 		sql += ","+prefix+ "liveways";
@@ -64,7 +65,7 @@ bool LockMap(std::shared_ptr<pqxx::transaction_base> work, const std::string &pr
 		sql += ","+prefix+ "meta";
 		sql += ","+prefix+ "usernames";
 		sql += ","+prefix+ "query_activity";
-		sql += ","+prefix+ "edit_activity";
+		sql += ","+prefix+ "edit_activity";*/
 		sql += " IN "+accessMode+" MODE;";
 
 		work->exec(sql);
@@ -136,7 +137,7 @@ PgMapQuery::PgMapQuery(const string &tableStaticPrefixIn,
 
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
-	useBboxInQuery = 0;
+	useBboxInQuery = true;
 }
 
 PgMapQuery::~PgMapQuery()
@@ -166,29 +167,14 @@ int PgMapQuery::StartCommon(const vector<double> &bbox, int64_t timestamp, std::
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	//Check if bbox data has been enabled for ways and relations
-	string errStrNative;
-	string useBboxInQueryStr;
-	try
-	{
-		useBboxInQueryStr = DbGetMetaValue(*dbconn, work.get(),
-			"useBboxInQuery", 
-			this->tableActivePrefix,
-			errStrNative);
-	}
-	catch(runtime_error &err)
-	{		
-	}
-	this->useBboxInQuery = atoi(useBboxInQueryStr.c_str()) == 1;
-
-	string errStr;
+	/*string errStr;
 	bool ok = DbInsertQueryActivity(*dbconn, work.get(), this->tableActivePrefix,
 		timestamp,
 		bbox,
 		errStr,
 		0);
 	if (!ok)
-		cout << errStr << endl;
+		cout << errStr << endl;*/
 
 	return 0;
 }
@@ -284,7 +270,7 @@ int PgMapQuery::Continue()
 	{
 		//Get way objects that reference these nodes
 		//Keep the way object IDs in memory until we have finished encoding nodes
-		if(!useBboxInQuery)
+		/*if(!useBboxInQuery)
 		{
 			GetLiveWaysThatContainNodes(*dbconn, work.get(), this->dbUsernameLookup,
 				this->tableStaticPrefix, this->tableActivePrefix, retainNodeIds->nodeIds, retainWayMemIds);
@@ -293,7 +279,7 @@ int PgMapQuery::Continue()
 				this->tableActivePrefix, "", retainNodeIds->nodeIds, retainWayMemIds);
 		}
 		else
-		{
+		{*/
 			DbXapiQueryObjVisible(*dbconn, work.get(), 
 				this->dbUsernameLookup, 
 				this->tableActivePrefix, 
@@ -302,7 +288,7 @@ int PgMapQuery::Continue()
 				"",
 				this->mapQueryBbox, 
 				retainWayMemIds);
-		}
+		//}
 
 		cout << "Found " << this->retainWayIds->wayIds.size() << " ways depend on " << retainWayMemIds->nodeIds.size() << " nodes" << endl;
 
@@ -326,6 +312,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 7)
 	{
+		//Get nodes objs needed to complete ways
 		if(this->setIterator != this->extraNodes.end())
 		{
 			GetVisibleObjectsById(*dbconn, work.get(), this->dbUsernameLookup,
