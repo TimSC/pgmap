@@ -312,7 +312,7 @@ int PgMapQuery::Continue()
 
 	if(this->mapQueryPhase == 7)
 	{
-		//Get nodes objs needed to complete ways
+		//Get nodes objs needed to complete ways and write to output
 		if(this->setIterator != this->extraNodes.end())
 		{
 			GetVisibleObjectsById(*dbconn, work.get(), this->dbUsernameLookup,
@@ -335,7 +335,8 @@ int PgMapQuery::Continue()
 	//Step 8 simplified out
 
 	if(this->mapQueryPhase == 9)
-	{		
+	{	
+		//Write way objects to output based on previously found way ID numbers
 		if(this->setIterator != this->retainWayIds->wayIds.end())
 		{
 			GetVisibleObjectsById(*dbconn, work.get(), this->dbUsernameLookup,

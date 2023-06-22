@@ -194,7 +194,7 @@ void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 		sql += ", ST_XMin(geom) AS bbox_xmin, ST_XMax(geom) AS bbox_xmax, ST_YMin(geom) AS bbox_ymin, ST_YMax(geom) AS bbox_ymax";
 
 	sql += " FROM live";
-	sql += " WHERE type='" + string(objType[0], 1) + "' AND ("+sqlFrags.str()+")";
+	sql += " WHERE type='" + objType.substr(0, 1) + "' AND ("+sqlFrags.str()+")";
 	sql += ";";
 
 	pqxx::icursorstream cursor( *work, sql, "objcursor", 1000 );	
