@@ -3,10 +3,10 @@ cppflags= -std=c++11 -Wall -DPY_SSIZE_T_CLEAN
 all: dump extract admin applydiffs osm2csv checkdata
 
 %.co: %.c %.h
-	gcc -Wall -fPIC -c -o $@ $<
+	gcc -Wall -fPIC -c -g -o $@ $<
 
 %.o: %.cpp %.h
-	g++ $(cppflags) -fPIC -c -o $@ $<
+	g++ $(cppflags) -fPIC -g -c -o $@ $<
 
 common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
 	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o dbusername.o \

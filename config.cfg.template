@@ -2,6 +2,7 @@ dbname:db_map
 dbhost:127.0.0.1
 dbuser:pycrocosm
 dbpass:k8AY^p$Ytnrh
+dbtablespace:
 dbtableprefix:planet_static_
 dbtablemodifyprefix:pycrocosm_mod_
 dbtabletestprefix:pycrocosm_test_

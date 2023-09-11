@@ -100,7 +100,7 @@ int main(int argc, char **argv)
 	
 	string cstr = GeneratePgConnectionString(config);
 	
-	class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+	class PgMap pgMap(cstr, config["dbtablespace"], config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 
 	if (pgMap.Ready()) {
 		cout << "Opened database successfully" << endl;

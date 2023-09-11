@@ -16,6 +16,26 @@
 using namespace std;
 using namespace boost::filesystem;
 
+bool SetTableSpace(pqxx::connection &c, pqxx::transaction_base *work, const string &tableSpace, std::string &errStr)
+{
+	try
+	{
+		string deleteSql = "SET default_tablespace = "+ c.quote_name(tableSpace) + ";";
+		work->exec(deleteSql);
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
+
 bool ClearTable(pqxx::connection &c, pqxx::transaction_base *work, const string &tableName, std::string &errStr)
 {
 	try

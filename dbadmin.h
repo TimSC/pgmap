@@ -5,6 +5,9 @@
 #include <string>
 #include "pgcommon.h"
 
+bool SetTableSpace(pqxx::connection &c, pqxx::transaction_base *work, 
+	const std::string &tableSpace, std::string &errStr);
+
 bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tableActivePrefix, 
 	const std::string &tableStaticPrefix,

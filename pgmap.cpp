@@ -1910,17 +1910,24 @@ void PgAdmin::Abort()
 
 // **********************************************
 
-PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
+PgMap::PgMap(const string &connection, 
+	const string &tableSpaceIn, 
+	const string &tableStaticPrefixIn, 
 	const string &tableActivePrefixIn,
 	const string &tableModPrefixIn,
 	const string &tableTestPrefixIn)
 {
 	dbconn.reset(new pqxx::connection(connection));
 	connectionString = connection;
+	tableSpace = tableSpaceIn;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
+
+	std::string errStr;
+	pqxx::nontransaction nontrans(*dbconn);
+	bool ok = SetTableSpace(*dbconn, &nontrans, tableSpace, errStr);
 }
 
 PgMap::~PgMap()

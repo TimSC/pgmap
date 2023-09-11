@@ -32,10 +32,12 @@ int main(int argc, char **argv)
 	cout << "Reading settings from config.cfg" << endl;
 	std::map<string, string> config;
 	ReadSettingsFile("config.cfg", config);
+	if (config.find("dbtablespace") == config.end())
+		config["dbtablespace"] = "";
 	
 	string cstr = GeneratePgConnectionString(config);
 	
-	class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+	class PgMap pgMap(cstr, config["dbtablespace"], config["dbtableprefix"], config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 
 	if (pgMap.Ready()) {
 		cout << "Opened database successfully" << endl;
@@ -261,7 +263,7 @@ int main(int argc, char **argv)
 
 		if(inputStr == "b")
 		{
-			class PgMap pgMap2(cstr, config["dbtableprefix"], config["dbtabletestprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+			class PgMap pgMap2(cstr, config["dbtablespace"], config["dbtableprefix"], config["dbtabletestprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 			std::shared_ptr<class PgTransaction> pgTransaction = pgMap2.GetTransaction("EXCLUSIVE");
 			bool ok = pgTransaction->ResetActiveTables(errStr);
 

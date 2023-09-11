@@ -311,7 +311,7 @@ int main(int argc, char **argv)
 			ReadSettingsFile("config.cfg", config);
 
 			string cstr = GeneratePgConnectionString(config);
-			class PgMap pgMap(cstr, config["dbtableprefix"], config["dbtablemodifyprefix"], 
+			class PgMap pgMap(cstr, config["dbtablespace"], config["dbtableprefix"], config["dbtablemodifyprefix"], 
 				config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 
 			transaction = pgMap.GetTransaction("ACCESS SHARE");

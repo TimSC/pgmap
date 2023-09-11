@@ -223,6 +223,7 @@ class PgMap
 {
 private:
 	std::shared_ptr<pqxx::connection> dbconn;
+	std::string tableSpace;
 	std::string tableStaticPrefix;
 	std::string tableActivePrefix;
 	std::string tableModPrefix;
@@ -231,7 +232,9 @@ private:
 	std::shared_ptr<class PgWork> sharedWork;
 
 public:
-	PgMap(const std::string &connection, const std::string &tableStaticPrefixIn, 
+	PgMap(const std::string &connection, 
+		const std::string &tableSpaceIn, 
+		const std::string &tableStaticPrefixIn, 
 		const std::string &tableActivePrefixIn,
 		const std::string &tableModPrefixIn,
 		const std::string &tableTestPrefixIn);
