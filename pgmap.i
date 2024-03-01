@@ -74,6 +74,7 @@ namespace std {
 %shared_ptr(OsmXmlDecode)
 %shared_ptr(OsmXmlEncode)
 %shared_ptr(OsmChangeXmlEncode)
+%shared_ptr(OsmFilterRenumber)
 
 %shared_ptr(DeduplicateOsm)
 
