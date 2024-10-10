@@ -56,9 +56,7 @@ std::string DbUsernameLookup::Find(int uid)
 
 	if(tableActiveExists)
 	{
-		pqxx::prepare::invocation invoc = work->prepared(this->tableActivePrefix+"getusername");
-		invoc(uid);
-		pqxx::result result = invoc.exec();
+		pqxx::result result = work->exec_prepared(this->tableActivePrefix+"getusername", uid);
 		for (pqxx::result::const_iterator ci = result.begin(); ci != result.end(); ++ci)
 		{
 			string username = ci[0].as<string>();
@@ -70,9 +68,7 @@ std::string DbUsernameLookup::Find(int uid)
 
 	if(tableStaticExists)
 	{
-		pqxx::prepare::invocation invoc = work->prepared(this->tableStaticPrefix+"getusername");
-		invoc(uid);
-		pqxx::result result = invoc.exec();
+		pqxx::result result = work->exec_prepared(this->tableStaticPrefix+"getusername", uid);
 		for (pqxx::result::const_iterator ci = result.begin(); ci != result.end(); ++ci)
 		{
 			string username = ci[0].as<string>();
@@ -100,18 +96,12 @@ void DbUpsertUsernamePrepare(pqxx::connection &c, pqxx::transaction_base *work, 
 void DbUpsertUsername(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	int uid, const std::string &username)
 {
-	pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updateusername");
-	invoc(uid);
-	invoc(username);
-	pqxx::result result = invoc.exec();
+	pqxx::result result = work->exec_prepared(tablePrefix+"updateusername", uid, username);
 	int rowsAffected = result.affected_rows();
 
 	if(rowsAffected == 0)
 	{
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertusername");
-		invoc(uid);
-		invoc(username);
-		invoc.exec();
+		work->exec_prepared(tablePrefix+"insertusername", uid, username);
 	}
 }
 

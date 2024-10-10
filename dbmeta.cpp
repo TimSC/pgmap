@@ -22,7 +22,7 @@ std::string DbGetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	string prepkey = metaTable+"get"+key;
 	c.prepare(prepkey, sql.str());
 
-	pqxx::result r = work->prepared(prepkey)(key).exec();
+	pqxx::result r = work->exec_prepared(prepkey, key);
 	int valueCol = r.column_number("value");	
 	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
 	{
@@ -49,7 +49,7 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	string prepkey = metaTable+"update"+key;
 	c.prepare(prepkey, sql.str());
 
-	pqxx::result r = work->prepared(prepkey)(key)(value).exec();
+	pqxx::result r = work->exec_prepared(prepkey, key, value);
 
 	if(r.affected_rows() == 0)
 	{
@@ -59,7 +59,7 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 		string prepkey2 = metaTable+"insert"+key;
 		c.prepare(prepkey2, sql2.str());
 
-		pqxx::result r = work->prepared(prepkey2)(key)(value).exec();
+		pqxx::result r = work->exec_prepared(prepkey2, key, value);
 		if(r.affected_rows() != 1)
 			throw runtime_error("Setting metadata should have updated a single row");
 	}

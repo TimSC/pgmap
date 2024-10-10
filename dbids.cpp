@@ -75,7 +75,13 @@ bool SetNextIdValue(pqxx::connection &c,
 	ss << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << "(id, maxid) VALUES ($1, $2);";
 
 	c.prepare(tablePrefix+"setnextId", ss.str());
-	work->prepared(tablePrefix+"setnextId")(objType)(value).exec();
+
+	pqxx::params params;
+	params.reserve(2);
+	params.append(objType);
+	params.append(value);
+
+	work->exec_prepared(tablePrefix+"setnextId", params);
 	return true;
 }
 

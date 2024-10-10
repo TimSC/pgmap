@@ -83,7 +83,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			if(verbose >= 1)
 				cout << checkExistingLiveSql << " " << objId << endl;
 			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
-			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
+
+			r = work->exec_prepared(tablePrefix+"checkobjexists"+typeStr, objId);
 		}
 		catch (const pqxx::sql_error &e)
 		{
@@ -112,7 +113,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			if(verbose >= 1)
 				cout << checkExistingOldSql << " " << objId << endl;
 			c.prepare(tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
-			r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
+			r2 = work->exec_prepared(tablePrefix+"checkoldobjexists"+typeStr, objId);
 		}
 		catch (const pqxx::sql_error &e)
 		{
@@ -145,7 +146,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				if(verbose >= 1)
 					cout << deletedLiveSql << " " << objId << endl;
 				c.prepare(tablePrefix+"deletelive"+typeStr, deletedLiveSql);
-				work->prepared(tablePrefix+"deletelive"+typeStr)(objId).exec();
+				work->exec_prepared(tablePrefix+"deletelive"+typeStr, objId);
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -189,19 +190,19 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldnode", ss.str());
 
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["geom"]);
+					pqxx::params params;
+					BindVal<int64_t>(params, row["id"]);
+					BindVal<int64_t>(params, row["changeset"]);
+					BindVal<int64_t>(params, row["changeset_index"]);
+					BindVal<string>(params, row["username"]);
+					BindVal<int64_t>(params, row["uid"]);
+					BindVal<int64_t>(params, row["timestamp"]);
+					BindVal<int64_t>(params, row["version"]);
+					BindVal<string>(params, row["tags"]);
+					params.append(true);
+					BindVal<string>(params, row["geom"]);
 
-					invoc.exec();
+					work->exec_prepared(tablePrefix+"copyoldnode", params);
 				}
 				else if(wayObject != nullptr)
 				{
@@ -209,19 +210,19 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldway", ss.str());
 
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["members"]);
+					pqxx::params params;
+					BindVal<int64_t>(params, row["id"]);
+					BindVal<int64_t>(params, row["changeset"]);
+					BindVal<int64_t>(params, row["changeset_index"]);
+					BindVal<string>(params, row["username"]);
+					BindVal<int64_t>(params, row["uid"]);
+					BindVal<int64_t>(params, row["timestamp"]);
+					BindVal<int64_t>(params, row["version"]);
+					BindVal<string>(params, row["tags"]);
+					params.append(true);
+					BindVal<string>(params, row["members"]);
 
-					invoc.exec();
+					work->exec_prepared(tablePrefix+"copyoldway");
 				}
 				else if(relationObject != nullptr)
 				{
@@ -229,20 +230,20 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"copyoldrelation", ss.str());
 	
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["members"]);
-					BindVal<string>(invoc, row["memberroles"]);
+					pqxx::params params;
+					BindVal<int64_t>(params, row["id"]);
+					BindVal<int64_t>(params, row["changeset"]);
+					BindVal<int64_t>(params, row["changeset_index"]);
+					BindVal<string>(params, row["username"]);
+					BindVal<int64_t>(params, row["uid"]);
+					BindVal<int64_t>(params, row["timestamp"]);
+					BindVal<int64_t>(params, row["version"]);
+					BindVal<string>(params, row["tags"]);
+					params.append(true);
+					BindVal<string>(params, row["members"]);
+					BindVal<string>(params, row["memberroles"]);
 
-					invoc.exec();
+					work->exec_prepared(tablePrefix+"copyoldrelation");
 				}
 			}
 			catch (const pqxx::sql_error &e)
@@ -311,25 +312,25 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertnode", ss.str());
-						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
+						work->exec_prepared(tablePrefix+"insertnode", objId, osmObject->metaData.changeset,osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, wkt.str());
 					}
 					else if(wayObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertway", ss.str());
-						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson).exec();
+						work->exec_prepared(tablePrefix+"insertway", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, refsJson);
 					}
 					else if(relationObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"insertrelation", ss.str());
-						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-							(tagsJson)(refsJson)(rolesJson).exec();
+						work->exec_prepared(tablePrefix+"insertrelation", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+							tagsJson, refsJson, rolesJson);
 					}
 				}
 				catch (const pqxx::sql_error &e)
@@ -352,7 +353,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 				if(ocdnSupported)
 				{
-					work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+					work->exec_prepared(tablePrefix+"insert"+typeStr+"ids", objId);
 				}
 				else
 				{
@@ -361,7 +362,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					stringstream ssi2;
 					ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
 					c.prepare(tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
-					pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
+					pqxx::result r = work->exec_prepared(tablePrefix+"insert"+typeStr+"idexists", objId);
 					
 					if(r.size() == 0)
 						throw runtime_error("No data returned from db unexpectedly");
@@ -370,7 +371,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 					//Insert id value if not already in table
 					if(count == 0)
-						work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+						work->exec_prepared(tablePrefix+"insert"+typeStr+"ids", objId);
 				}
 			}
 			else
@@ -401,25 +402,25 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updatenode", ss.str());
-						work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
+						work->exec_prepared(tablePrefix+"updatenode", osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, objId, wkt.str());
 					}
 					else if(wayObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updateway", ss.str());
-						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson).exec();
+						work->exec_prepared(tablePrefix+"updateway", osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, objId, refsJson);
 					}
 					else if(relationObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						c.prepare(tablePrefix+"updaterelation", ss.str());
-						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-							(tagsJson)(objId)(refsJson)(rolesJson).exec();
+						work->exec_prepared(tablePrefix+"updaterelation", osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+							tagsJson, objId, refsJson, rolesJson);
 					}
 
 				}
@@ -480,27 +481,27 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"insertoldnode", ss.str());
-					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(wkt.str()).exec();
+					work->exec_prepared(tablePrefix+"insertoldnode", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+						tagsJson, osmObject->metaData.visible, wkt.str());
 				}
 				else if(wayObject != nullptr)
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"insertoldway", ss.str());
-					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(refsJson).exec();
+					work->exec_prepared(tablePrefix+"insertoldway", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+						tagsJson, osmObject->metaData.visible, refsJson);
 				}
 				else if(relationObject != nullptr)
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					c.prepare(tablePrefix+"insertoldrelation", ss.str());
-					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(refsJson)(rolesJson).exec();
+					work->exec_prepared(tablePrefix+"insertoldrelation", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+						tagsJson, osmObject->metaData.visible, refsJson, rolesJson);
 				}
 
 			}
@@ -527,7 +528,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			c.prepare(tablePrefix+"insert"+typeStr+"ids2", ssi.str());
 			if(ocdnSupported)
 			{
-				work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
+				work->exec_prepared(tablePrefix+"insert"+typeStr+"ids2", objId);
 			}
 			else
 			{
@@ -536,7 +537,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				stringstream ssi2;
 				ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
 				c.prepare(tablePrefix+"insert"+typeStr+"idexists2", ssi2.str());
-				pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists2")(objId).exec();
+				pqxx::result r = work->exec_prepared(tablePrefix+"insert"+typeStr+"idexists2", objId);
 			
 				if(r.size() == 0)
 					throw runtime_error("No data returned from db unexpectedly");
@@ -545,7 +546,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 				//Insert id value if not already in table
 				if(count == 0)
-					work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
+					work->exec_prepared(tablePrefix+"insert"+typeStr+"ids2", objId);
 			}
 		}
 
@@ -741,7 +742,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 
 int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &wayIds,
-    int verbose,
+	int verbose,
 	const std::string &tablePrefix, 
 	std::string &errStr)
 {
@@ -760,7 +761,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 			string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
 			//cout << sql << endl;
 
-			work->exec(sql);
+			work->exec(sql, "UpdateWayBboxesById1");
 
 			sqlFrags.str("");
 			count = 0;
@@ -772,7 +773,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
 		//cout << sql << endl;
 
-		work->exec(sql);
+		work->exec(sql, "UpdateWayBboxesById2");
 	}
 
 	return 0;	
@@ -846,7 +847,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		if(verbose >= 2) cout << sql.str() << endl;
 
 		conn.prepare(tablePrefix+"update_relation_bbox", sql.str());
-		work->prepared(tablePrefix+"update_relation_bbox")(outerBbox[0])(outerBbox[1])(outerBbox[2])(outerBbox[3])(rel.objId).exec();
+		work->exec_prepared(tablePrefix+"update_relation_bbox", outerBbox[0], outerBbox[1], outerBbox[2], outerBbox[3], rel.objId);
 	}
 	else
 	{
@@ -854,13 +855,13 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<rel.objId<<";";
 		if(verbose >= 2) cout << sql.str() << endl;
 
-		work->exec(sql);
+		work->exec(sql, "UpdateSingleRelation");
 	}
 }
 
 int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *work,
 	const std::set<int64_t> &objectIds,
-    int verbose,
+	int verbose,
 	const std::string &tablePrefix, 
 	std::string &errStr)
 {

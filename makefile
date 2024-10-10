@@ -1,4 +1,4 @@
-cppflags= -std=c++11 -Wall -DPY_SSIZE_T_CLEAN
+cppflags= -std=c++17 -Wall -DPY_SSIZE_T_CLEAN
 
 all: dump extract admin applydiffs osm2csv checkdata
 

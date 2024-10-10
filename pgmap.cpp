@@ -1929,7 +1929,6 @@ PgMap::~PgMap()
 		this->sharedWork->work.reset();
 	this->sharedWork.reset();
 
-	dbconn->disconnect();
 	dbconn.reset();
 }
 

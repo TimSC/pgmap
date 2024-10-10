@@ -333,46 +333,46 @@ bool InsertChangesetInDb(pqxx::connection &c,
 	{
 		c.prepare(tablePrefix+"insertchangeset", ss.str());
 
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertchangeset");
-		invoc(changeset.objId);
+		pqxx::params params;
+		params.append(changeset.objId);
 		if(changeset.username.size() > 0)
-			invoc(changeset.username);
+			params.append(changeset.username);
 		else
-			invoc();
+			params.append();
 		if(changeset.uid != 0)
-			invoc(changeset.uid);
+			params.append(changeset.uid);
 		else
-			invoc();
+			params.append();
 
 		string tagJson;
 		EncodeTags(changeset.tags, tagJson);
-		invoc(tagJson);
+		params.append(tagJson);
 
 		if(changeset.open_timestamp != 0)
-			invoc(changeset.open_timestamp);
+			params.append(changeset.open_timestamp);
 		else
-			invoc();
+			params.append();
 		if(changeset.close_timestamp != 0)
-			invoc(changeset.close_timestamp);
+			params.append(changeset.close_timestamp);
 		else
-			invoc();
-		invoc(changeset.is_open);
+			params.append();
+		params.append(changeset.is_open);
 		if(changeset.bbox_set)
 		{
-			invoc(changeset.x1);
-			invoc(changeset.y1);
-			invoc(changeset.x2);
-			invoc(changeset.y2);
+			params.append(changeset.x1);
+			params.append(changeset.y1);
+			params.append(changeset.x2);
+			params.append(changeset.y2);
 		}
 		else
 		{
-			invoc();
-			invoc();
-			invoc();
-			invoc();
+			params.append();
+			params.append();
+			params.append();
+			params.append();
 		}
 
-		invoc.exec();
+		work->exec_prepared(tablePrefix+"insertchangeset", params);
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -404,32 +404,32 @@ int UpdateChangesetInDb(pqxx::connection &c,
 	{
 		c.prepare(tablePrefix+"updatechangeset", ss.str());
 
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatechangeset");
-		invoc(changeset.username);
-		invoc(changeset.uid);
+		pqxx::params params;
+		params.append(changeset.username);
+		params.append(changeset.uid);
 		string tagJson;
 		EncodeTags(changeset.tags, tagJson);
-		invoc(tagJson);
-		invoc(changeset.open_timestamp);
-		invoc(changeset.close_timestamp);
-		invoc(changeset.is_open);
+		params.append(tagJson);
+		params.append(changeset.open_timestamp);
+		params.append(changeset.close_timestamp);
+		params.append(changeset.is_open);
 		if(changeset.bbox_set)
 		{
-			invoc(changeset.x1);
-			invoc(changeset.y1);
-			invoc(changeset.x2);
-			invoc(changeset.y2);
+			params.append(changeset.x1);
+			params.append(changeset.y1);
+			params.append(changeset.x2);
+			params.append(changeset.y2);
 		}
 		else
 		{
-			invoc();
-			invoc();
-			invoc();
-			invoc();
+			params.append();
+			params.append();
+			params.append();
+			params.append();
 		}
-		invoc(changeset.objId);
+		params.append(changeset.objId);
 
-		pqxx::result result = invoc.exec();
+		pqxx::result result = work->exec_prepared(tablePrefix+"updatechangeset", params);
 		rowsAffected = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
@@ -465,14 +465,14 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 	{
 		c.prepare(tablePrefix+"expandchangeset", ss.str());
 
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"expandchangeset");
-		invoc(bbox[0]);
-		invoc(bbox[1]);
-		invoc(bbox[2]);
-		invoc(bbox[3]);
-		invoc(cid);
+		pqxx::params params;
+		params.append(bbox[0]);
+		params.append(bbox[1]);
+		params.append(bbox[2]);
+		params.append(bbox[3]);
+		params.append(cid);
 
-		pqxx::result result = invoc.exec();
+		pqxx::result result = work->exec_prepared(tablePrefix+"expandchangeset", params);
 		rowsAffected = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
