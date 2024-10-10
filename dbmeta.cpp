@@ -46,7 +46,7 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << "UPDATE "<< metaTable << " SET value=$2";
 	sql << " WHERE key = $1;";
 
-	string prepkey = metaTable+"update"+key;
+	string prepkey = "";
 	c.prepare(prepkey, sql.str());
 
 	pqxx::result r = work->exec_prepared(prepkey, key, value);
@@ -56,7 +56,7 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 		stringstream sql2;
 		sql2 << "INSERT INTO "<< metaTable << " (key, value) VALUES ($1, $2);";
 
-		string prepkey2 = metaTable+"insert"+key;
+		string prepkey2 = metaTable+"insert";
 		c.prepare(prepkey2, sql2.str());
 
 		pqxx::result r = work->exec_prepared(prepkey2, key, value);
