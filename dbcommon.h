@@ -36,9 +36,5 @@ bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work,
 
 void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut);
 
-std::string md5sum(const char *buffer, unsigned len);
-
-std::string md5sum(const std::string &buffer);
-
 #endif //_DB_COMMON_H
 

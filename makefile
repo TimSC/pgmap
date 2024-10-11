@@ -19,7 +19,7 @@ osmdata = cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
 	cppo5m/utils.o cppo5m/pbf.o cppo5m/pbf/fileformat.pb.cc cppo5m/pbf/osmformat.pb.cc\
 	cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o
 
-libs = -lboost_filesystem -lboost_program_options -lboost_system -lprotobuf -lboost_iostreams -lpqxx -lexpat -lz -lcrypto
+libs = -lboost_filesystem -lboost_program_options -lboost_system -lprotobuf -lboost_iostreams -lpqxx -lexpat -lz
 
 dump: dump.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@

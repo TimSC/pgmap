@@ -94,15 +94,4 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 	minorVerOut = (ver / 100) % 100;
 }
 
-std::string md5sum(const char *buffer, unsigned len)
-{
-	unsigned char *tmp_hash = MD5((const unsigned char *)buffer, len, nullptr);
-	return std::string((char *)tmp_hash, MD5_DIGEST_LENGTH);
-}
-
-std::string md5sum(const std::string &buffer)
-{
-	unsigned char *tmp_hash = MD5((const unsigned char *)buffer.c_str(), buffer.size(), nullptr);
-	return std::string((char *)tmp_hash, MD5_DIGEST_LENGTH);
-}
 
