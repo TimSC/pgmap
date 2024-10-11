@@ -4,6 +4,7 @@
 #include "dbcommon.h"
 #include "dbdecode.h"
 #include "dbjson.h"
+#include "dbprepared.h"
 extern "C" {
 #include "cppo5m/iso8601lib/iso8601.h"
 }
@@ -331,7 +332,7 @@ bool InsertChangesetInDb(pqxx::connection &c,
 
 	try
 	{
-		c.prepare(tablePrefix+"insertchangeset", ss.str());
+		prepare_deduplicated(c, tablePrefix+"insertchangeset", ss.str());
 
 		pqxx::params params;
 		params.append(changeset.objId);
@@ -402,7 +403,7 @@ int UpdateChangesetInDb(pqxx::connection &c,
 
 	try
 	{
-		c.prepare(tablePrefix+"updatechangeset", ss.str());
+		prepare_deduplicated(c, tablePrefix+"updatechangeset", ss.str());
 
 		pqxx::params params;
 		params.append(changeset.username);
@@ -463,7 +464,7 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 
 	try
 	{
-		c.prepare(tablePrefix+"expandchangeset", ss.str());
+		prepare_deduplicated(c, tablePrefix+"expandchangeset", ss.str());
 
 		pqxx::params params;
 		params.append(bbox[0]);

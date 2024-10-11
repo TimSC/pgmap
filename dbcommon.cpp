@@ -1,5 +1,6 @@
 #include "dbcommon.h"
 #include <iostream>
+#include <openssl/md5.h>
 using namespace std;
 
 #if PQXX_VERSION_MAJOR >= 6
@@ -91,5 +92,17 @@ void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorV
 	int ver = r[0][0].as<int>();
 	majorVerOut = ver / 10000;
 	minorVerOut = (ver / 100) % 100;
+}
+
+std::string md5sum(const char *buffer, unsigned len)
+{
+	unsigned char *tmp_hash = MD5((const unsigned char *)buffer, len, nullptr);
+	return std::string((char *)tmp_hash, MD5_DIGEST_LENGTH);
+}
+
+std::string md5sum(const std::string &buffer)
+{
+	unsigned char *tmp_hash = MD5((const unsigned char *)buffer.c_str(), buffer.size(), nullptr);
+	return std::string((char *)tmp_hash, MD5_DIGEST_LENGTH);
 }
 

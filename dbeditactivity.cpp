@@ -2,6 +2,7 @@
 #include "dbdecode.h"
 #include "dbjson.h"
 #include "util.h"
+#include "dbprepared.h"
 using namespace std;
 
 #if PQXX_VERSION_MAJOR >= 6
@@ -241,14 +242,14 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 
 		if(activity.bbox.size() == 4)
 		{
-			c.prepare(tablePrefix+"insert_edit_activity1", sql.str());
+			prepare_deduplicated(c, tablePrefix+"insert_edit_activity1", sql.str());
 			work->exec_prepared(tablePrefix+"insert_edit_activity1", activity.changeset, activity.timestamp,
 				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
 				affectedParentsEnc, relatedEnc, activity.bbox[0], activity.bbox[1], activity.bbox[2], activity.bbox[3]);
 		}
 		else
 		{
-			c.prepare(tablePrefix+"insert_edit_activity2", sql.str());
+			prepare_deduplicated(c, tablePrefix+"insert_edit_activity2", sql.str());
 			work->exec_prepared(tablePrefix+"insert_edit_activity2", activity.changeset, activity.timestamp,
 				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
 				affectedParentsEnc, relatedEnc);
@@ -277,7 +278,7 @@ void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << "SELECT uid, SUM(nodes) as nodes, SUM(ways) as ways, SUM(relations) as relations, SUM(nodes)+SUM(ways)+SUM(relations) as objects";
 	sql << " FROM " << c.quote_name(tablePrefix+"edit_activity") << " WHERE timestamp>=$1 GROUP BY uid ORDER BY objects DESC LIMIT 10;";
 
-	c.prepare(tablePrefix+"get_most_active_users", sql.str());
+	prepare_deduplicated(c, tablePrefix+"get_most_active_users", sql.str());
 	pqxx::result r = work->exec_prepared(tablePrefix+"get_most_active_users", startTimestamp);
 	
 	int uidCol = r.column_number("uid");

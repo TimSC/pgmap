@@ -1,5 +1,7 @@
 #include "dbusername.h"
 #include "dbcommon.h"
+#include "dbprepared.h"
+#include <iostream>
 using namespace std;
 
 const int DB_USERNAME_CACHE_MAX = 10000;
@@ -23,7 +25,7 @@ DbUsernameLookup::DbUsernameLookup(pqxx::connection &c, pqxx::transaction_base *
 		{
 			stringstream sql;
 			sql << "SELECT username FROM " << tableName << " WHERE uid = $1;";
-			c.prepare(this->tableStaticPrefix+"getusername", sql.str());
+			prepare_deduplicated(c, this->tableStaticPrefix+"getusername", sql.str());
 		}
 	}
 
@@ -35,7 +37,7 @@ DbUsernameLookup::DbUsernameLookup(pqxx::connection &c, pqxx::transaction_base *
 		{
 			stringstream sql;
 			sql << "SELECT username FROM " << tableName << " WHERE uid = $1;";
-			c.prepare(this->tableActivePrefix+"getusername2", sql.str());
+			prepare_deduplicated(c, this->tableActivePrefix+"getusername2", sql.str());
 		}
 	}
 	
@@ -86,11 +88,11 @@ std::string DbUsernameLookup::Find(int uid)
 void DbUpsertUsernamePrepare(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix)
 {
 	string insertsql = "INSERT INTO "+c.quote_name(tablePrefix+"usernames")+" (uid, username) VALUES ($1, $2);";
-	c.prepare(tablePrefix+"insertusername", insertsql);
+	prepare_deduplicated(c, tablePrefix+"insertusername", insertsql);
 
 	string updatesql = "UPDATE "+ c.quote_name(tablePrefix+"usernames")+" SET username=$2";
 	updatesql += " WHERE uid = $1;";
-	c.prepare(tablePrefix+"updateusername", updatesql);
+	prepare_deduplicated(c, tablePrefix+"updateusername", updatesql);
 }
 
 void DbUpsertUsername(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 

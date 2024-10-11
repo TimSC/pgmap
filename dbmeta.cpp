@@ -1,4 +1,5 @@
 #include "dbmeta.h"
+#include "dbprepared.h"
 #include <stdexcept>
 #include <iostream>
 using namespace std;
@@ -20,7 +21,7 @@ std::string DbGetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << "SELECT value FROM " << metaTable << " WHERE key = $1";
 
 	string prepkey = metaTable+"get"+key;
-	c.prepare(prepkey, sql.str());
+	prepare_deduplicated(c, prepkey, sql.str());
 
 	pqxx::result r = work->exec_prepared(prepkey, key);
 	int valueCol = r.column_number("value");	
@@ -46,8 +47,8 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << "UPDATE "<< metaTable << " SET value=$2";
 	sql << " WHERE key = $1;";
 
-	string prepkey = "";
-	c.prepare(prepkey, sql.str());
+	string prepkey = metaTable+"update"+key;
+	prepare_deduplicated(c, prepkey, sql.str());
 
 	pqxx::result r = work->exec_prepared(prepkey, key, value);
 
@@ -57,7 +58,7 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 		sql2 << "INSERT INTO "<< metaTable << " (key, value) VALUES ($1, $2);";
 
 		string prepkey2 = metaTable+"insert";
-		c.prepare(prepkey2, sql2.str());
+		prepare_deduplicated(c, prepkey2, sql2.str());
 
 		pqxx::result r = work->exec_prepared(prepkey2, key, value);
 		if(r.affected_rows() != 1)
