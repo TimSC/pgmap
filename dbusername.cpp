@@ -37,7 +37,7 @@ DbUsernameLookup::DbUsernameLookup(pqxx::connection &c, pqxx::transaction_base *
 		{
 			stringstream sql;
 			sql << "SELECT username FROM " << tableName << " WHERE uid = $1;";
-			prepare_deduplicated(c, this->tableActivePrefix+"getusername2", sql.str());
+			prepare_deduplicated(c, this->tableActivePrefix+"getusername", sql.str());
 		}
 	}
 	

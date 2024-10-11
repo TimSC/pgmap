@@ -8,6 +8,7 @@ std::map<std::string, std::string> keyToSql;
 
 void prepare_deduplicated(pqxx::connection &c, std::string key, std::string sql)
 {
+	//cout << "prepare " << key << " " << sql << endl;
 	auto existing = keyToSql.find(key);
 	if (existing != keyToSql.end())
 	{
