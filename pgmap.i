@@ -12,7 +12,6 @@
 %include "std_shared_ptr.i"
 %include "streambuf.i"
 %include exception.i
-using std::string;
 
 %{
 /* Put header files here */
@@ -37,25 +36,24 @@ using std::string;
 	}
 }
 
-namespace std {
-	%template(vectori) vector<int>;
-	%template(vectori64) vector<int64_t>;
-	%template(vectorvectori64) vector<vector<int64_t> >;
-	%template(vectorpairi64i64) vector<std::pair<int64_t, int64_t> >;
-	%template(vectord) vector<double>;
-	%template(vectorbool) vector<bool>;
-	%template(vectorstring) vector<string>;
-	%template(vectordd) vector<vector<double> >;
 
-	%template(mapstringstring) std::map<std::string, std::string>;
-	%template(mapi64i64) std::map<int64_t, int64_t>;
-	%template(mapi64vectord) std::map<int64_t, vector<double> >;
+%template(vectori) std::vector<int>;
+%template(vectori64) std::vector<int64_t>;
+%template(vectorvectori64) std::vector<std::vector<int64_t> >;
+%template(vectorpairi64i64) std::vector<std::pair<int64_t, int64_t> >;
+%template(vectord) std::vector<double>;
+%template(vectorbool) std::vector<bool>;
+%template(vectorstring) std::vector<std::string>;
+%template(vectordd) std::vector<std::vector<double> >;
 
-	%template(seti64) std::set<int64_t>;
-	%template(setpairi64i64) std::set<std::pair<int64_t, int64_t> >;
+%template(mapstringstring) std::map<std::string, std::string>;
+%template(mapi64i64) std::map<int64_t, int64_t>;
+%template(mapi64vectord) std::map<int64_t, std::vector<double> >;
 
-	%template(pairi64i64) std::pair<int64_t, int64_t>;
-};
+%template(seti64) std::set<int64_t>;
+%template(setpairi64i64) std::set<std::pair<int64_t, int64_t> >;
+
+%template(pairi64i64) std::pair<int64_t, int64_t>;
 
 %shared_ptr(MetaData)
 %shared_ptr(IDataStreamHandler)
@@ -78,17 +76,17 @@ namespace std {
 
 %shared_ptr(DeduplicateOsm)
 
-namespace std {
-	%template(vectorosmnode) vector<class OsmNode>;
-	%template(vectorosmway) vector<class OsmWay>;
-	%template(vectorosmrelation) vector<class OsmRelation>;
-};
+%shared_ptr(OsmObject)
+%shared_ptr(OsmNode)
+%shared_ptr(OsmWay)
+%shared_ptr(OsmRelation)
 
 %shared_ptr(OsmData)
+%template(vectorosmdata) std::vector<class OsmData>;
 
-namespace std {
-	%template(vectorosmdata) vector<class OsmData>;
-};
+%template(vectorosmnode) std::vector<class OsmNode>;
+%template(vectorosmway) std::vector<class OsmWay>;
+%template(vectorosmrelation) std::vector<class OsmRelation>;
 
 %shared_ptr(OsmChange)
 
@@ -98,10 +96,10 @@ namespace std {
 
 %shared_ptr(PgChangeset)
 
-namespace std {
-	%template(vectorchangeset) vector<class PgChangeset>;
-	%template(vectorsharedptreditactivity) vector<shared_ptr<class EditActivity> >;
-};
+
+%template(vectorchangeset) std::vector<class PgChangeset>;
+%template(vectorsharedptreditactivity) std::vector<std::shared_ptr<class EditActivity> >;
+
 
 %shared_ptr(EditActivity)
 %shared_ptr(PgWork)

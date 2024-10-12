@@ -24,7 +24,7 @@ def get_swig_executable():
 	# Find SWIG executable
 	swig_executable = None
 	swig_minimum_version = "3.0.2"
-	for executable in ["swig", "swig3.0"]:
+	for executable in ["swig", "swig3.0", "swig4.0"]:
 		swig_executable = find_executable(executable)
 		if swig_executable is not None:
 			# Check that SWIG version is ok
