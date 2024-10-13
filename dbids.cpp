@@ -1,5 +1,6 @@
 #include "dbids.h"
 #include "dbcommon.h"
+#include "dbprepared.h"
 using namespace std;
 
 #if PQXX_VERSION_MAJOR >= 6
@@ -74,7 +75,7 @@ bool SetNextIdValue(pqxx::connection &c,
 	stringstream ss;
 	ss << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << "(id, maxid) VALUES ($1, $2);";
 
-	c.prepare(tablePrefix+"setnextId", ss.str());
+	prepare_deduplicated(c, tablePrefix+"setnextId", ss.str());
 	work->prepared(tablePrefix+"setnextId")(objType)(value).exec();
 	return true;
 }

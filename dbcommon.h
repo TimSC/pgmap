@@ -12,13 +12,24 @@
 #endif
 
 ///Tolerate NULL values when we copy row from live to old table
+#if PQXX_VERSION_MAJOR >= 7
+template<class T> void BindVal(pqxx::params &invoc, const pqxxfield &field)
+{
+	if(field.is_null())
+		invoc.append();
+	else
+		invoc.append(field.as<T>());
+}
+#else
 template<class T> void BindVal(pqxx::prepare::invocation &invoc, const pqxxfield &field)
 {
 	if(field.is_null())
 		invoc();
 	else
 		invoc(field.as<T>());
+
 }
+#endif
 
 bool DbExec(pqxx::transaction_base *work, const std::string& sql, std::string &errStr, size_t *rowsAffected = nullptr, int verbose = 0);
 

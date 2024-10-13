@@ -4,6 +4,7 @@
 #include "dbjson.h"
 #include "dbusername.h"
 #include "dbquery.h"
+#include "dbprepared.h"
 #include "util.h"
 using namespace std;
 
@@ -82,7 +83,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		{
 			if(verbose >= 1)
 				cout << checkExistingLiveSql << " " << objId << endl;
-			c.prepare(tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
+			prepare_deduplicated(c, tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
 			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
 		}
 		catch (const pqxx::sql_error &e)
@@ -111,7 +112,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		{
 			if(verbose >= 1)
 				cout << checkExistingOldSql << " " << objId << endl;
-			c.prepare(tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
+			prepare_deduplicated(c, tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
 			r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
 		}
 		catch (const pqxx::sql_error &e)
@@ -144,7 +145,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			{
 				if(verbose >= 1)
 					cout << deletedLiveSql << " " << objId << endl;
-				c.prepare(tablePrefix+"deletelive"+typeStr, deletedLiveSql);
+				prepare_deduplicated(c, tablePrefix+"deletelive"+typeStr, deletedLiveSql);
 				work->prepared(tablePrefix+"deletelive"+typeStr)(objId).exec();
 			}
 			catch (const pqxx::sql_error &e)
@@ -187,7 +188,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"copyoldnode", ss.str());
+					prepare_deduplicated(c, tablePrefix+"copyoldnode", ss.str());
 
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
 					BindVal<int64_t>(invoc, row["id"]);
@@ -207,7 +208,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"copyoldway", ss.str());
+					prepare_deduplicated(c, tablePrefix+"copyoldway", ss.str());
 
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
 					BindVal<int64_t>(invoc, row["id"]);
@@ -227,7 +228,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"copyoldrelation", ss.str());
+					prepare_deduplicated(c, tablePrefix+"copyoldrelation", ss.str());
 	
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
 					BindVal<int64_t>(invoc, row["id"]);
@@ -310,7 +311,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
-						c.prepare(tablePrefix+"insertnode", ss.str());
+						prepare_deduplicated(c, tablePrefix+"insertnode", ss.str());
 						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
 					}
@@ -318,7 +319,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
-						c.prepare(tablePrefix+"insertway", ss.str());
+						prepare_deduplicated(c, tablePrefix+"insertway", ss.str());
 						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson).exec();
 					}
@@ -326,7 +327,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
-						c.prepare(tablePrefix+"insertrelation", ss.str());
+						prepare_deduplicated(c, tablePrefix+"insertrelation", ss.str());
 						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 							(tagsJson)(refsJson)(rolesJson).exec();
@@ -348,7 +349,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
 				if(verbose >= 1)
 					cout << ssi.str() << endl;
-				c.prepare(tablePrefix+"insert"+typeStr+"ids", ssi.str());
+				prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"ids", ssi.str());
 
 				if(ocdnSupported)
 				{
@@ -360,7 +361,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					//Check if id already exists in table
 					stringstream ssi2;
 					ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
-					c.prepare(tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
+					prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
 					pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
 					
 					if(r.size() == 0)
@@ -400,7 +401,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
-						c.prepare(tablePrefix+"updatenode", ss.str());
+						prepare_deduplicated(c, tablePrefix+"updatenode", ss.str());
 						work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
 					}
@@ -408,7 +409,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
-						c.prepare(tablePrefix+"updateway", ss.str());
+						prepare_deduplicated(c, tablePrefix+"updateway", ss.str());
 						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson).exec();
 					}
@@ -416,7 +417,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
-						c.prepare(tablePrefix+"updaterelation", ss.str());
+						prepare_deduplicated(c, tablePrefix+"updaterelation", ss.str());
 						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 							(tagsJson)(objId)(refsJson)(rolesJson).exec();
@@ -479,7 +480,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"insertoldnode", ss.str());
+					prepare_deduplicated(c, tablePrefix+"insertoldnode", ss.str());
 					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(wkt.str()).exec();
@@ -488,7 +489,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"insertoldway", ss.str());
+					prepare_deduplicated(c, tablePrefix+"insertoldway", ss.str());
 					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(refsJson).exec();
@@ -497,7 +498,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
-					c.prepare(tablePrefix+"insertoldrelation", ss.str());
+					prepare_deduplicated(c, tablePrefix+"insertoldrelation", ss.str());
 					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(refsJson)(rolesJson).exec();
@@ -524,7 +525,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 			if(verbose >= 1)
 				cout << ssi.str() << endl;
-			c.prepare(tablePrefix+"insert"+typeStr+"ids2", ssi.str());
+			prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"ids2", ssi.str());
 			if(ocdnSupported)
 			{
 				work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
@@ -535,7 +536,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				//Check if id already exists in table
 				stringstream ssi2;
 				ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
-				c.prepare(tablePrefix+"insert"+typeStr+"idexists2", ssi2.str());
+				prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"idexists2", ssi2.str());
 				pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists2")(objId).exec();
 			
 				if(r.size() == 0)
@@ -741,7 +742,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 
 int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &wayIds,
-    int verbose,
+	int verbose,
 	const std::string &tablePrefix, 
 	std::string &errStr)
 {
@@ -845,7 +846,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope($1,$2,$3,$4, 4326) WHERE (id = $5);";
 		if(verbose >= 2) cout << sql.str() << endl;
 
-		conn.prepare(tablePrefix+"update_relation_bbox", sql.str());
+		prepare_deduplicated(conn, tablePrefix+"update_relation_bbox", sql.str());
 		work->prepared(tablePrefix+"update_relation_bbox")(outerBbox[0])(outerBbox[1])(outerBbox[2])(outerBbox[3])(rel.objId).exec();
 	}
 	else
@@ -860,7 +861,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 
 int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *work,
 	const std::set<int64_t> &objectIds,
-    int verbose,
+	int verbose,
 	const std::string &tablePrefix, 
 	std::string &errStr)
 {
