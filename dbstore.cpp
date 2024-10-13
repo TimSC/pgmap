@@ -84,7 +84,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			if(verbose >= 1)
 				cout << checkExistingLiveSql << " " << objId << endl;
 			prepare_deduplicated(c, tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
+
+#if PQXX_VERSION_MAJOR >= 7
+			r = work->exec_prepared(tablePrefix+"checkobjexists"+typeStr, objId);
+#else
 			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
+#endif
 		}
 		catch (const pqxx::sql_error &e)
 		{
@@ -113,7 +118,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			if(verbose >= 1)
 				cout << checkExistingOldSql << " " << objId << endl;
 			prepare_deduplicated(c, tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
+
+#if PQXX_VERSION_MAJOR >= 7
+			r2 = work->exec_prepared(tablePrefix+"checkoldobjexists"+typeStr, objId);
+#else
 			r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
+#endif
 		}
 		catch (const pqxx::sql_error &e)
 		{
@@ -146,7 +156,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				if(verbose >= 1)
 					cout << deletedLiveSql << " " << objId << endl;
 				prepare_deduplicated(c, tablePrefix+"deletelive"+typeStr, deletedLiveSql);
+
+#if PQXX_VERSION_MAJOR >= 7
+				work->exec_prepared(tablePrefix+"deletelive"+typeStr, objId);
+#else
 				work->prepared(tablePrefix+"deletelive"+typeStr)(objId).exec();
+#endif
 			}
 			catch (const pqxx::sql_error &e)
 			{
@@ -190,6 +205,21 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						cout << ss.str() << endl;
 					prepare_deduplicated(c, tablePrefix+"copyoldnode", ss.str());
 
+#if PQXX_VERSION_MAJOR >= 7
+					pqxx::params params;
+					BindVal<int64_t>(params, row["id"]);
+					BindVal<int64_t>(params, row["changeset"]);
+					BindVal<int64_t>(params, row["changeset_index"]);
+					BindVal<string>(params, row["username"]);
+					BindVal<int64_t>(params, row["uid"]);
+					BindVal<int64_t>(params, row["timestamp"]);
+					BindVal<int64_t>(params, row["version"]);
+					BindVal<string>(params, row["tags"]);
+					params.append(true);
+					BindVal<string>(params, row["geom"]);
+
+					work->exec_prepared(tablePrefix+"copyoldnode", params);
+#else
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
 					BindVal<int64_t>(invoc, row["id"]);
 					BindVal<int64_t>(invoc, row["changeset"]);
@@ -203,6 +233,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					BindVal<string>(invoc, row["geom"]);
 
 					invoc.exec();
+#endif
 				}
 				else if(wayObject != nullptr)
 				{
@@ -210,6 +241,21 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						cout << ss.str() << endl;
 					prepare_deduplicated(c, tablePrefix+"copyoldway", ss.str());
 
+#if PQXX_VERSION_MAJOR >= 7
+					pqxx::params params;
+					BindVal<int64_t>(params, row["id"]);
+					BindVal<int64_t>(params, row["changeset"]);
+					BindVal<int64_t>(params, row["changeset_index"]);
+					BindVal<string>(params, row["username"]);
+					BindVal<int64_t>(params, row["uid"]);
+					BindVal<int64_t>(params, row["timestamp"]);
+					BindVal<int64_t>(params, row["version"]);
+					BindVal<string>(params, row["tags"]);
+					params.append(true);
+					BindVal<string>(params, row["members"]);
+
+					work->exec_prepared(tablePrefix+"copyoldway");
+#else
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
 					BindVal<int64_t>(invoc, row["id"]);
 					BindVal<int64_t>(invoc, row["changeset"]);
@@ -223,6 +269,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					BindVal<string>(invoc, row["members"]);
 
 					invoc.exec();
+#endif
 				}
 				else if(relationObject != nullptr)
 				{
@@ -230,6 +277,22 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						cout << ss.str() << endl;
 					prepare_deduplicated(c, tablePrefix+"copyoldrelation", ss.str());
 	
+#if PQXX_VERSION_MAJOR >= 7
+					pqxx::params params;
+					BindVal<int64_t>(params, row["id"]);
+					BindVal<int64_t>(params, row["changeset"]);
+					BindVal<int64_t>(params, row["changeset_index"]);
+					BindVal<string>(params, row["username"]);
+					BindVal<int64_t>(params, row["uid"]);
+					BindVal<int64_t>(params, row["timestamp"]);
+					BindVal<int64_t>(params, row["version"]);
+					BindVal<string>(params, row["tags"]);
+					params.append(true);
+					BindVal<string>(params, row["members"]);
+					BindVal<string>(params, row["memberroles"]);
+
+					work->exec_prepared(tablePrefix+"copyoldrelation");
+#else
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
 					BindVal<int64_t>(invoc, row["id"]);
 					BindVal<int64_t>(invoc, row["changeset"]);
@@ -244,6 +307,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					BindVal<string>(invoc, row["memberroles"]);
 
 					invoc.exec();
+#endif
 				}
 			}
 			catch (const pqxx::sql_error &e)
@@ -312,25 +376,41 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						prepare_deduplicated(c, tablePrefix+"insertnode", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"insertnode", objId, osmObject->metaData.changeset,osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, wkt.str());
+#else
 						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
+#endif
 					}
 					else if(wayObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						prepare_deduplicated(c, tablePrefix+"insertway", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"insertway", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, refsJson);
+#else
 						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson).exec();
+#endif
 					}
 					else if(relationObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						prepare_deduplicated(c, tablePrefix+"insertrelation", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"insertrelation", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+							tagsJson, refsJson, rolesJson);
+#else
 						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 							(tagsJson)(refsJson)(rolesJson).exec();
+#endif
 					}
 				}
 				catch (const pqxx::sql_error &e)
@@ -353,7 +433,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 				if(ocdnSupported)
 				{
+#if PQXX_VERSION_MAJOR >= 7
+					work->exec_prepared(tablePrefix+"insert"+typeStr+"ids", objId);
+#else
 					work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+#endif
 				}
 				else
 				{
@@ -362,7 +446,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					stringstream ssi2;
 					ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
 					prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
+#if PQXX_VERSION_MAJOR >= 7
+					pqxx::result r = work->exec_prepared(tablePrefix+"insert"+typeStr+"idexists", objId);
+#else
 					pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
+#endif
 					
 					if(r.size() == 0)
 						throw runtime_error("No data returned from db unexpectedly");
@@ -371,7 +459,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 					//Insert id value if not already in table
 					if(count == 0)
+					{
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"insert"+typeStr+"ids", objId);
+#else
 						work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
+#endif
+					}
 				}
 			}
 			else
@@ -402,25 +496,41 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						prepare_deduplicated(c, tablePrefix+"updatenode", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"updatenode", osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, objId, wkt.str());
+#else
 						work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
+#endif
 					}
 					else if(wayObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						prepare_deduplicated(c, tablePrefix+"updateway", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"updateway", osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, objId, refsJson);
+#else
 						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson).exec();
+#endif
 					}
 					else if(relationObject != nullptr)
 					{
 						if(verbose >= 1)
 							cout << ss.str() << endl;
 						prepare_deduplicated(c, tablePrefix+"updaterelation", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+						work->exec_prepared(tablePrefix+"updaterelation", osmObject->metaData.changeset, osmObject->metaData.username,\
+							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+							tagsJson, objId, refsJson, rolesJson);
+#else
 						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
 							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 							(tagsJson)(objId)(refsJson)(rolesJson).exec();
+#endif
 					}
 
 				}
@@ -481,27 +591,45 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					prepare_deduplicated(c, tablePrefix+"insertoldnode", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+					work->exec_prepared(tablePrefix+"insertoldnode", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+						tagsJson, osmObject->metaData.visible, wkt.str());
+#else
 					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(wkt.str()).exec();
+#endif
 				}
 				else if(wayObject != nullptr)
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					prepare_deduplicated(c, tablePrefix+"insertoldway", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+					work->exec_prepared(tablePrefix+"insertoldway", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+						tagsJson, osmObject->metaData.visible, refsJson);
+#else
 					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(refsJson).exec();
+#endif
 				}
 				else if(relationObject != nullptr)
 				{
 					if(verbose >= 1)
 						cout << ss.str() << endl;
 					prepare_deduplicated(c, tablePrefix+"insertoldrelation", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+					work->exec_prepared(tablePrefix+"insertoldrelation", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
+						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
+						tagsJson, osmObject->metaData.visible, refsJson, rolesJson);
+#else
 					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
 						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
 						(tagsJson)(osmObject->metaData.visible)(refsJson)(rolesJson).exec();
+#endif
 				}
 
 			}
@@ -528,7 +656,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"ids2", ssi.str());
 			if(ocdnSupported)
 			{
+#if PQXX_VERSION_MAJOR >= 7
+				work->exec_prepared(tablePrefix+"insert"+typeStr+"ids2", objId);
+#else
 				work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
+#endif
 			}
 			else
 			{
@@ -537,7 +669,11 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 				stringstream ssi2;
 				ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
 				prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"idexists2", ssi2.str());
+#if PQXX_VERSION_MAJOR >= 7
+				pqxx::result r = work->exec_prepared(tablePrefix+"insert"+typeStr+"idexists2", objId);
+#else
 				pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists2")(objId).exec();
+#endif
 			
 				if(r.size() == 0)
 					throw runtime_error("No data returned from db unexpectedly");
@@ -546,7 +682,13 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 				//Insert id value if not already in table
 				if(count == 0)
+				{
+#if PQXX_VERSION_MAJOR >= 7
+					work->exec_prepared(tablePrefix+"insert"+typeStr+"ids2", objId);
+#else
 					work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
+#endif
+				}
 			}
 		}
 
@@ -761,7 +903,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 			string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
 			//cout << sql << endl;
 
-			work->exec(sql);
+			work->exec(sql, "UpdateWayBboxesById1");
 
 			sqlFrags.str("");
 			count = 0;
@@ -773,7 +915,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
 		//cout << sql << endl;
 
-		work->exec(sql);
+		work->exec(sql, "UpdateWayBboxesById2");
 	}
 
 	return 0;	
@@ -847,7 +989,12 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		if(verbose >= 2) cout << sql.str() << endl;
 
 		prepare_deduplicated(conn, tablePrefix+"update_relation_bbox", sql.str());
+
+#if PQXX_VERSION_MAJOR >= 7
+		work->exec_prepared(tablePrefix+"update_relation_bbox", outerBbox[0], outerBbox[1], outerBbox[2], outerBbox[3], rel.objId);
+#else
 		work->prepared(tablePrefix+"update_relation_bbox")(outerBbox[0])(outerBbox[1])(outerBbox[2])(outerBbox[3])(rel.objId).exec();
+#endif
 	}
 	else
 	{
@@ -855,7 +1002,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<rel.objId<<";";
 		if(verbose >= 2) cout << sql.str() << endl;
 
-		work->exec(sql);
+		work->exec(sql, "UpdateSingleRelation");
 	}
 }
 

@@ -58,9 +58,13 @@ std::string DbUsernameLookup::Find(int uid)
 
 	if(tableActiveExists)
 	{
+#if PQXX_VERSION_MAJOR >= 7
+		pqxx::result result = work->exec_prepared(this->tableActivePrefix+"getusername", uid);
+#else
 		pqxx::prepare::invocation invoc = work->prepared(this->tableActivePrefix+"getusername");
 		invoc(uid);
 		pqxx::result result = invoc.exec();
+#endif
 		for (pqxx::result::const_iterator ci = result.begin(); ci != result.end(); ++ci)
 		{
 			string username = ci[0].as<string>();
@@ -72,9 +76,13 @@ std::string DbUsernameLookup::Find(int uid)
 
 	if(tableStaticExists)
 	{
+#if PQXX_VERSION_MAJOR >= 7
+		pqxx::result result = work->exec_prepared(this->tableStaticPrefix+"getusername", uid);
+#else
 		pqxx::prepare::invocation invoc = work->prepared(this->tableStaticPrefix+"getusername");
 		invoc(uid);
 		pqxx::result result = invoc.exec();
+#endif
 		for (pqxx::result::const_iterator ci = result.begin(); ci != result.end(); ++ci)
 		{
 			string username = ci[0].as<string>();
@@ -102,18 +110,26 @@ void DbUpsertUsernamePrepare(pqxx::connection &c, pqxx::transaction_base *work, 
 void DbUpsertUsername(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	int uid, const std::string &username)
 {
+#if PQXX_VERSION_MAJOR >= 7
+	pqxx::result result = work->exec_prepared(tablePrefix+"updateusername", uid, username);
+#else
 	pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updateusername");
 	invoc(uid);
 	invoc(username);
 	pqxx::result result = invoc.exec();
+#endif
 	int rowsAffected = result.affected_rows();
 
 	if(rowsAffected == 0)
 	{
+#if PQXX_VERSION_MAJOR >= 7
+		work->exec_prepared(tablePrefix+"insertusername", uid, username);
+#else
 		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertusername");
 		invoc(uid);
 		invoc(username);
 		invoc.exec();
+#endif
 	}
 }
 

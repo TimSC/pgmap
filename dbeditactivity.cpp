@@ -243,16 +243,28 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 		if(activity.bbox.size() == 4)
 		{
 			prepare_deduplicated(c, tablePrefix+"insert_edit_activity1", sql.str());
+#if PQXX_VERSION_MAJOR >= 7
+			work->exec_prepared(tablePrefix+"insert_edit_activity1", activity.changeset, activity.timestamp,
+				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
+				affectedParentsEnc, relatedEnc, activity.bbox[0], activity.bbox[1], activity.bbox[2], activity.bbox[3]);
+#else
 			work->prepared(tablePrefix+"insert_edit_activity1")(activity.changeset)(activity.timestamp)
 				(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
 				(affectedParentsEnc)(relatedEnc)(activity.bbox[0])(activity.bbox[1])(activity.bbox[2])(activity.bbox[3]).exec();
+#endif
 		}
 		else
 		{
 			prepare_deduplicated(c, tablePrefix+"insert_edit_activity2", sql.str());
+#if PQXX_VERSION_MAJOR >= 7
+			work->exec_prepared(tablePrefix+"insert_edit_activity2", activity.changeset, activity.timestamp,
+				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
+				affectedParentsEnc, relatedEnc);
+#else
 			work->prepared(tablePrefix+"insert_edit_activity2")(activity.changeset)(activity.timestamp)
 				(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
 				(affectedParentsEnc)(relatedEnc).exec();
+#endif
 		}
 	}
 	catch (const pqxx::sql_error &e)
@@ -279,8 +291,12 @@ void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << " FROM " << c.quote_name(tablePrefix+"edit_activity") << " WHERE timestamp>=$1 GROUP BY uid ORDER BY objects DESC LIMIT 10;";
 
 	prepare_deduplicated(c, tablePrefix+"get_most_active_users", sql.str());
+#if PQXX_VERSION_MAJOR >= 7
+	pqxx::result r = work->exec_prepared(tablePrefix+"get_most_active_users", startTimestamp);
+#else
 	pqxx::result r = work->prepared(tablePrefix+"get_most_active_users")(startTimestamp).exec();
-	
+#endif	
+
 	int uidCol = r.column_number("uid");
 	int nodesCol = r.column_number("nodes");
 	int waysCol = r.column_number("ways");
