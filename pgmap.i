@@ -78,17 +78,13 @@ namespace std {
 
 %shared_ptr(DeduplicateOsm)
 
-namespace std {
-	%template(vectorosmnode) vector<class OsmNode>;
-	%template(vectorosmway) vector<class OsmWay>;
-	%template(vectorosmrelation) vector<class OsmRelation>;
-};
+%template(vectorosmnode) std::vector<OsmNode>;
+%template(vectorosmway) std::vector<OsmWay>;
+%template(vectorosmrelation) std::vector<OsmRelation>;
 
 %shared_ptr(OsmData)
 
-namespace std {
-	%template(vectorosmdata) vector<class OsmData>;
-};
+%template(vectorosmdata) std::vector<OsmData>;
 
 %shared_ptr(OsmChange)
 
@@ -99,8 +95,8 @@ namespace std {
 %shared_ptr(PgChangeset)
 
 namespace std {
-	%template(vectorchangeset) vector<class PgChangeset>;
-	%template(vectorsharedptreditactivity) vector<shared_ptr<class EditActivity> >;
+	%template(vectorchangeset) vector<PgChangeset>;
+	%template(vectorsharedptreditactivity) vector<shared_ptr<EditActivity> >;
 };
 
 %shared_ptr(EditActivity)
