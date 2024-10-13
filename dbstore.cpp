@@ -254,7 +254,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					params.append(true);
 					BindVal<string>(params, row["members"]);
 
-					work->exec_prepared(tablePrefix+"copyoldway");
+					work->exec_prepared(tablePrefix+"copyoldway", params);
 #else
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
 					BindVal<int64_t>(invoc, row["id"]);
@@ -291,7 +291,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 					BindVal<string>(params, row["members"]);
 					BindVal<string>(params, row["memberroles"]);
 
-					work->exec_prepared(tablePrefix+"copyoldrelation");
+					work->exec_prepared(tablePrefix+"copyoldrelation", params);
 #else
 					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
 					BindVal<int64_t>(invoc, row["id"]);
