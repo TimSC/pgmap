@@ -4,6 +4,7 @@
 #include "dbcommon.h"
 #include "dbdecode.h"
 #include "dbjson.h"
+#include "dbprepared.h"
 extern "C" {
 #include "cppo5m/iso8601lib/iso8601.h"
 }
@@ -331,7 +332,54 @@ bool InsertChangesetInDb(pqxx::connection &c,
 
 	try
 	{
-		c.prepare(tablePrefix+"insertchangeset", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+
+		prepare_deduplicated(c, tablePrefix+"insertchangeset", ss.str());
+
+		pqxx::params params;
+		params.append(changeset.objId);
+		if(changeset.username.size() > 0)
+			params.append(changeset.username);
+		else
+			params.append();
+		if(changeset.uid != 0)
+			params.append(changeset.uid);
+		else
+			params.append();
+
+		string tagJson;
+		EncodeTags(changeset.tags, tagJson);
+		params.append(tagJson);
+
+		if(changeset.open_timestamp != 0)
+			params.append(changeset.open_timestamp);
+		else
+			params.append();
+		if(changeset.close_timestamp != 0)
+			params.append(changeset.close_timestamp);
+		else
+			params.append();
+		params.append(changeset.is_open);
+		if(changeset.bbox_set)
+		{
+			params.append(changeset.x1);
+			params.append(changeset.y1);
+			params.append(changeset.x2);
+			params.append(changeset.y2);
+		}
+		else
+		{
+			params.append();
+			params.append();
+			params.append();
+			params.append();
+		}
+
+		work->exec_prepared(tablePrefix+"insertchangeset", params);
+
+#else
+
+		prepare_deduplicated(c, tablePrefix+"insertchangeset", ss.str());
 
 		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertchangeset");
 		invoc(changeset.objId);
@@ -373,6 +421,8 @@ bool InsertChangesetInDb(pqxx::connection &c,
 		}
 
 		invoc.exec();
+
+#endif
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -402,7 +452,38 @@ int UpdateChangesetInDb(pqxx::connection &c,
 
 	try
 	{
-		c.prepare(tablePrefix+"updatechangeset", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+		prepare_deduplicated(c, tablePrefix+"updatechangeset", ss.str());
+
+		pqxx::params params;
+		params.append(changeset.username);
+		params.append(changeset.uid);
+		string tagJson;
+		EncodeTags(changeset.tags, tagJson);
+		params.append(tagJson);
+		params.append(changeset.open_timestamp);
+		params.append(changeset.close_timestamp);
+		params.append(changeset.is_open);
+		if(changeset.bbox_set)
+		{
+			params.append(changeset.x1);
+			params.append(changeset.y1);
+			params.append(changeset.x2);
+			params.append(changeset.y2);
+		}
+		else
+		{
+			params.append();
+			params.append();
+			params.append();
+			params.append();
+		}
+		params.append(changeset.objId);
+
+		pqxx::result result = work->exec_prepared(tablePrefix+"updatechangeset", params);
+
+#else
+		prepare_deduplicated(c, tablePrefix+"updatechangeset", ss.str());
 
 		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatechangeset");
 		invoc(changeset.username);
@@ -430,6 +511,7 @@ int UpdateChangesetInDb(pqxx::connection &c,
 		invoc(changeset.objId);
 
 		pqxx::result result = invoc.exec();
+#endif
 		rowsAffected = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
@@ -463,7 +545,19 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 
 	try
 	{
-		c.prepare(tablePrefix+"expandchangeset", ss.str());
+#if PQXX_VERSION_MAJOR >= 7
+		prepare_deduplicated(c, tablePrefix+"expandchangeset", ss.str());
+
+		pqxx::params params;
+		params.append(bbox[0]);
+		params.append(bbox[1]);
+		params.append(bbox[2]);
+		params.append(bbox[3]);
+		params.append(cid);
+
+		pqxx::result result = work->exec_prepared(tablePrefix+"expandchangeset", params);
+#else
+		prepare_deduplicated(c, tablePrefix+"expandchangeset", ss.str());
 
 		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"expandchangeset");
 		invoc(bbox[0]);
@@ -473,6 +567,7 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 		invoc(cid);
 
 		pqxx::result result = invoc.exec();
+#endif
 		rowsAffected = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
