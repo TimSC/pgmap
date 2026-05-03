@@ -775,8 +775,7 @@ void OsmChangesetsDecodeString::StartElement(const XML_Char *name, const XML_Cha
 			int timezoneOffsetMin = 0;
 			ParseIso8601Datetime(attribs["created_at"].c_str(), &dt, &timezoneOffsetMin);
 			TmToUtc(&dt, timezoneOffsetMin);
-			time_t ts = mktime (&dt);
-			this->currentChangeset.open_timestamp = (int64_t)ts;
+			this->currentChangeset.open_timestamp = (int64_t)timegm(&dt);
 		}
 		if(attribs.find("closed_at") != attribs.end())
 		{
@@ -784,8 +783,7 @@ void OsmChangesetsDecodeString::StartElement(const XML_Char *name, const XML_Cha
 			int timezoneOffsetMin = 0;
 			ParseIso8601Datetime(attribs["closed_at"].c_str(), &dt, &timezoneOffsetMin);
 			TmToUtc(&dt, timezoneOffsetMin);
-			time_t ts = mktime (&dt);
-			this->currentChangeset.close_timestamp = (int64_t)ts;
+			this->currentChangeset.close_timestamp = (int64_t)timegm(&dt);
 		}
 		if(attribs.find("user") != attribs.end())
 			this->currentChangeset.username = attribs["user"];

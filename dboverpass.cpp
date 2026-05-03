@@ -94,8 +94,6 @@ void DbXapiQueryIdVisible(pqxx::connection &c, pqxx::transaction_base *work,
 		tagValue,
 		bbox);
 
-	cout << sql << endl;
-
 	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );
 
 	int records = 1;
@@ -122,8 +120,6 @@ void DbXapiQueryObjVisible(pqxx::connection &c, pqxx::transaction_base *work,
 		tagKey,
 		tagValue,
 		bbox);
-
-	cout << sql << endl;
 
 	pqxx::icursorstream cursor( *work, sql, "nodecursor", 1000 );
 

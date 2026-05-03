@@ -835,7 +835,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 		{
 			if(rel.refTypeStrs[j] != "way" or rel.refIds[j] > 0) continue;
 			std::map<int64_t, int64_t>::iterator it = createdWayIds.find(rel.refIds[j]);
-			if(it == createdNodeIds.end())
+			if(it == createdWayIds.end())
 			{
 				stringstream ss;
 				ss << "Relation "<< rel.objId << " depends on undefined way " << rel.refIds[j];
@@ -855,10 +855,10 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 		{
 			if(rel.refTypeStrs[j] != "relation" or rel.refIds[j] > 0) continue;
 			std::map<int64_t, int64_t>::iterator it = createdRelationIds.find(rel.refIds[j]);
-			if(it == createdNodeIds.end())
+			if(it == createdRelationIds.end())
 			{
 				stringstream ss;
-				ss << "Relation "<< rel.objId << " depends on undefined way " << rel.refIds[j];
+				ss << "Relation "<< rel.objId << " depends on undefined relation " << rel.refIds[j];
 				errStr = ss.str();
 				return false;
 			}

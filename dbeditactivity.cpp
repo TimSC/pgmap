@@ -187,7 +187,7 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
 	sql << " FROM " << table << " WHERE timestamp>="<<sinceTimestamp;
 	if (untilTimestamp > 0)
-		sql << " AND timestamp<"<<untilTimestamp<<endl;
+		sql << " AND timestamp<"<<untilTimestamp;
 	sql <<";" ;
 
 	try

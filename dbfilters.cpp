@@ -105,11 +105,11 @@ bool DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &
 	for(size_t i=0; i < refTypeStrs.size(); i++)
 	{
 		if(refTypeStrs[i] == "node")
-			this->nodeIds.insert(objId);
+			this->nodeIds.insert(refIds[i]);
 		else if(refTypeStrs[i] == "way")
-			this->wayIds.insert(objId);
+			this->wayIds.insert(refIds[i]);
 		else if(refTypeStrs[i] == "relation")
-			this->relationIds.insert(objId);
+			this->relationIds.insert(refIds[i]);
 		else
 			throw runtime_error("Unknown member type in relation");
 	}
