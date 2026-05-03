@@ -43,7 +43,7 @@ void DbGetPrimaryKeyCols(pqxx::connection &c, pqxx::transaction_base *work,
 
 	pqxx::result r = work->exec(sql);
 	int colNameCol = r.column_number("column_name");
-	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+	for (int rownum=0; rownum < r.size(); ++rownum)
 	{
 		const pqxxrow row = r[rownum];
 		colsOut.push_back(row[colNameCol].as<string>());

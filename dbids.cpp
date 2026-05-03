@@ -174,13 +174,17 @@ bool ResetChangesetUidCounts(pqxx::connection &c, pqxx::transaction_base *work,
 		}
 	}
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "node", "changeset", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "way", "changeset", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "relation", "changeset", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 	ok = GetMaxFieldInTable(c, work, st.str(), "id", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 
 	stringstream ss;
 	ss << "DELETE FROM "<<c.quote_name(tablePrefix+"nextids") << " WHERE id = 'changeset';";
@@ -208,13 +212,17 @@ bool ResetChangesetUidCounts(pqxx::connection &c, pqxx::transaction_base *work,
 		}
 	}
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "node", "uid", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "way", "uid", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 	ok = GetMaxObjIdLiveOrOld(c, work, tablePrefix, "relation", "uid", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 	ok = GetMaxFieldInTable(c, work, st.str(), "uid", errStr, val);
-	if(!ok) return false; if(val > maxVal) maxVal = val;
+	if(!ok) return false;
+	if(val > maxVal) maxVal = val;
 
 	stringstream ss3;
 	ss3 << "DELETE FROM "<<c.quote_name(tablePrefix+"nextids") <<" WHERE id = 'uid';";
@@ -252,12 +260,12 @@ bool GetNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work,
 		return false;
 	}
 
-	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+	for (int rownum=0; rownum < r.size(); ++rownum)
 	{
 		const pqxxrow row = r[rownum];
 		string id;
 		int64_t maxid = 0;
-		for (unsigned int colnum=0; colnum < row.size(); ++colnum)
+		for (int colnum=0; colnum < row.size(); ++colnum)
 		{
 			const pqxxfield field = row[colnum];
 			if(field.num()==0)

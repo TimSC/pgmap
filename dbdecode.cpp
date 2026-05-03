@@ -83,8 +83,6 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 	class MetaData metaData;
 	JsonToStringMap tagHandler;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
-	uint64_t lastUpdateCount = 0;
-	bool verbose = false;
 
 	pqxx::result rows;
 	cursor.get(rows);
@@ -116,7 +114,6 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 		double lon = atof(c[lonCol].c_str());
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		if(&usernames != nullptr)
 		{
 			string username = usernames.Find(metaData.uid);
 			if(username.length() > 0)
@@ -128,10 +125,7 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 
 		double timeNow = (double)clock() / CLOCKS_PER_SEC;
 		if (timeNow - lastUpdateTime > 30.0)
-		{
-			lastUpdateCount = count;
 			lastUpdateTime = timeNow;
-		}
 
 		if(enc)
 			enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
@@ -148,8 +142,6 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 	JsonToWayMembers wayMemHandler;
 	const std::vector<int64_t> refs;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
-	uint64_t lastUpdateCount = 0;
-	bool verbose = false;
 
 	pqxx::result rows;
 	cursor.get(rows);
@@ -178,7 +170,6 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 		int64_t objId = c[idCol].as<int64_t>();
 
 		DecodeMetadata(c, metaDataCols, metaData);
-		if(&usernames != nullptr)
 		{
 			string username = usernames.Find(metaData.uid);
 			if(username.length() > 0)
@@ -192,10 +183,7 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 
 		double timeNow = (double)clock() / CLOCKS_PER_SEC;
 		if (timeNow - lastUpdateTime > 30.0)
-		{
-			lastUpdateCount = count;
 			lastUpdateTime = timeNow;
-		}
 
 		if(enc)
 			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
@@ -214,8 +202,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 	std::vector<std::string> refRoles;
 	const std::vector<int64_t> refs;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
-	uint64_t lastUpdateCount = 0;
-	bool verbose = false;
+
 	for ( size_t batch = 0; true; batch ++ )
 	{
 		pqxx::result rows;
@@ -248,7 +235,6 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 				continue;
 
 			DecodeMetadata(c, metaDataCols, metaData);
-			if(&usernames != nullptr)
 			{
 				string username = usernames.Find(metaData.uid);
 				if(username.length() > 0)
@@ -269,10 +255,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 
 			double timeNow = (double)clock() / CLOCKS_PER_SEC;
 			if (timeNow - lastUpdateTime > 30.0)
-			{
-				lastUpdateCount = count;
 				lastUpdateTime = timeNow;
-			}
 
 			if(enc)
 				enc->StoreRelation(objId, metaData, tagHandler.tagMap, 

@@ -29,7 +29,7 @@ std::string DbGetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	pqxx::result r = work->prepared(prepkey)(key).exec();
 #endif
 	int valueCol = r.column_number("value");	
-	for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+	for (int rownum=0; rownum < r.size(); ++rownum)
 	{
 		const pqxxrow row = r[rownum];
 		return row[valueCol].as<string>();

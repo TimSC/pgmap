@@ -618,7 +618,7 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 		class OsmWay &mainWay = outData->ways[0];
 
 		std::set<int64_t> memberNodes;
-		for(int64_t i=0; i<mainWay.refs.size(); i++)
+		for(size_t i=0; i<mainWay.refs.size(); i++)
 			memberNodes.insert(mainWay.refs[i]);
 		this->GetObjectsById("node", memberNodes, outData);
  	}
@@ -629,7 +629,7 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 		class OsmRelation &mainRelation = outData->relations[0];
 
 		std::set<int64_t> memberNodes, memberWays, memberRelations;
-		for(int64_t i=0; i<mainRelation.refIds.size(); i++)
+		for(size_t i=0; i<mainRelation.refIds.size(); i++)
 		{
 			if(mainRelation.refTypeStrs[i]=="node")
 				memberNodes.insert(mainRelation.refIds[i]);
@@ -646,8 +646,8 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 		memberWayObjs->StreamTo(*outData.get());
 
 		std::set<int64_t> memberNodes2;
-		for(int64_t i=0; i<memberWayObjs->ways.size(); i++)
-			for(int64_t j=0; j<memberWayObjs->ways[i].refs.size(); j++)
+		for(size_t i=0; i<memberWayObjs->ways.size(); i++)
+			for(size_t j=0; j<memberWayObjs->ways[i].refs.size(); j++)
 				memberNodes2.insert(memberWayObjs->ways[i].refs[j]);
 		this->GetObjectsById("node", memberNodes2, outData);
 	}

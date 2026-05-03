@@ -24,8 +24,6 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	std::string &errStr,
 	int verbose)
 {
-	char trueStr[] = "true";
-	char falseStr[] = "true";
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
 
@@ -903,7 +901,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 			string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
 			//cout << sql << endl;
 
-			work->exec(sql, "UpdateWayBboxesById1");
+			work->exec(sql);
 
 			sqlFrags.str("");
 			count = 0;
@@ -915,7 +913,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		string sql = "UPDATE "+tablePrefix+"liveways SET bbox=ST_Envelope(ST_Union(ARRAY(SELECT geom FROM "+tablePrefix+"visiblenodes WHERE "+tablePrefix+"visiblenodes.id::bigint = ANY(ARRAY(SELECT jsonb_array_elements("+tablePrefix+"liveways.members))::text[]::bigint[])))) WHERE ("+sqlFrags.str()+");";
 		//cout << sql << endl;
 
-		work->exec(sql, "UpdateWayBboxesById2");
+		work->exec(sql);
 	}
 
 	return 0;	
@@ -1002,7 +1000,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=null WHERE id = "<<rel.objId<<";";
 		if(verbose >= 2) cout << sql.str() << endl;
 
-		work->exec(sql, "UpdateSingleRelation");
+		work->exec(sql.str());
 	}
 }
 

@@ -150,7 +150,7 @@ bool DbGetEditActivityById(pqxx::connection &c,
 		pqxx::result r = work->exec(sql.str());
 		class EditActivityCols cols(r);
 
-		for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+		for (int rownum=0; rownum < r.size(); ++rownum)
 		{
 			const pqxxrow row = r[rownum];
 			DecodeEditActivityRow(cols, row, out);
@@ -196,7 +196,7 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 		class EditActivityCols cols(r);
 		out.resize(r.size());
 
-		for (unsigned int rownum=0; rownum < r.size(); ++rownum)
+		for (int rownum=0; rownum < r.size(); ++rownum)
 		{
 			const pqxxrow row = r[rownum];
 			auto activity = make_shared<class EditActivity>();
@@ -306,7 +306,7 @@ void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		int64_t uid = c[uidCol].as<int64_t>();
 		int64_t nodes = c[nodesCol].as<int64_t>();
-		int64_t ways = c[nodesCol].as<int64_t>();
+		int64_t ways = c[waysCol].as<int64_t>();
 		int64_t relations = c[relationsCol].as<int64_t>();
 
 		uidOut.push_back(uid);

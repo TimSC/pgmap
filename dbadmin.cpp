@@ -934,7 +934,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 	}
 	else
 	{
-		if (extension(diffPath) == ".gz")
+		if (boost::filesystem::path(diffPath).extension() == ".gz")
 		{
 			cout << "   " << diffPath << endl;
 			std::string xmlData;
@@ -988,7 +988,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 
 					//Ensure a copy of affected parents is in the active table
 					std::map<int64_t, int64_t> unusedNodeIds, unusedWayIds, unusedRelationIds;
-					bool ok = ::StoreObjects(c, work, tableModPrefix, *affectedParents.get(), 
+					::StoreObjects(c, work, tableModPrefix, *affectedParents.get(),
 						unusedNodeIds, unusedWayIds, unusedRelationIds, errStr);
 
 					for(size_t j=0; j<affectedParents->ways.size(); j++)
@@ -998,17 +998,17 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				}
 
 				//Update bboxes of modified and parent ways
-				int ret = ::UpdateWayBboxesById(c, work,
+				::UpdateWayBboxesById(c, work,
 					waysToUpdate,
 					0,
-					tableModPrefix, 
+					tableModPrefix,
 					errStr);
 
 				//Update relation bboxes
-				ret = ::UpdateRelationBboxesById(c, work,
+				::UpdateRelationBboxesById(c, work,
 					relsToUpdate,
 					0,
-					tableModPrefix, 
+					tableModPrefix,
 					errStr);
 			}
 		}
@@ -1029,9 +1029,6 @@ size_t DbCheckWaysFromCursor(pqxx::connection &c, pqxx::transaction_base *work,
 	JsonToStringMap tagHandler;
 	JsonToWayMembers wayMemHandler;
 	const std::vector<int64_t> refs;
-	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
-	uint64_t lastUpdateCount = 0;
-	bool verbose = false;
 	size_t count = 0;
 
 	//Get a batch of rows

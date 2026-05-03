@@ -34,7 +34,7 @@ void DecodeRowsToChangesets(pqxx::result &rows, class DbUsernameLookup &username
 	Reader reader;
 	class JsonToStringMap tagHandler;
 
-	for (unsigned int rownum=0; rownum < rows.size(); ++rownum)
+	for (int rownum=0; rownum < rows.size(); ++rownum)
 	{
 		const pqxxrow row = rows[rownum];
 
@@ -159,8 +159,6 @@ bool GetOldNewRelationByChangeset(pqxx::connection &c, pqxx::transaction_base *w
 	string excludeTable;
 	if(excludeTablePrefix.size() > 0)
 		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
-
-	int count = 0;
 
 	stringstream sql;
 	sql << "SELECT " << relTable << ".*";

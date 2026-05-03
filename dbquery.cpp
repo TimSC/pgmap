@@ -131,7 +131,7 @@ void GetLiveRelationsForObjects(pqxx::connection &c, pqxx::transaction_base *wor
 		excludeTable = c.quote_name(excludeTablePrefix + "relationids");
 
 	stringstream sqlFrags;
-	int count = 0;
+	size_t count = 0;
 	for(; it != qids.end() && count < step; it++)
 	{
 		if(count >= 1)
@@ -169,7 +169,7 @@ void GetVisibleObjectsById(pqxx::connection &c, pqxx::transaction_base *work,
 	string nodeTable = c.quote_name(tablePrefix + "visible" +objType+ "s");
 
 	stringstream sqlFrags;
-	int count = 0;
+	size_t count = 0;
 	for(; it != objIds.end() && count < step; it++)
 	{
 		if(count >= 1)
@@ -213,7 +213,7 @@ void DbGetObjectsByIdVer(pqxx::connection &c, pqxx::transaction_base *work,
 	string objTable = c.quote_name(tablePrefix+liveOrOld+objType+"s");
 
 	stringstream sqlFrags;
-	int count = 0;
+	size_t count = 0;
 	if(objType == "relation") //Relations are dumped in one shot
 		step = 0;
 	for(; it != objIdVers.end() && (count < step || step == 0); it++)
@@ -257,7 +257,7 @@ void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work,
 	string objTable = c.quote_name(tablePrefix+liveOrOld+objType+"s");
 
 	stringstream sqlFrags;
-	int count = 0;
+	size_t count = 0;
 	if(objType == "relation") //Relations are dumped in one shot
 		step = 0;
 	for(; it != objIds.end() && (count < step || step == 0); it++)
