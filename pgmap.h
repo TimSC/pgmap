@@ -235,6 +235,11 @@ public:
 		const std::string &tableActivePrefixIn,
 		const std::string &tableModPrefixIn,
 		const std::string &tableTestPrefixIn);
+	PgMap(const std::string &connection, const std::string &tableStaticPrefixIn, 
+		const std::string &tableActivePrefixIn,
+		const std::string &tableModPrefixIn,
+		const std::string &tableTestPrefixIn,
+		const std::map<std::string, int64_t> &limits);
 	virtual ~PgMap();
 	PgMap& operator=(const PgMap&) {return *this;};
 
@@ -247,4 +252,3 @@ public:
 };
 
 #endif //_PGMAP_H
-

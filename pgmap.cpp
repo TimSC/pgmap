@@ -1923,6 +1923,18 @@ PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn,
 	tableTestPrefix = tableTestPrefixIn;
 }
 
+PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
+	const string &tableActivePrefixIn,
+	const string &tableModPrefixIn,
+	const string &tableTestPrefixIn,
+	const std::map<std::string, int64_t> &limits):
+	PgMap(connection, tableStaticPrefixIn, tableActivePrefixIn, tableModPrefixIn, tableTestPrefixIn)
+{
+	class OsmXmlLimits xmlLimits;
+	xmlLimits.Apply(limits);
+	SetDefaultOsmXmlLimits(xmlLimits);
+}
+
 PgMap::~PgMap()
 {
 	if(this->sharedWork)
@@ -1969,4 +1981,3 @@ std::shared_ptr<class PgAdmin> PgMap::GetAdmin(const std::string &shareMode)
 	shared_ptr<class PgAdmin> out(new class PgAdmin(dbconn, tableStaticPrefix, tableModPrefix, tableTestPrefix, this->sharedWork, shareMode));
 	return out;
 }
-

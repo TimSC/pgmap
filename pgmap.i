@@ -48,6 +48,7 @@ namespace std {
 	%template(vectordd) vector<vector<double> >;
 
 	%template(mapstringstring) std::map<std::string, std::string>;
+	%template(mapstringi64) std::map<std::string, int64_t>;
 	%template(mapi64i64) std::map<int64_t, int64_t>;
 	%template(mapi64vectord) std::map<int64_t, vector<double> >;
 
@@ -122,4 +123,3 @@ namespace std {
 
 %include "cppo5m/pbf.h"
 */
-
