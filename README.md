@@ -42,9 +42,7 @@ You may or may need to rebuild to protobuf files:
 
 If you have not already, install the python module and build the tools:
 
-	python setup.py build
-
-	python setup.py install
+	pip install .
 
 	make
 

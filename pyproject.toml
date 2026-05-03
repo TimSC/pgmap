@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pgmap"
+version = "0.1"
+description = "pgmap swig module"
+authors = [{name = "Tim Sheerman-Chase"}]
