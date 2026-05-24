@@ -55,7 +55,11 @@ string mergestr(const std::vector<string> &parts, const std::string &glue)
 bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut)
 {
 	string configContent;
-	ReadFileContents(settingsPath.c_str(), false, configContent);
+	if(!ReadFileContents(settingsPath.c_str(), false, configContent))
+	{
+		cerr << "Warning: config file \"" << settingsPath << "\" could not be found" << endl;
+		return false;
+	}
 	std::vector<std::string> lines = split(configContent, '\n');
 	for(size_t i=0; i < lines.size(); i++)
 	{
@@ -208,4 +212,3 @@ void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vecto
 		}
 	}	
 }
-
