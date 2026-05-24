@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <algorithm>
 #include "dbjson.h"
 #include "util.h"
 using namespace std;
@@ -36,6 +37,17 @@ inline string Int64ToStr(int64_t val)
 	stringstream ss;
 	ss << val;
 	return ss.str();
+}
+
+void WarnZeroLengthTags(const std::string &objType, int64_t objId, const TagMap &tags)
+{
+	for(TagMap::const_iterator it=tags.begin(); it != tags.end(); it++)
+	{
+		if(it->first.size() == 0)
+			cerr << "Warning: " << objType << " " << objId << " has zero length tag key" << endl;
+		if(it->second.size() == 0)
+			cerr << "Warning: " << objType << " " << objId << " has zero length tag value for key \"" << it->first << "\"" << endl;
+	}
 }
 
 class CsvStore : public IDataStreamHandler
@@ -144,6 +156,10 @@ bool CsvStore::Finish()
 bool CsvStore::StoreNode(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, double lat, double lon)
 {
+	if(lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0)
+		cerr << "Warning: node " << objId << " has invalid lat/lon: " << lat << "," << lon << endl;
+	WarnZeroLengthTags("node", objId, tags);
+
 	string tagsJson;
 	EncodeTags(tags, tagsJson);
 	StrReplaceAll(tagsJson, "\"", "\"\"");
@@ -197,6 +213,12 @@ bool CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 bool CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
 	const TagMap &tags, const std::vector<int64_t> &refs)
 {
+	if(refs.size() == 0)
+		cerr << "Warning: way " << objId << " has zero nodes" << endl;
+	else if(refs.size() < 2)
+		cerr << "Warning: way " << objId << " has fewer than two nodes" << endl;
+	WarnZeroLengthTags("way", objId, tags);
+
 	string tagsJson;
 	EncodeTags(tags, tagsJson);
 	StrReplaceAll(tagsJson, "\"", "\"\"");
@@ -262,6 +284,15 @@ bool CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
 	const std::vector<std::string> &refRoles)
 {
+	if(refIds.size() == 0)
+		cerr << "Warning: relation " << objId << " has zero members" << endl;
+	if(refTypeStrs.size() != refIds.size() || refTypeStrs.size() != refRoles.size())
+	{
+		cerr << "Warning: relation " << objId << " has relation member vector length mismatch: types="
+			<< refTypeStrs.size() << ", ids=" << refIds.size() << ", roles=" << refRoles.size() << endl;
+	}
+	WarnZeroLengthTags("relation", objId, tags);
+
 	string tagsJson;
 	EncodeTags(tags, tagsJson);
 	StrReplaceAll(tagsJson, "\"", "\"\"");
@@ -316,7 +347,8 @@ bool CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 	objIdStr += "\n";
 	this->relationIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
 
-	for(size_t i=0; i<refIds.size(); i++)
+	size_t refCount = std::min(refIds.size(), std::min(refTypeStrs.size(), refRoles.size()));
+	for(size_t i=0; i<refCount; i++)
 	{
 		const std::string &refTypeStr = refTypeStrs[i];
 		stringstream ss2;
@@ -353,4 +385,3 @@ int main(int argc, char **argv)
 	csvStore.reset();
 	cout << "All done!" << endl;
 }
-
