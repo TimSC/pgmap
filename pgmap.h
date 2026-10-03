@@ -157,6 +157,10 @@ public:
 	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,
 		class PgMapError &errStr);
+	// Inclusive row range; lastId/atomicEditId zero means no corresponding filter.
+	void QueryEditActivityByIds(int64_t firstId, int64_t lastId, int64_t atomicEditId,
+		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
+		class PgMapError &errStr);
 	void QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 		int64_t untilTimestamp,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,

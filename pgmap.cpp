@@ -802,6 +802,65 @@ int PgTransaction::UpdateObjectBboxesById(
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 		class PgMapError &errStr)
 {
+	/*
+	 * Retaining context for rectangular extract synchronization
+	 * -------------------------------------------------------
+	 * An extract is a map-query result, not simply nodes inside its rectangle.
+	 * In membership-based query mode, an inside node selects its parent ways,
+	 * and all nodes of those ways are returned, including outside nodes. Direct
+	 * relations of those returned nodes/ways are also selected. In bbox mode,
+	 * stored way/relation envelopes determine selection instead. Neither mode
+	 * implies unlimited expansion of the graph or completion of all relations.
+	 * Consequently, an edit to an outside node can affect an extract, and moving
+	 * a node inside can require adding an unchanged way and its other nodes.
+	 * Recording only modified objects or their new positions is insufficient.
+	 *
+	 * The caller captures original object state before applying a block, then
+	 * constructs this activity after applying it, while the map remains locked.
+	 * existing/updated record object type, ID and version; affectedparents and
+	 * related retain additional versioned references. Full object contents stay
+	 * in the map's static, live and history tables rather than being duplicated
+	 * in each activity row. Type is required because IDs are per object type;
+	 * version is required because fetching today's object by ID would lose the
+	 * state associated with this edit. Referenced history must remain available
+	 * for as long as consumers are allowed to synchronize from these records.
+	 * All lookups must respect the static baseline and active overlay, including
+	 * suppression of overridden/deleted static objects.
+	 *
+	 * sync_before/sync_after are intended to retain the relevant versioned
+	 * context on each side of the edit. bbox_before/bbox_after retain matching
+	 * spatial extents as SRID-4326 GeometryCollections. JSON array entry i matches
+	 * geometry component i+1: counts AND ordering must agree. Separate extents
+	 * matter because a node can enter or leave a rectangle, and an unchanged
+	 * parent object's version can acquire a different extent when a node moves.
+	 * An object version alone also does not identify its members' versions at
+	 * this revision; retaining footprints does not reconstruct the whole graph.
+	 *
+	 * Current coverage is deliberately limited: the upload caller records old
+	 * versions and point geometries of accepted node modifications/deletions.
+	 * Creation has an empty before array and empty collection. Deletions skipped
+	 * by if-unused are excluded. After-state and complete parent/dependency sync
+	 * context are not populated yet, so these rows alone do not constitute a
+	 * complete extract-update algorithm. Unrecorded context is SQL NULL; known
+	 * empty context is [] paired with GEOMETRYCOLLECTION EMPTY.
+	 *
+	 * A future consumer uses retained spatial/dependency context to find candidate
+	 * edits, retrieves the referenced historical objects, and determines which
+	 * objects enter, leave, or change in its query result. Spatial overlap is a
+	 * candidate filter, not proof of membership. Before removing a completion
+	 * node or relation, other retained selection reasons must be checked. Leaving
+	 * an extract is distinct from deletion from the global map. The correctness
+	 * target is the result of a fresh query at the consumer's target revision.
+	 *
+	 * One upload may contain multiple action blocks. This method gives all rows
+	 * in this PgTransaction one atomic_edit_id and ordered block_index values.
+	 * Activity inserts and map changes share the same database transaction: a
+	 * later validation/storage failure rolls them all back. Consumers must apply
+	 * complete groups before advancing their checkpoint, not individual rows or
+	 * timestamp windows. The exclusive locks serialize ID allocation and remain
+	 * held until commit/abort; sequence gaps after rollback are harmless. Legacy
+	 * rows with NULL grouping cannot be assumed to share transaction boundaries.
+	 */
 	std::string nativeErrStr;
 	if(this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in EXCLUSIVE mode");
@@ -1386,6 +1445,20 @@ bool PgTransaction::GetEditActivityById(int64_t editActivityId,
 	return found;
 }
 
+void PgTransaction::QueryEditActivityByIds(int64_t firstId, int64_t lastId,
+	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &editActivity,
+	class PgMapError &errStr)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	if(firstId < 0 || lastId < 0 || atomicEditId < 0 || (lastId > 0 && lastId < firstId))
+		throw invalid_argument("Invalid activity ID range");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work) throw runtime_error("Transaction has been deleted");
+	DbQueryEditActivityByIds(*dbconn, work.get(), this->tableActivePrefix,
+		firstId, lastId, atomicEditId, editActivity, errStr.errStr);
+}
+
 void PgTransaction::QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &editActivity,
@@ -1600,15 +1673,18 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, "", this->tableStaticPrefix, 0, false, nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableModPrefix, 0, false, nativeErrStr);
-	errStr.errStr = nativeErrStr;
-	if(!ok) return ok;
-	ok = DbSetSchemaVersion(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableTestPrefix, 0, false, nativeErrStr);
-	errStr.errStr = nativeErrStr;
-
+	// Dropping everything does not need intermediate schema transformations.
+	// Process dependent active views before the static tables they reference.
+	for(const string &prefix : {this->tableTestPrefix, this->tableModPrefix, this->tableStaticPrefix})
+	{
+		if(!DbDropMapTables(*dbconn, work.get(), verbose, prefix, nativeErrStr))
+		{
+			errStr.errStr = nativeErrStr;
+			return false;
+		}
+	}
+	errStr.errStr.clear();
+	bool ok = true;
 	return ok;
 }
 

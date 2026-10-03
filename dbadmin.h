@@ -10,6 +10,10 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tableStaticPrefix,
 	std::string &errStr);
 
+// Drop known map objects directly, without depending on migration history.
+bool DbDropMapTables(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, std::string &errStr);
+
 bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &parentPrefix, 

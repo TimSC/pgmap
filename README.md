@@ -161,11 +161,42 @@ Work in progress
 Atomic edit activity (schema version 14)
 ---------------------------------------
 
+The XML endpoints `/replication/edit_activity/<id>` and
+`/replication/edit_activities` expose `atomic_edit_id` and `block_index`
+attributes for grouped rows. Their `sync_before` and `sync_after` elements
+contain actual historical OSM objects resolved from type/ID/version references,
+in reference order. Corresponding `bbox_before` and `bbox_after` elements hold
+WKT with `format="wkt"` and `srid="4326"`. Unrecorded fields have `null="true"`;
+known empty sync context is an empty element. Missing referenced history is an
+error rather than a silently shortened list. Rebuild the bindings to expose the
+additional C++ reader fields before running these endpoints.
+
+The admin tool's "Drop tables" operation drops the known map tables, visible
+views, and atomic-edit sequence directly using IF EXISTS. It does not run the
+downgrade chain, so it also works with incomplete or mismatched schemas. It
+removes static, mod, and test data, including dependent objects via CASCADE.
+Use the separate schema upgrade/downgrade operation to retain map data.
+
 Schema version 14 adds `atomic_edit_id BIGINT` and `block_index BIGINT` to
 `edit_activity`, with a unique index on the pair. All activity records inserted
 through one `PgTransaction` share an atomic edit ID; block positions start at
 zero. Separate uploads in the same changeset receive separate IDs. The C++ and
 SWIG `EditActivity` fields are `atomicEditId` and `blockIndex`.
+
+Version 14 also adds `sync_before` and `sync_after` JSONB arrays, paired with
+`bbox_before` and `bbox_after` geometry collections (SRID 4326). Each reference
+contains an object type, ID, and version. Array entry i corresponds to geometry
+component i+1; constraints enforce matching counts and require each pair to be
+either fully NULL or fully populated. NULL means context has not been recorded;
+an empty array paired with an empty collection means known empty context.
+For node edits, the activity writer populates `sync_before` with old node
+references and `bbox_before` with matching point geometries. Node creation
+records an empty array and empty collection. Skipped if-unused deletions are
+excluded. After-state and way/relation context are not populated yet.
+
+These additions amend migration 13-to-14. Databases already marked version 14
+will not rerun that migration and need the additional ALTER TABLE commands
+applied separately; do not downgrade populated databases merely to add fields.
 
 IDs are allocated lazily from a per-table-set sequence after acquiring the
 exclusive map locks. Those locks remain held until commit or abort, ensuring
@@ -181,5 +212,23 @@ must not be treated as one grouped edit.
 Rebuild the pgmap library and use the admin tool's existing table creation/
 upgrade operation with the latest schema before running the updated server.
 The upgrade applies to static, mod, and test table sets. Downgrading to version
-13 removes the grouping columns and sequence and loses grouping information.
+13 removes the grouping and sync columns and sequence and loses that information.
 This change does not add a replication API or populate extract sync data.
+
+Edit activity ID queries
+-----------------------
+
+The existing XML API supports:
+
+* `/replication/edit_activity/123`: a single row (404 if missing).
+* `/replication/edit_activities?id=123`: a single row as a collection.
+* `/replication/edit_activities?first_id=100&last_id=150`: an inclusive row range.
+* `/replication/edit_activities?first_id=100`: rows from 100 onwards.
+* `/replication/edit_activities?atomic_edit_id=42`: all rows of atomic edit 42.
+
+ID queries return rows ordered by row ID; an unmatched collection query returns
+an empty collection. IDs must be positive integers. A row range can additionally
+be restricted by atomic edit ID, but that may return only part of the group.
+Row ranges can split atomic edits; use atomic-edit queries when a complete group
+is required. Timestamp queries remain supported but cannot be combined with ID
+filters. Rebuild pgmap bindings for the new QueryEditActivityByIds method.

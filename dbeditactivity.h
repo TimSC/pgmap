@@ -19,6 +19,12 @@ public:
 	int relations;
 	std::string action;
 	std::vector<double> bbox;
+	// JSON reference array and matching SRID-4326 GeometryCollection WKT.
+	// Empty strings mean context was not recorded.
+	std::string syncBefore;
+	std::string bboxBefore;
+	std::string syncAfter;
+	std::string bboxAfter;
 	int64_t changeset;
 	int64_t timestamp;
 	int64_t uid;
@@ -64,6 +70,11 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	int64_t sinceTimestamp,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
+	std::string &errStr);
+
+void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, int64_t firstId, int64_t lastId,
+	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr);
 
 #endif //_EDIT_ACTIVITY_H
