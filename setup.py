@@ -4,9 +4,12 @@
 setup.py file for SWIG pgmap
 """
 from __future__ import print_function
+import os
 import re
+import shlex
 import subprocess
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from packaging.version import Version
 from setuptools import setup, Extension
 import setuptools.command.build_ext
@@ -24,6 +27,37 @@ class Build_Py_With_Swig(setuptools.command.build_py.build_py):
 class Build_Ext_find_swig3(setuptools.command.build_ext.build_ext):
 	def find_swig(self):
 		return get_swig_executable()
+
+	def build_extensions(self):
+		self.compiler.compile = make_parallel_compile(self.compiler)
+		super().build_extensions()
+
+
+def make_parallel_compile(compiler):
+	"""Compile the source files of an extension in parallel.
+
+	setuptools compiles sources one at a time (its --parallel option only
+	builds separate extensions concurrently). Set PGMAP_BUILD_JOBS to limit
+	the number of compiler processes; the default is the number of CPUs."""
+	jobs = int(os.environ.get("PGMAP_BUILD_JOBS") or os.cpu_count() or 1)
+
+	def compile(sources, output_dir=None, macros=None, include_dirs=None, debug=0,
+			extra_preargs=None, extra_postargs=None, depends=None):
+		macros, objects, extra_postargs, pp_opts, build = compiler._setup_compile(
+			output_dir, macros, include_dirs, sources, depends, extra_postargs)
+		cc_args = compiler._get_cc_args(pp_opts, debug, extra_preargs)
+
+		def compile_one(obj):
+			if obj not in build:
+				return
+			src, ext = build[obj]
+			compiler._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
+
+		with ThreadPoolExecutor(max_workers=jobs) as executor:
+			list(executor.map(compile_one, objects))
+		return objects
+
+	return compile
 
 
 def get_swig_executable():
@@ -44,6 +78,12 @@ def get_swig_executable():
 	return swig_executable
 
 
+# Compiler flags appended after Python's defaults (-g -O2), so they take
+# precedence. Override with PGMAP_CFLAGS, e.g. PGMAP_CFLAGS="-g -O0" for
+# debugging. An empty value uses Python's defaults.
+PGMAP_CFLAGS = shlex.split(os.environ.get("PGMAP_CFLAGS", "-g0 -O1"))
+
+
 pgmap_module = Extension('_pgmap',
 	define_macros=[('PYTHON_AWARE', '1')],
 	sources=['pgmap.i', 'util.cpp', 'dbquery.cpp', 'dbids.cpp', 'dbadmin.cpp', 'dbcommon.cpp', 'dbreplicate.cpp', 'dbdecode.cpp',
@@ -55,7 +95,7 @@ pgmap_module = Extension('_pgmap',
 	swig_opts=['-c++', '-DPYTHON_AWARE', '-DSWIGWORDSIZE64'],
 	libraries=['pqxx', 'expat', 'z', 'boost_filesystem', 'boost_system', 'protobuf', 'boost_iostreams'],
 	language="c++",
-	extra_compile_args=["-std=c++17", '-DPY_SSIZE_T_CLEAN'],
+	extra_compile_args=["-std=c++17", '-DPY_SSIZE_T_CLEAN'] + PGMAP_CFLAGS,
 )
 
 
