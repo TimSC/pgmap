@@ -157,3 +157,29 @@ Work in progress
 * Probably should add doxygen documentation (or more comments generally)
 
 
+
+Atomic edit activity (schema version 14)
+---------------------------------------
+
+Schema version 14 adds `atomic_edit_id BIGINT` and `block_index BIGINT` to
+`edit_activity`, with a unique index on the pair. All activity records inserted
+through one `PgTransaction` share an atomic edit ID; block positions start at
+zero. Separate uploads in the same changeset receive separate IDs. The C++ and
+SWIG `EditActivity` fields are `atomicEditId` and `blockIndex`.
+
+IDs are allocated lazily from a per-table-set sequence after acquiring the
+exclusive map locks. Those locks remain held until commit or abort, ensuring
+later writers cannot publish lower IDs after a consumer has advanced. Sequence
+gaps after rollback are expected. Activity rows and object changes use the same
+transaction; uploads abort if activity insertion fails.
+
+Existing activity rows retain NULL in both new columns because historical
+transaction boundaries cannot reliably be reconstructed from timestamps. The
+C++ reader represents these as `atomicEditId = 0` and `blockIndex = -1`; they
+must not be treated as one grouped edit.
+
+Rebuild the pgmap library and use the admin tool's existing table creation/
+upgrade operation with the latest schema before running the updated server.
+The upgrade applies to static, mod, and test table sets. Downgrading to version
+13 removes the grouping columns and sequence and loses grouping information.
+This change does not add a replication API or populate extract sync data.

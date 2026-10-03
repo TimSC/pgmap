@@ -16,6 +16,7 @@ class EditActivityCols
 public:
 
 	int idCol;
+	int atomicEditIdCol, blockIndexCol;
 	int nodesCol;
 	int waysCol;
 	int relationsCol;
@@ -33,6 +34,8 @@ public:
 EditActivityCols::EditActivityCols(pqxx::result &r)
 {
 	idCol = r.column_number("id");
+	atomicEditIdCol = r.column_number("atomic_edit_id");
+	blockIndexCol = r.column_number("block_index");
 	nodesCol = r.column_number("nodes");
 	waysCol = r.column_number("ways");
 	relationsCol = r.column_number("relations");
@@ -53,6 +56,8 @@ EditActivityCols::EditActivityCols(pqxx::result &r)
 EditActivity::EditActivity()
 {
 	objId = 0;
+	atomicEditId = 0;
+	blockIndex = -1;
 	nodes = 0;
 	ways = 0;
 	relations = 0;
@@ -74,6 +79,8 @@ EditActivity::EditActivity( const EditActivity &obj)
 EditActivity& EditActivity::operator=(const EditActivity &arg)
 {
 	objId = arg.objId;
+	atomicEditId = arg.atomicEditId;
+	blockIndex = arg.blockIndex;
 
 	nodes = arg.nodes;
 	ways = arg.ways;
@@ -103,6 +110,8 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 	class EditActivity &out)
 {
 	out.objId = row[cols.idCol].as<int64_t>();
+	out.atomicEditId = row[cols.atomicEditIdCol].is_null() ? 0 : row[cols.atomicEditIdCol].as<int64_t>();
+	out.blockIndex = row[cols.blockIndexCol].is_null() ? -1 : row[cols.blockIndexCol].as<int64_t>();
 
 	out.nodes = row[cols.nodesCol].as<int64_t>();
 	out.ways = row[cols.waysCol].as<int64_t>();
@@ -227,10 +236,10 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 	EncodeObjTypeIdVers(activity.relatedType, activity.relatedIdVer, relatedEnc);
 
 	stringstream sql;
-	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, action, nodes, ways, relations, existing, updated, affectedparents, related, bbox) VALUES ";
-	sql << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,";
+	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, action, nodes, ways, relations, existing, updated, affectedparents, related, atomic_edit_id, block_index, bbox) VALUES ";
+	sql << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,";
 	if(activity.bbox.size() == 4)
-		sql << "ST_MakeEnvelope($12,$13,$14,$15,4326)";
+		sql << "ST_MakeEnvelope($14,$15,$16,$17,4326)";
 	else
 		sql << "null";
 	sql << ");";
@@ -246,11 +255,11 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 #if PQXX_VERSION_MAJOR >= 7
 			work->exec_prepared(tablePrefix+"insert_edit_activity1", activity.changeset, activity.timestamp,
 				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
-				affectedParentsEnc, relatedEnc, activity.bbox[0], activity.bbox[1], activity.bbox[2], activity.bbox[3]);
+				affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex, activity.bbox[0], activity.bbox[1], activity.bbox[2], activity.bbox[3]);
 #else
 			work->prepared(tablePrefix+"insert_edit_activity1")(activity.changeset)(activity.timestamp)
 				(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
-				(affectedParentsEnc)(relatedEnc)(activity.bbox[0])(activity.bbox[1])(activity.bbox[2])(activity.bbox[3]).exec();
+				(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex)(activity.bbox[0])(activity.bbox[1])(activity.bbox[2])(activity.bbox[3]).exec();
 #endif
 		}
 		else
@@ -259,11 +268,11 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 #if PQXX_VERSION_MAJOR >= 7
 			work->exec_prepared(tablePrefix+"insert_edit_activity2", activity.changeset, activity.timestamp,
 				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
-				affectedParentsEnc, relatedEnc);
+				affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex);
 #else
 			work->prepared(tablePrefix+"insert_edit_activity2")(activity.changeset)(activity.timestamp)
 				(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
-				(affectedParentsEnc)(relatedEnc).exec();
+				(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex).exec();
 #endif
 		}
 	}

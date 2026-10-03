@@ -809,10 +809,21 @@ bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbInsertEditActivity(*dbconn, work.get(), this->tableActivePrefix, 
-		activity,
+	// Allocate only after the exclusive map locks have been acquired. The next
+	// writer cannot allocate until this transaction commits or aborts.
+	if(atomicEditId == 0)
+	{
+		string sequence = dbconn->quote_name(this->tableActivePrefix + "atomic_edit_id_seq");
+		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
+	}
+	EditActivity groupedActivity(activity);
+	groupedActivity.atomicEditId = atomicEditId;
+	groupedActivity.blockIndex = activityBlockIndex;
+	bool ok = DbInsertEditActivity(*dbconn, work.get(), this->tableActivePrefix,
+		groupedActivity,
 		nativeErrStr,
 		0);
+	if(ok) ++activityBlockIndex;
 
 	errStr.errStr = nativeErrStr;
 

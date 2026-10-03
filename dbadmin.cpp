@@ -242,6 +242,32 @@ bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;
 }
 
+// Legacy rows remain ungrouped: timestamps cannot recover upload boundaries.
+bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, string &errStr)
+{
+	string table = c.quote_name(tablePrefix + "edit_activity");
+	string sql = "CREATE SEQUENCE " + c.quote_name(tablePrefix + "atomic_edit_id_seq") + ";";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "ALTER TABLE " + table + " ADD COLUMN atomic_edit_id BIGINT, ADD COLUMN block_index BIGINT, "
+		"ADD CHECK ((atomic_edit_id IS NULL AND block_index IS NULL) OR "
+		"(atomic_edit_id IS NOT NULL AND atomic_edit_id > 0 AND block_index IS NOT NULL AND block_index >= 0));";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "CREATE UNIQUE INDEX " + c.quote_name(tablePrefix + "activity_atomic_block") +
+		" ON " + table + " (atomic_edit_id, block_index);";
+	return DbExec(work, sql, errStr, nullptr, verbose);
+}
+
+bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, string &errStr)
+{
+	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
+		" DROP COLUMN atomic_edit_id, DROP COLUMN block_index;";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "DROP SEQUENCE " + c.quote_name(tablePrefix + "atomic_edit_id_seq") + ";";
+	return DbExec(work, sql, errStr, nullptr, verbose);
+}
+
 bool DbDowngradeTables13To12(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
@@ -350,7 +376,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	cout << "Starting schema version" << schemaVersion << endl;
 
 	if(latest)
-		targetVer = 13;
+		targetVer = 14;
 	bool ok = true;
 
 	//Upgrading
@@ -393,7 +419,21 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		schemaVersion = 13;
 	}
 
+	if(schemaVersion == 13 and targetVer > schemaVersion)
+	{
+		if(!DbUpgradeTables13to14(c, work, verbose, tablePrefix, errStr)) return false;
+		if(!DbSetMetaValue(c, work, "schema_version", "14", tablePrefix, errStr)) return false;
+		schemaVersion = 14;
+	}
+
 	//Downgrading
+	if(targetVer < 14 and schemaVersion == 14)
+	{
+		if(!DbDowngradeTables14To13(c, work, verbose, tablePrefix, errStr)) return false;
+		if(!DbSetMetaValue(c, work, "schema_version", "13", tablePrefix, errStr)) return false;
+		schemaVersion = 13;
+	}
+
 	if(targetVer < 13 and schemaVersion == 13)
 	{
 		ok = DbDowngradeTables13To12(c, work, 

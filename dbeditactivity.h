@@ -10,6 +10,9 @@ class EditActivity
 {
 public:
 	int64_t objId;
+	// Zero/-1 denote legacy activity with unknown transaction boundaries.
+	int64_t atomicEditId;
+	int64_t blockIndex;
 
 	int nodes;
 	int ways;

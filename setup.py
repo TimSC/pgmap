@@ -10,6 +10,15 @@ import shutil
 from packaging.version import Version
 from setuptools import setup, Extension
 import setuptools.command.build_ext
+import setuptools.command.build_py
+
+
+class Build_Py_With_Swig(setuptools.command.build_py.build_py):
+	def run(self):
+		# SWIG generates pgmap.py during build_ext. Generate it before build_py
+		# copies Python modules, otherwise a clean wheel contains only _pgmap.
+		self.run_command('build_ext')
+		super().run()
 
 
 class Build_Ext_find_swig3(setuptools.command.build_ext.build_ext):
@@ -53,5 +62,5 @@ pgmap_module = Extension('_pgmap',
 setup(
 	ext_modules=[pgmap_module],
 	py_modules=["pgmap"],
-	cmdclass={"build_ext": Build_Ext_find_swig3},
+	cmdclass={"build_ext": Build_Ext_find_swig3, "build_py": Build_Py_With_Swig},
 )

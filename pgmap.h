@@ -81,6 +81,8 @@ public:
 class PgTransaction : public PgCommon
 {
 private:
+	int64_t atomicEditId = 0;
+	int64_t activityBlockIndex = 0;
 
 
 public:
