@@ -105,6 +105,9 @@ namespace std {
 %shared_ptr(PgCommon)
 
 %include "pgcommon.h"
+%shared_ptr(PgExtractExport)
+%ignore DbUpdateExtractNodes;
+%include "dbextract.h"
 
 %shared_ptr(PgMapQuery)
 %shared_ptr(PgTransaction)

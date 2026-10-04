@@ -936,50 +936,24 @@ int64_t PgTransaction::UpdateExtractNodes(int64_t extractId, const string &name)
 	return DbUpdateExtractNodes(*dbconn, *sharedWork->work, tableActivePrefix, extractId, name);
 }
 
-int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
-	shared_ptr<IDataStreamHandler> output)
+std::shared_ptr<PgExtractExport> PgTransaction::StartExportExtract(int64_t extractId,
+    const string &name, shared_ptr<IDataStreamHandler> output)
 {
-	if(extractId < 0 || (!extractId && name.empty()) || !output)
-		throw invalid_argument("Select an extract by positive ID or nonempty name");
-	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
-		throw runtime_error("Map must be locked while exporting an extract");
-	LockExtractTables("ACCESS SHARE");
-	auto work = sharedWork->work;
-	if(!work) throw runtime_error("Transaction has been deleted");
-	string metadata = dbconn->quote_name(tableActivePrefix + "extracts");
-	string predicate = extractId ? "id=" + to_string(extractId) : "name=" + work->quote(name);
-	auto rows = work->exec("SELECT id, ST_XMin(bbox), ST_YMin(bbox), ST_XMax(bbox), ST_YMax(bbox) FROM " +
-		metadata + " WHERE " + predicate + " ORDER BY id LIMIT 2");
-	if(rows.empty()) throw runtime_error("Extract not found");
-	if(rows.size() > 1) throw runtime_error("Extract name is ambiguous; select by ID");
-	extractId = rows[0][0].as<int64_t>();
-	output->StoreIsDiff(false);
-	output->StoreBounds(rows[0][1].as<double>(), rows[0][2].as<double>(),
-		rows[0][3].as<double>(), rows[0][4].as<double>());
-	// Preserve usernames stored in the snapshot instead of replacing them with
-	// potentially newer source-map usernames during decoding.
-	DbUsernameLookup storedUsernames(*dbconn, work.get(), "", "");
-	for(const char *type : {"node", "way", "relation"})
-	{
-		string kind(type);
-		string sql = "SELECT *";
-		if(kind == "node") sql += ", ST_X(geom) AS lon, ST_Y(geom) AS lat";
-		sql += " FROM " + dbconn->quote_name(tableActivePrefix + "extract_live" + kind + "s") +
-			" WHERE extract_id=" + to_string(extractId) + " ORDER BY id";
-		pqxx::icursorstream cursor(*work, sql, "export_extract_" + kind, 1000);
-		if(kind == "node")
-			while(NodeResultsToEncoder(cursor, storedUsernames, output) > 0) {}
-		else if(kind == "way")
-			while(WayResultsToEncoder(cursor, storedUsernames, output) > 0) {}
-		else
-		{
-			set<int64_t> skip;
-			RelationResultsToEncoder(cursor, storedUsernames, skip, output);
-		}
-		output->Reset();
-	}
-	output->Finish();
-	return extractId;
+    if(extractId < 0 || (!extractId && name.empty()) || !output)
+        throw invalid_argument("Select an extract by positive ID or nonempty name");
+    if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+        throw runtime_error("Map must be locked while exporting an extract");
+    LockExtractTables("ACCESS SHARE");
+    return shared_ptr<PgExtractExport>(new PgExtractExport(dbconn, sharedWork,
+        tableActivePrefix, extractId, name, output));
+}
+
+int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
+    shared_ptr<IDataStreamHandler> output)
+{
+    auto exporter = StartExportExtract(extractId, name, output);
+    while(exporter->Continue() != 1) {}
+    return exporter->GetId();
 }
 
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,

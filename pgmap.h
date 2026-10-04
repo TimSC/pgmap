@@ -11,6 +11,7 @@
 #include "dbusername.h"
 #include "pgcommon.h"
 #include "dbeditactivity.h"
+#include "dbextract.h"
 
 class PgMapError
 {
@@ -165,6 +166,8 @@ public:
 	// Select by positive ID, or by a unique name when ID is zero.
 	int64_t ExportExtract(int64_t extractId, const std::string &name,
 		std::shared_ptr<IDataStreamHandler> output);
+	std::shared_ptr<PgExtractExport> StartExportExtract(int64_t extractId,
+		const std::string &name, std::shared_ptr<IDataStreamHandler> output);
 
 	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,
