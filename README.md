@@ -259,8 +259,8 @@ changeset, or edit activity tables. Object versions and original metadata are
 retained, but IDs continue to come from the source map.
 
 All extract queries must scope object and membership lookups by extract ID.
-The extract tool can save initial rectangular snapshots; incremental
-synchronization is not implemented. Stored extracts can be exported with
+The extract tool can save initial rectangular snapshots, which `update_extract`
+brings up to date with later edits. Stored extracts can be exported with
 `export_extract`. Downgrade to 13 and direct map-table dropping remove these
 tables. Already-version-14 databases will not automatically run the amended
 migration; adding these tables requires a separate application of the DDL.
@@ -322,11 +322,11 @@ Before accessing extracts, they lock all eight active-prefix extract tables in
 one consistent order: metadata, nodes, ways, relations, way memberships, then
 node/way/relation relation memberships. Saving uses EXCLUSIVE; exporting uses
 ACCESS SHARE. Locks remain held until commit or abort. These modes allow exports
-alongside saves, while serializing saves and preventing conflicting DDL. Future
-extract update operations must follow the same main-map-before-extract order.
+alongside saves, while serializing saves and preventing conflicting DDL. Updates
+follow the same main-map-before-extract order and lock extracts EXCLUSIVE.
 
-Updating a stored extract (node edits only)
-------------------------------------------
+Updating a stored extract
+-------------------------
 
     make update_extract
     ./update_extract --id=1
@@ -334,21 +334,23 @@ Updating a stored extract (node edits only)
 
 The command reads `config.cfg` (or `--config=...`), locks the main map first and
 all extract tables exclusively afterwards, then updates to the latest visible
-source activity checkpoint. All pending rows must be grouped create/modify/
-delete actions on nodes only. Pending way/relation edits, legacy ungrouped rows,
-incomplete groups, unset checkpoints, or a source checkpoint that has moved
-backwards cause failure without committing changes. Names must be unique.
+source activity checkpoint. Pending edits may create, modify or delete nodes,
+ways and relations. Legacy ungrouped rows, incomplete groups, unset checkpoints,
+or a source checkpoint that has moved backwards cause failure without committing
+changes. Names must be unique.
 
-Most logic lives in `dbextract.cpp`/`dbextract.h`. This first implementation uses
-activity to validate the interval, then recalculates the extract's membership
-in SQL using its stored query mode and the current source snapshot. It replaces
-only that extract's current objects and memberships, preserving source IDs and
-versions, and advances both checkpoints atomically. It handles node movement,
-creation/deletion, shared completion nodes, and unchanged ways/relations entering
-or leaving due to node edits. It does not replay individual historical versions
-or use sync footprints to narrow the calculation yet; work scales with the
-spatial query and source membership data. Temporary SQL tables avoid loading the
-extract into client memory. With no pending activity the command is a no-op.
+Most logic lives in `dbextract.cpp`/`dbextract.h`. Activity is used to detect
+pending edits and validate the interval; the extract's membership is then
+recalculated in SQL using its stored query mode and the current source snapshot,
+following the same selection rules as a map query. It replaces only that
+extract's current objects and memberships, preserving source IDs and versions,
+and advances both checkpoints atomically. It handles node movement, shared
+completion nodes, and unchanged ways/relations entering or leaving due to edits
+elsewhere. Membership-mode extracts are selected through the static and active
+membership tables, so the cost is similar to a fresh map query of the bbox. It
+does not replay individual historical versions or use sync footprints to narrow
+the calculation. Temporary SQL tables avoid loading the extract into client
+memory. With no pending activity the command is a no-op.
 
 The source activity stream must be complete and retained, and derived source
 bboxes must be correctly maintained. A reset/truncated/replaced source is not a
@@ -356,6 +358,47 @@ supported continuation, even if regenerated numeric checkpoints happen to
 match; source identity tracking remains future work. No new schema version is
 needed.
 
-Run the isolated C++ database regression suite with `make test_dbextract` then
-`./test_dbextract` from this directory. It uses the configured connection but
-creates uniquely prefixed test tables and rolls back all test schema/data.
+Listing stored extracts
+-----------------------
+
+`PgTransaction::ListExtracts` (`DbListExtracts` in `dbextract.cpp`) describes
+every stored extract: ID, name, bbox, query mode, time of the last save or
+update, checkpoints, and whether the map has later edits.
+`PgTransaction::GetExtract` describes one extract and also counts its nodes,
+ways and relations. The parent project shows both in its Django admin.
+
+Deleting a stored extract
+-------------------------
+
+`PgTransaction::DeleteExtract` (`DbDeleteExtract` in `dbextract.cpp`) removes an
+extract's metadata, objects and membership rows, selected by ID or unique name.
+It locks the extract tables EXCLUSIVE and does not touch the map. There is no
+command line tool for this; the parent project's Django admin uses it.
+
+Comparing a stored extract with a map query
+-------------------------------------------
+
+    make compare_extract
+    ./compare_extract --id=1
+    ./compare_extract --name=portsmouth
+    ./compare_extract --all
+
+The command reads the stored extract from the database and runs a fresh map
+query of the extract's bbox, both in one transaction snapshot, then compares
+them. `--all` checks every stored extract in ID order within that one snapshot
+and finishes with a summary line. Object types, IDs and versions must agree; ordering is ignored and tags,
+coordinates and members are not compared. It prints object counts for each side
+and lists every differing object as missing
+from the extract, not in the query, or having different versions. It notes when
+the map has edits later than the extract's checkpoint, in which case differences
+are expected until `update_extract` is run, and when the map's `useBboxInQuery`
+mode has changed since the extract was saved. Nothing is modified. The exit
+status is 0 when every extract checked matches, 1 if any differs and 2 for an
+error. The versions of
+every object on both sides are held in memory during the comparison. The
+comparison is in `DbCompareExtract` in `dbextract.cpp`, also available as
+`PgTransaction::CompareExtract` and `CompareAllExtracts` through the bindings.
+
+Tests for stored extracts live in the parent project
+(`querymap/test_dbextract.py`), which exercises these functions through the
+Python bindings.

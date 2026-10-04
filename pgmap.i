@@ -106,8 +106,20 @@ namespace std {
 
 %include "pgcommon.h"
 %shared_ptr(PgExtractExport)
-%ignore DbUpdateExtractNodes;
+%ignore DbUpdateExtract;
+%ignore DbCompareExtract;
+%ignore DbListExtractIds;
+%ignore DbDeleteExtract;
+%ignore DbListExtracts;
+%copyctor ExtractInfo;
+%copyctor ExtractDifference;
+%copyctor ExtractComparison;
 %include "dbextract.h"
+namespace std {
+	%template(vectorextractdifference) vector<ExtractDifference>;
+	%template(vectorextractcomparison) vector<ExtractComparison>;
+	%template(vectorextractinfo) vector<ExtractInfo>;
+};
 
 %shared_ptr(PgMapQuery)
 %shared_ptr(PgTransaction)

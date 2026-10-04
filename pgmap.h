@@ -160,7 +160,9 @@ public:
 	// The caller commits metadata, checkpoints and contents together.
 	int64_t SaveExtract(const std::vector<double> &bbox, const std::string &name);
 
-	int64_t UpdateExtractNodes(int64_t extractId, const std::string &name);
+	// Bring a stored extract up to date with the map and return its ID.
+	// Select by positive ID, or by a unique name when ID is zero.
+	int64_t UpdateExtract(int64_t extractId, const std::string &name);
 
 	// Stream every stored object without rerunning the rectangle query.
 	// Select by positive ID, or by a unique name when ID is zero.
@@ -168,6 +170,20 @@ public:
 		std::shared_ptr<IDataStreamHandler> output);
 	std::shared_ptr<PgExtractExport> StartExportExtract(int64_t extractId,
 		const std::string &name, std::shared_ptr<IDataStreamHandler> output);
+
+	// Remove a stored extract and its contents; returns its ID.
+	int64_t DeleteExtract(int64_t extractId, const std::string &name);
+
+	// Describe every stored extract in ID order, without object counts.
+	void ListExtracts(std::vector<ExtractInfo> &out);
+	// Describe one extract, including object counts. Returns false if not found.
+	bool GetExtract(int64_t extractId, ExtractInfo &out);
+
+	// Compare a stored extract with a fresh map query of its bbox.
+	void CompareExtract(int64_t extractId, const std::string &name,
+		class ExtractComparison &out);
+	// Compare every stored extract, in ID order, using this one snapshot.
+	void CompareAllExtracts(std::vector<ExtractComparison> &out);
 
 	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,

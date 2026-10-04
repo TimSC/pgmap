@@ -928,12 +928,14 @@ int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &nam
 	return id;
 }
 
-int64_t PgTransaction::UpdateExtractNodes(int64_t extractId, const string &name)
+int64_t PgTransaction::UpdateExtract(int64_t extractId, const string &name)
 {
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
 		throw runtime_error("Main map must be locked before updating an extract");
 	LockExtractTables("EXCLUSIVE");
-	return DbUpdateExtractNodes(*dbconn, *sharedWork->work, tableActivePrefix, extractId, name);
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	return DbUpdateExtract(*dbconn, *work, tableStaticPrefix, tableActivePrefix, extractId, name);
 }
 
 std::shared_ptr<PgExtractExport> PgTransaction::StartExportExtract(int64_t extractId,
@@ -954,6 +956,62 @@ int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
     auto exporter = StartExportExtract(extractId, name, output);
     while(exporter->Continue() != 1) {}
     return exporter->GetId();
+}
+
+int64_t PgTransaction::DeleteExtract(int64_t extractId, const string &name)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while deleting an extract");
+	LockExtractTables("EXCLUSIVE");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	return DbDeleteExtract(*dbconn, *work, tableActivePrefix, extractId, name);
+}
+
+void PgTransaction::ListExtracts(vector<ExtractInfo> &out)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while listing extracts");
+	LockExtractTables("ACCESS SHARE");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	DbListExtracts(*dbconn, *work, tableActivePrefix, 0, false, out);
+}
+
+bool PgTransaction::GetExtract(int64_t extractId, ExtractInfo &out)
+{
+	if(extractId <= 0) throw invalid_argument("Extract ID must be positive");
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while reading an extract");
+	LockExtractTables("ACCESS SHARE");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	vector<ExtractInfo> found;
+	DbListExtracts(*dbconn, *work, tableActivePrefix, extractId, true, found);
+	if(found.empty()) return false;
+	out = found[0];
+	return true;
+}
+
+void PgTransaction::CompareExtract(int64_t extractId, const string &name,
+	ExtractComparison &out)
+{
+	DbCompareExtract(*this, extractId, name, out);
+}
+
+void PgTransaction::CompareAllExtracts(vector<ExtractComparison> &out)
+{
+	out.clear();
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while comparing extracts");
+	LockExtractTables("ACCESS SHARE");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	for(int64_t id : DbListExtractIds(*dbconn, *work, tableActivePrefix))
+	{
+		out.emplace_back();
+		DbCompareExtract(*this, id, "", out.back());
+	}
 }
 
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,

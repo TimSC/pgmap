@@ -17,4 +17,4 @@ build/
 *.o
 export_extract
 update_extract
-test_dbextract
+compare_extract

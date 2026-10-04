@@ -7,7 +7,7 @@ int main(int argc, char **argv)
 {
 	try
 	{
-		po::options_description options("Update a stored extract from node-only edit activity");
+		po::options_description options("Update a stored extract to the current map");
 		options.add_options()("help","Show usage")
 			("id",po::value<int64_t>(),"Extract ID")
 			("name",po::value<std::string>(),"Unique extract name")
@@ -24,7 +24,7 @@ int main(int argc, char **argv)
 		PgMap map(GeneratePgConnectionString(config),config["dbtableprefix"],
 			config["dbtablemodifyprefix"],config["dbtablemodifyprefix"],config["dbtabletestprefix"]);
 		auto transaction=map.GetTransaction("ACCESS SHARE");
-		id=transaction->UpdateExtractNodes(id,name); transaction->Commit();
+		id=transaction->UpdateExtract(id,name); transaction->Commit();
 		std::cout<<"Updated extract "<<id<<std::endl; return 0;
 	}
 	catch(const std::exception &error) { std::cerr<<"Extract update failed: "<<error.what()<<std::endl; return 1; }
