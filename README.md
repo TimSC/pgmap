@@ -313,3 +313,49 @@ An unknown ID/name is an error; duplicate names require selecting by ID.
 The output is written to a temporary file beside the destination and renamed
 only on success. An existing destination is replaced on success and retained
 on failure. Export does not modify the database or require a schema change.
+
+Extract table locking
+---------------------
+
+Save/export transactions acquire the static and active main-map locks first.
+Before accessing extracts, they lock all eight active-prefix extract tables in
+one consistent order: metadata, nodes, ways, relations, way memberships, then
+node/way/relation relation memberships. Saving uses EXCLUSIVE; exporting uses
+ACCESS SHARE. Locks remain held until commit or abort. These modes allow exports
+alongside saves, while serializing saves and preventing conflicting DDL. Future
+extract update operations must follow the same main-map-before-extract order.
+
+Updating a stored extract (node edits only)
+------------------------------------------
+
+    make update_extract
+    ./update_extract --id=1
+    ./update_extract --name=portsmouth
+
+The command reads `config.cfg` (or `--config=...`), locks the main map first and
+all extract tables exclusively afterwards, then updates to the latest visible
+source activity checkpoint. All pending rows must be grouped create/modify/
+delete actions on nodes only. Pending way/relation edits, legacy ungrouped rows,
+incomplete groups, unset checkpoints, or a source checkpoint that has moved
+backwards cause failure without committing changes. Names must be unique.
+
+Most logic lives in `dbextract.cpp`/`dbextract.h`. This first implementation uses
+activity to validate the interval, then recalculates the extract's membership
+in SQL using its stored query mode and the current source snapshot. It replaces
+only that extract's current objects and memberships, preserving source IDs and
+versions, and advances both checkpoints atomically. It handles node movement,
+creation/deletion, shared completion nodes, and unchanged ways/relations entering
+or leaving due to node edits. It does not replay individual historical versions
+or use sync footprints to narrow the calculation yet; work scales with the
+spatial query and source membership data. Temporary SQL tables avoid loading the
+extract into client memory. With no pending activity the command is a no-op.
+
+The source activity stream must be complete and retained, and derived source
+bboxes must be correctly maintained. A reset/truncated/replaced source is not a
+supported continuation, even if regenerated numeric checkpoints happen to
+match; source identity tracking remains future work. No new schema version is
+needed.
+
+Run the isolated C++ database regression suite with `make test_dbextract` then
+`./test_dbextract` from this directory. It uses the configured connection but
+creates uniquely prefixed test tables and rolls back all test schema/data.

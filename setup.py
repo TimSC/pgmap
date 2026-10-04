@@ -87,7 +87,7 @@ PGMAP_CFLAGS = shlex.split(os.environ.get("PGMAP_CFLAGS", "-g0 -O1"))
 pgmap_module = Extension('_pgmap',
 	define_macros=[('PYTHON_AWARE', '1')],
 	sources=['pgmap.i', 'util.cpp', 'dbquery.cpp', 'dbids.cpp', 'dbadmin.cpp', 'dbcommon.cpp', 'dbreplicate.cpp', 'dbdecode.cpp',
-		'dbstore.cpp', 'dbdump.cpp', 'dbfilters.cpp', 'dbchangeset.cpp', 'dbjson.cpp', 'dbmeta.cpp', 'dbusername.cpp',
+		'dbextract.cpp', 'dbstore.cpp', 'dbdump.cpp', 'dbfilters.cpp', 'dbchangeset.cpp', 'dbjson.cpp', 'dbmeta.cpp', 'dbusername.cpp',
 		'dboverpass.cpp', 'dbeditactivity.cpp', 'dbprepared.cpp', 'pgcommon.cpp', 'pgmap.cpp', 'cppo5m/o5m.cpp',
 		'cppo5m/varint.cpp', 'cppo5m/OsmData.cpp', 'cppo5m/osmxml.cpp', 'cppo5m/iso8601lib/iso8601.c',
 		'cppo5m/utils.cpp', 'cppo5m/pbf.cpp', 'cppo5m/pbf/fileformat.pb.cc', 'cppo5m/pbf/osmformat.pb.cc',

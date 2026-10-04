@@ -1,5 +1,6 @@
 #include "pgmap.h"
 #include "dbquery.h"
+#include "dbextract.h"
 #include "dbids.h"
 #include "dbadmin.h"
 #include "dbdecode.h"
@@ -867,6 +868,29 @@ public:
 	}
 };
 
+void PgTransaction::LockExtractTables(const string &accessMode)
+{
+	if(accessMode != "ACCESS SHARE" && accessMode != "EXCLUSIVE")
+		throw invalid_argument("Unsupported extract lock mode");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	// The constructor acquires static then active main-map locks first.
+	// Every extract operation must use this same table order, in one statement,
+	// before accessing any extract metadata, objects or membership rows.
+	string sql = "LOCK TABLE ";
+	bool first = true;
+	for(const char *name : {"extracts", "extract_livenodes", "extract_liveways",
+		"extract_liverelations", "extract_way_mems", "extract_relation_mems_n",
+		"extract_relation_mems_w", "extract_relation_mems_r"})
+	{
+		if(!first) sql += ",";
+		first = false;
+		sql += dbconn->quote_name(tableActivePrefix + name);
+	}
+	work->exec(sql + " IN " + accessMode + " MODE;");
+	// Locks are owned by the transaction and released at commit or abort.
+}
+
 int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &name)
 {
 	if(bbox.size() != 4) throw invalid_argument("Bbox must have four coordinates");
@@ -877,6 +901,7 @@ int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &nam
 		throw invalid_argument("Bbox must be a nonempty longitude/latitude rectangle");
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
 		throw runtime_error("Map must be locked while creating an extract");
+	LockExtractTables("EXCLUSIVE");
 	auto work = sharedWork->work;
 	if(!work) throw runtime_error("Transaction has been deleted");
 	// Capture both cursors from the same snapshot as the map query. No later
@@ -903,6 +928,14 @@ int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &nam
 	return id;
 }
 
+int64_t PgTransaction::UpdateExtractNodes(int64_t extractId, const string &name)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Main map must be locked before updating an extract");
+	LockExtractTables("EXCLUSIVE");
+	return DbUpdateExtractNodes(*dbconn, *sharedWork->work, tableActivePrefix, extractId, name);
+}
+
 int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
 	shared_ptr<IDataStreamHandler> output)
 {
@@ -910,6 +943,7 @@ int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
 		throw invalid_argument("Select an extract by positive ID or nonempty name");
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
 		throw runtime_error("Map must be locked while exporting an extract");
+	LockExtractTables("ACCESS SHARE");
 	auto work = sharedWork->work;
 	if(!work) throw runtime_error("Transaction has been deleted");
 	string metadata = dbconn->quote_name(tableActivePrefix + "extracts");

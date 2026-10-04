@@ -16,3 +16,5 @@ pgmap_wrap.cpp
 build/
 *.o
 export_extract
+update_extract
+test_dbextract

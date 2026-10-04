@@ -83,6 +83,7 @@ class PgTransaction : public PgCommon
 private:
 	int64_t atomicEditId = 0;
 	int64_t activityBlockIndex = 0;
+	void LockExtractTables(const std::string &accessMode);
 
 
 public:
@@ -157,6 +158,8 @@ public:
 	// Stream a rectangular snapshot to current-state extract tables and return its ID.
 	// The caller commits metadata, checkpoints and contents together.
 	int64_t SaveExtract(const std::vector<double> &bbox, const std::string &name);
+
+	int64_t UpdateExtractNodes(int64_t extractId, const std::string &name);
 
 	// Stream every stored object without rerunning the rectangle query.
 	// Select by positive ID, or by a unique name when ID is zero.

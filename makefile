@@ -1,6 +1,6 @@
 cppflags= -std=c++17 -Wall -DPY_SSIZE_T_CLEAN
 
-all: dump extract export_extract admin applydiffs osm2csv checkdata
+all: dump extract export_extract update_extract admin applydiffs osm2csv checkdata
 
 %.co: %.c %.h
 	gcc -Wall -fPIC -c -o $@ $<
@@ -9,7 +9,7 @@ all: dump extract export_extract admin applydiffs osm2csv checkdata
 	g++ $(cppflags) -fPIC -c -o $@ $<
 
 common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
-	dbdecode.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o dbusername.o \
+	dbdecode.o dbextract.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o dbusername.o \
 	dboverpass.o dbeditactivity.o dbprepared.o pgcommon.o pgmap.o \
 	cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
 	cppo5m/utils.o cppo5m/pbf.o cppo5m/pbf/fileformat.pb.cc cppo5m/pbf/osmformat.pb.cc\
@@ -29,6 +29,12 @@ extract: extract.cpp $(common)
 
 export_extract: export_extract.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
+
+update_extract: update_extract.cpp $(common)
+	g++ $^ $(cppflags) $(libs) -o $@
+
+test_dbextract: tests/dbextract_test.cpp $(common)
+	g++ -I. $^ $(cppflags) $(libs) -o $@
 
 downloadtiles: downloadtiles.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
@@ -57,5 +63,5 @@ quickinit: quickinit.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 clean:
-	rm *.o admin dump extract export_extract applydiffs osm2csv checkdata quickinit
+	rm *.o admin dump extract export_extract update_extract applydiffs osm2csv checkdata quickinit
 
