@@ -154,6 +154,15 @@ public:
 		int64_t closedTimestamp,
 		class PgMapError &errStr);
 
+	// Stream a rectangular snapshot to current-state extract tables and return its ID.
+	// The caller commits metadata, checkpoints and contents together.
+	int64_t SaveExtract(const std::vector<double> &bbox, const std::string &name);
+
+	// Stream every stored object without rerunning the rectangle query.
+	// Select by positive ID, or by a unique name when ID is zero.
+	int64_t ExportExtract(int64_t extractId, const std::string &name,
+		std::shared_ptr<IDataStreamHandler> output);
+
 	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,
 		class PgMapError &errStr);

@@ -16,6 +16,8 @@ int main(int argc, char **argv)
 		("help", "produce help message")
 		("wkt", po::value<string>(), "WKT polygon file name")
 		("bbox", po::value<string>(), "bbox shape (e.g -1.078,50.788,-1.074,50.790)")
+		("save-db", "Save rectangular extract to database instead of a file")
+		("name", po::value<string>()->default_value(""), "Optional database extract name")
 		("out", po::value<string>(), "Output file name (extension must be .osm.gz or .o5m.gz)")
 	;
 
@@ -41,7 +43,15 @@ int main(int argc, char **argv)
 		vector<string> bboxvals = split(vm["bbox"].as<string>(), ',');
 		for(size_t i=0; i < bboxvals.size(); i++)
 		{
-			bbox.push_back(atof(bboxvals[i].c_str()));
+			try {
+				size_t consumed = 0;
+				double value = stod(bboxvals[i], &consumed);
+				if(consumed != bboxvals[i].size()) throw invalid_argument("trailing characters");
+				bbox.push_back(value);
+			} catch(const exception &) {
+				cerr << "Invalid bbox coordinate" << endl;
+				return 2;
+			}
 		}
 		if(bbox.size() != 4)
 		{
@@ -54,6 +64,32 @@ int main(int argc, char **argv)
 	{
 		cerr << "Bbox or WKT filename must be specified" << endl;
 		exit(-2);
+	}
+
+	if(vm.count("save-db"))
+	{
+		if(bbox.size() != 4 || vm.count("wkt") || vm.count("out"))
+		{
+			cerr << "--save-db requires --bbox and cannot be combined with --wkt or --out" << endl;
+			return 2;
+		}
+		try
+		{
+			map<string,string> config;
+			ReadSettingsFile("config.cfg", config);
+			PgMap map(GeneratePgConnectionString(config), config["dbtableprefix"],
+				config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
+			auto transaction = map.GetTransaction("ACCESS SHARE");
+			int64_t id = transaction->SaveExtract(bbox, vm["name"].as<string>());
+			transaction->Commit();
+			cout << "Saved database extract " << id << endl;
+			return 0;
+		}
+		catch(const exception &error)
+		{
+			cerr << "Database extract failed: " << error.what() << endl;
+			return 1;
+		}
 	}
 
 	string outFina = "extract.o5m.gz";

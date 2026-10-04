@@ -242,6 +242,71 @@ bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;
 }
 
+// Extracts store independent current states, not static/mod overlays.
+bool DbCreateExtractTables(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, string &errStr)
+{
+	string metadata = c.quote_name(tablePrefix + "extracts");
+	string sql = "CREATE TABLE IF NOT EXISTS " + metadata +
+		" (id BIGSERIAL PRIMARY KEY, name TEXT, bbox GEOMETRY(Polygon, 4326) NOT NULL, "
+		"use_bbox_in_query BOOLEAN NOT NULL DEFAULT false, "
+		"performed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+		"edit_activity_id BIGINT CHECK (edit_activity_id >= 0), "
+		"atomic_edit_id BIGINT CHECK (atomic_edit_id >= 0));";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+
+	// Match live map object columns, adding extract_id to scope every object.
+	string common = " (extract_id BIGINT NOT NULL REFERENCES " + metadata +
+		"(id) ON DELETE CASCADE, id BIGINT NOT NULL, changeset BIGINT, "
+		"changeset_index SMALLINT, username TEXT, uid INTEGER, timestamp BIGINT, "
+		"version INTEGER NOT NULL, tags JSONB, ";
+	for(const char *type : {"node", "way", "relation"})
+	{
+		string kind(type);
+		string table = c.quote_name(tablePrefix + "extract_live" + kind + "s");
+		string columns;
+		if(kind == "node") columns = "geom GEOMETRY(Point, 4326)";
+		else if(kind == "way") columns = "members JSONB, bbox GEOMETRY(Geometry, 4326)";
+		else columns = "members JSONB, memberroles JSONB, bbox GEOMETRY(Geometry, 4326)";
+		sql = "CREATE TABLE IF NOT EXISTS " + table + common + columns +
+			", PRIMARY KEY (extract_id, id));";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "extract_live" + kind + "s_gix") +
+			" ON " + table + " USING GIST (" + (kind == "node" ? "geom" : "bbox") + ");";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+
+	// Keep reverse membership lookups within an extract. Do not require every
+	// relation member to exist: map queries do not return complete relations.
+	for(const char *suffix : {"way_mems", "relation_mems_n", "relation_mems_w", "relation_mems_r"})
+	{
+		string table = c.quote_name(tablePrefix + "extract_" + suffix);
+		string owner = string(suffix) == "way_mems" ? "way" : "relation";
+		sql = "CREATE TABLE IF NOT EXISTS " + table +
+			" (extract_id BIGINT NOT NULL, id BIGINT NOT NULL, version INTEGER NOT NULL, "
+			"index INTEGER NOT NULL, member BIGINT NOT NULL, PRIMARY KEY (extract_id, id, index), "
+			"FOREIGN KEY (extract_id, id) REFERENCES " +
+			c.quote_name(tablePrefix + "extract_live" + owner + "s") + "(extract_id, id) ON DELETE CASCADE);";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "extract_" + suffix + "_member_idx") +
+			" ON " + table + " (extract_id, member);";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+	return true;
+}
+
+bool DbDropExtractTables(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, string &errStr)
+{
+	for(const char *name : {"extract_way_mems", "extract_relation_mems_n", "extract_relation_mems_w",
+		"extract_relation_mems_r", "extract_livenodes", "extract_liveways", "extract_liverelations", "extracts"})
+	{
+		string sql = "DROP TABLE IF EXISTS " + c.quote_name(tablePrefix + name) + " CASCADE;";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+	return true;
+}
+
 // Legacy rows remain ungrouped: timestamps cannot recover upload boundaries.
 bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
@@ -263,12 +328,14 @@ bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "CREATE UNIQUE INDEX " + c.quote_name(tablePrefix + "activity_atomic_block") +
 		" ON " + table + " (atomic_edit_id, block_index);";
-	return DbExec(work, sql, errStr, nullptr, verbose);
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
 bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
 {
+	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
 		" DROP COLUMN atomic_edit_id, DROP COLUMN block_index, "
 		"DROP COLUMN sync_before, DROP COLUMN bbox_before, DROP COLUMN sync_after, DROP COLUMN bbox_after;";
@@ -372,6 +439,7 @@ bool DbDowngradeTables11To0(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbDropMapTables(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
 {
+	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	// Use exact known names rather than prefix matching, which could remove
 	// unrelated tables. IF EXISTS supports partial or mismatched schemas.
 	for(const char *name : {"visiblenodes", "visibleways", "visiblerelations"})

@@ -1,6 +1,6 @@
 cppflags= -std=c++17 -Wall -DPY_SSIZE_T_CLEAN
 
-all: dump extract admin applydiffs osm2csv checkdata
+all: dump extract export_extract admin applydiffs osm2csv checkdata
 
 %.co: %.c %.h
 	gcc -Wall -fPIC -c -o $@ $<
@@ -25,6 +25,9 @@ dump: dump.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 extract: extract.cpp $(common)
+	g++ $^ $(cppflags) $(libs) -o $@
+
+export_extract: export_extract.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 downloadtiles: downloadtiles.cpp $(common)
@@ -54,5 +57,5 @@ quickinit: quickinit.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 clean:
-	rm *.o admin dump extract applydiffs osm2csv checkdata quickinit
+	rm *.o admin dump extract export_extract applydiffs osm2csv checkdata quickinit
 

@@ -232,3 +232,84 @@ be restricted by atomic edit ID, but that may return only part of the group.
 Row ranges can split atomic edits; use atomic-edit queries when a complete group
 is required. Timestamp queries remain supported but cannot be combined with ID
 filters. Rebuild pgmap bindings for the new QueryEditActivityByIds method.
+
+Extract storage (schema version 14)
+----------------------------------
+
+Migration 13-to-14 creates the following tables under each configured table-set
+prefix. There is one shared set of tables per prefix, supporting multiple
+extracts by extract ID; each extract has one current state without an overlay.
+
+* `extracts`: generated ID, optional name, rectangular bbox (Polygon, SRID 4326),
+  query-mode flag `use_bbox_in_query`, `performed_at` timestamp, last applied
+  `edit_activity_id`, and last applied `atomic_edit_id`. A NULL
+  checkpoint denotes an extract whose initial snapshot is not established.
+* `extract_livenodes`, `extract_liveways`, `extract_liverelations`: columns match
+  the main live objects, with `extract_id` added. Primary keys are
+  `(extract_id, id)`; tags/members/roles use JSONB, node coordinates use Point
+  geometry, and ways/relations have bbox geometry. Spatial indexes are included.
+* `extract_way_mems` and `extract_relation_mems_n/w/r`: current membership rows
+  with extract ID, owner ID/version, index, and member ID. Reverse lookup indexes
+  use `(extract_id, member)`. Deleting an owner removes its membership rows.
+
+Deleting extract metadata cascades to that extract's objects and membership.
+Relation members are not constrained to exist locally because map-query results
+can contain incomplete relations. There are no extract history, overlay ID,
+changeset, or edit activity tables. Object versions and original metadata are
+retained, but IDs continue to come from the source map.
+
+All extract queries must scope object and membership lookups by extract ID.
+The extract tool can save initial rectangular snapshots; incremental
+synchronization is not implemented. Stored extracts can be exported with
+`export_extract`. Downgrade to 13 and direct map-table dropping remove these
+tables. Already-version-14 databases will not automatically run the amended
+migration; adding these tables requires a separate application of the DDL.
+
+Saving a rectangular extract to the database
+--------------------------------------------
+
+Build the tool with `make extract`, then run from the pgmap directory:
+
+    ./extract --bbox=-1.078,50.788,-1.074,50.790 --save-db --name=portsmouth
+
+Connection and prefixes come from `config.cfg`. The new extract is stored in
+`<dbtablemodifyprefix>extracts` and its associated extract object/membership
+tables. The command prints the generated extract ID. Each invocation creates a
+new extract; it does not replace an existing one. `--save-db` requires a nonempty
+bbox and cannot be combined with `--wkt` or `--out`. File output remains the
+existing default.
+
+`performed_at` records the snapshot transaction's start time. Row and atomic
+checkpoints are the greatest visible IDs in the source activity table, or zero
+if none exist, read in the same repeatable-read transaction as the map query.
+The extract metadata, object rows, and membership rows commit together. A failed
+query or insert rolls back the snapshot. Source object IDs, versions, tags,
+geometry, members, roles, and metadata are preserved, including outside nodes
+needed to complete ways. Contents stream into PostgreSQL; the existing map query
+still retains selected object/member IDs in memory.
+
+The source must have the amended schema 14, including `performed_at` and
+`edit_activity_id` metadata columns. Existing version-14 installations need
+those additions applied separately. Rebuild the tool/bindings after updating.
+
+Exporting a stored extract
+--------------------------
+
+Build with `make export_extract`, then select by ID or unique name:
+
+    ./export_extract --id=1 --out=portsmouth.osm.gz
+    ./export_extract --name=portsmouth --out=portsmouth.o5m.gz
+
+Supported extensions are `.osm`, `.o5m`, `.osm.gz`, and `.o5m.gz`. The tool reads
+`config.cfg` by default; use `--config=/path/to/config.cfg` to select another
+configuration. It uses `dbtablemodifyprefix` for extract tables.
+
+Every stored node, way, and relation is exported in ID order within its type,
+including outside completion nodes. The rectangle is written as bounds, not
+used to filter the stored contents again. Objects stream in batches from one
+consistent database snapshot, preserving stored usernames and source versions.
+An unknown ID/name is an error; duplicate names require selecting by ID.
+
+The output is written to a temporary file beside the destination and renamed
+only on success. An existing destination is replaced on success and retained
+on failure. Export does not modify the database or require a schema change.

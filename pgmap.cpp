@@ -14,6 +14,7 @@
 #include "util.h"
 #include "cppo5m/OsmData.h"
 #include <algorithm>
+#include <cmath>
 using namespace std;
 
 PgMapError::PgMapError()
@@ -797,6 +798,154 @@ int PgTransaction::UpdateObjectBboxesById(
 	errStr.errStr = nativeErrStr;
 
 	return ok;
+}
+
+// A streaming database sink: object contents remain in PostgreSQL, not OsmData.
+// The query and destination writes use the same repeatable-read transaction.
+class ExtractDatabaseWriter : public IDataStreamHandler
+{
+	pqxx::connection &connection;
+	pqxx::transaction_base &work;
+	string prefix;
+	int64_t extractId;
+
+	void CopyObject(const string &kind, int64_t id)
+	{
+		string columns = "id, changeset, changeset_index, username, uid, timestamp, version, tags";
+		if(kind == "node") columns += ", geom";
+		else if(kind == "way") columns += ", members, bbox";
+		else columns += ", members, memberroles, bbox";
+		string destination = connection.quote_name(prefix + "extract_live" + kind + "s");
+		string source = connection.quote_name(prefix + "visible" + kind + "s");
+		work.exec("INSERT INTO " + destination + " (extract_id, " + columns + ") SELECT " +
+			to_string(extractId) + ", " + columns + " FROM " + source + " WHERE id=" +
+			to_string(id) + " ON CONFLICT (extract_id, id) DO NOTHING");
+	}
+
+	void Membership(const string &suffix, int64_t id, int64_t version,
+		const vector<int64_t> &refs, const vector<string> *types = nullptr)
+	{
+		// Bound each SQL batch even for unusually large ways or relations.
+		for(size_t start = 0; start < refs.size(); start += 1000)
+		{
+			string sql = "INSERT INTO " + connection.quote_name(prefix + "extract_" + suffix) +
+				" (extract_id, id, version, index, member) VALUES ";
+			bool any = false;
+			for(size_t i = start; i < refs.size() && i < start + 1000; ++i)
+			{
+				if(types && suffix != "relation_mems_" + (*types)[i].substr(0,1)) continue;
+				if(any) sql += ",";
+				any = true;
+				sql += "(" + to_string(extractId) + "," + to_string(id) + "," +
+					to_string(version) + "," + to_string(i) + "," + to_string(refs[i]) + ")";
+			}
+			if(any) work.exec(sql + " ON CONFLICT (extract_id, id, index) DO NOTHING");
+		}
+	}
+public:
+	ExtractDatabaseWriter(pqxx::connection &c, pqxx::transaction_base &w,
+		const string &p, int64_t id): connection(c), work(w), prefix(p), extractId(id) {}
+	bool StoreNode(int64_t id, const MetaData &, const TagMap &, double, double) override
+	{
+		CopyObject("node", id);
+		return false;
+	}
+	bool StoreWay(int64_t id, const MetaData &meta, const TagMap &, const vector<int64_t> &refs) override
+	{
+		CopyObject("way", id);
+		Membership("way_mems", id, meta.version, refs);
+		return false;
+	}
+	bool StoreRelation(int64_t id, const MetaData &meta, const TagMap &,
+		const vector<string> &types, const vector<int64_t> &refs, const vector<string> &) override
+	{
+		if(types.size() != refs.size()) throw runtime_error("Invalid relation membership");
+		CopyObject("relation", id);
+		for(const char *suffix : {"relation_mems_n", "relation_mems_w", "relation_mems_r"})
+			Membership(suffix, id, meta.version, refs, &types);
+		return false;
+	}
+};
+
+int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &name)
+{
+	if(bbox.size() != 4) throw invalid_argument("Bbox must have four coordinates");
+	for(double value : bbox)
+		if(!std::isfinite(value)) throw invalid_argument("Bbox coordinates must be finite");
+	if(bbox[0] < -180 || bbox[2] > 180 || bbox[1] < -90 || bbox[3] > 90 ||
+		bbox[0] >= bbox[2] || bbox[1] >= bbox[3])
+		throw invalid_argument("Bbox must be a nonempty longitude/latitude rectangle");
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while creating an extract");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	// Capture both cursors from the same snapshot as the map query. No later
+	// commits can advance these checkpoints beyond the contents being extracted.
+	string activity = dbconn->quote_name(tableActivePrefix + "edit_activity");
+	auto checkpoint = work->exec("SELECT COALESCE(max(id),0), COALESCE(max(atomic_edit_id),0) FROM " + activity);
+	auto mode = work->exec("SELECT value FROM " + dbconn->quote_name(tableActivePrefix + "meta") +
+		" WHERE key='useBboxInQuery'");
+	bool bboxMode = !mode.empty() && atoi(mode[0][0].as<string>().c_str()) == 1;
+	string envelope = "ST_MakeEnvelope(";
+	for(size_t i=0; i<4; ++i) envelope += work->quote(bbox[i]) + ",";
+	envelope += "4326)";
+	string sql = "INSERT INTO " + dbconn->quote_name(tableActivePrefix + "extracts") +
+		" (name, bbox, use_bbox_in_query, performed_at, edit_activity_id, atomic_edit_id) VALUES (" +
+		work->quote(name) + "," + envelope + "," + (bboxMode ? "true" : "false") +
+		",CURRENT_TIMESTAMP," + checkpoint[0][0].as<string>() + "," +
+		checkpoint[0][1].as<string>() + ") RETURNING id";
+	int64_t id = work->exec(sql)[0][0].as<int64_t>();
+	shared_ptr<IDataStreamHandler> sink = make_shared<ExtractDatabaseWriter>(*dbconn, *work, tableActivePrefix, id);
+	auto query = GetQueryMgr();
+	int status = query->Start(bbox, time(nullptr), sink);
+	while(status == 0) status = query->Continue();
+	if(status < 0) throw runtime_error("Extract map query failed");
+	return id;
+}
+
+int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
+	shared_ptr<IDataStreamHandler> output)
+{
+	if(extractId < 0 || (!extractId && name.empty()) || !output)
+		throw invalid_argument("Select an extract by positive ID or nonempty name");
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while exporting an extract");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	string metadata = dbconn->quote_name(tableActivePrefix + "extracts");
+	string predicate = extractId ? "id=" + to_string(extractId) : "name=" + work->quote(name);
+	auto rows = work->exec("SELECT id, ST_XMin(bbox), ST_YMin(bbox), ST_XMax(bbox), ST_YMax(bbox) FROM " +
+		metadata + " WHERE " + predicate + " ORDER BY id LIMIT 2");
+	if(rows.empty()) throw runtime_error("Extract not found");
+	if(rows.size() > 1) throw runtime_error("Extract name is ambiguous; select by ID");
+	extractId = rows[0][0].as<int64_t>();
+	output->StoreIsDiff(false);
+	output->StoreBounds(rows[0][1].as<double>(), rows[0][2].as<double>(),
+		rows[0][3].as<double>(), rows[0][4].as<double>());
+	// Preserve usernames stored in the snapshot instead of replacing them with
+	// potentially newer source-map usernames during decoding.
+	DbUsernameLookup storedUsernames(*dbconn, work.get(), "", "");
+	for(const char *type : {"node", "way", "relation"})
+	{
+		string kind(type);
+		string sql = "SELECT *";
+		if(kind == "node") sql += ", ST_X(geom) AS lon, ST_Y(geom) AS lat";
+		sql += " FROM " + dbconn->quote_name(tableActivePrefix + "extract_live" + kind + "s") +
+			" WHERE extract_id=" + to_string(extractId) + " ORDER BY id";
+		pqxx::icursorstream cursor(*work, sql, "export_extract_" + kind, 1000);
+		if(kind == "node")
+			while(NodeResultsToEncoder(cursor, storedUsernames, output) > 0) {}
+		else if(kind == "way")
+			while(WayResultsToEncoder(cursor, storedUsernames, output) > 0) {}
+		else
+		{
+			set<int64_t> skip;
+			RelationResultsToEncoder(cursor, storedUsernames, skip, output);
+		}
+		output->Reset();
+	}
+	output->Finish();
+	return extractId;
 }
 
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
