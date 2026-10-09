@@ -274,6 +274,7 @@ name given to `--out`:
 * `.osm` for OSM XML
 * `.o5m` for o5m
 * `.pbf` for PBF
+* `.json` for OSM JSON, the format the OSM API returns for `.json` requests
 
 Add `.gz` to any of them, for example `.osm.gz`, to gzip the file. PBF is
 already compressed internally, so `.pbf.gz` gains almost nothing. Any other
@@ -293,11 +294,12 @@ The `extract` and `dump` tools can record which edits their output includes:
     ./dump --out=dump.osm.gz --edit-ids
 
 `--edit-ids` adds `edit_activity_id` and `atomic_edit_id` attributes to the root
-`<osm>` element, holding the latest edit activity row ID and atomic edit ID (zero
+`<osm>` element, or the same two names as string members at the top of a JSON
+file, holding the latest edit activity row ID and atomic edit ID (zero
 if there is no activity). They are read in the same transaction snapshot as the
 data, so the file contains exactly the edits up to those IDs. The option needs
-`.osm` or `.osm.gz` output, because the other formats have no root element to
-hold attributes; with those the tools stop with an error. Without the option the
+`.osm` or `.json` output, compressed or not, because o5m and PBF have nowhere to
+hold the IDs; with those the tools stop with an error. Without the option the
 output is unchanged. `dump` writes `dump.o5m.gz` unless `--out` names another file.
 `PgTransaction::GetLatestEditIds` returns the same IDs through the bindings.
 

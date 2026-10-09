@@ -20,7 +20,7 @@ int main(int argc, char **argv)
 		("save-db", "Save rectangular extract to database instead of a file")
 		("name", po::value<string>()->default_value(""), "Optional database extract name")
 		("out", po::value<string>(), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
-		("edit-ids", "Add the latest edit activity ID and atomic edit ID as attributes of the root XML element (.osm or .osm.gz only)")
+		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (.osm or .json output, with or without .gz)")
 	;
 
 	po::variables_map vm;
@@ -109,9 +109,9 @@ int main(int argc, char **argv)
 		cerr << error.what() << endl;
 		return 2;
 	}
-	if(vm.count("edit-ids") && outFormat != OsmFormat::OsmXml)
+	if(vm.count("edit-ids") && !OsmFileWriter::HasHeaderAttribs(outFormat))
 	{
-		cerr << "--edit-ids requires .osm or .osm.gz output; other formats have no root element to hold attributes" << endl;
+		cerr << "--edit-ids requires .osm or .json output; the other formats have nowhere to hold the IDs" << endl;
 		return 2;
 	}
 

@@ -14,7 +14,7 @@ int main(int argc, char **argv)
 	desc.add_options()
 		("help", "produce help message")
 		("out", po::value<string>()->default_value("dump.o5m.gz"), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
-		("edit-ids", "Add the latest edit activity ID and atomic edit ID as attributes of the root XML element (.osm or .osm.gz only)")
+		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (.osm or .json output, with or without .gz)")
 	;
 	po::variables_map vm;
 	try
@@ -43,9 +43,9 @@ int main(int argc, char **argv)
 		cerr << error.what() << endl;
 		return 2;
 	}
-	if(vm.count("edit-ids") && outFormat != OsmFormat::OsmXml)
+	if(vm.count("edit-ids") && !OsmFileWriter::HasHeaderAttribs(outFormat))
 	{
-		cerr << "--edit-ids requires .osm or .osm.gz output; other formats have no root element to hold attributes" << endl;
+		cerr << "--edit-ids requires .osm or .json output; the other formats have nowhere to hold the IDs" << endl;
 		return 2;
 	}
 

@@ -14,7 +14,7 @@ static bool EndsWith(const std::string &text, const std::string &ending)
 
 const char *OsmFileWriter::SupportedNames()
 {
-	return ".osm, .o5m or .pbf, optionally followed by .gz";
+	return ".osm, .o5m, .pbf or .json, optionally followed by .gz";
 }
 
 OsmFormat OsmFileWriter::FormatOf(const std::string &filename)
@@ -29,10 +29,17 @@ OsmFormat OsmFileWriter::FormatOf(const std::string &filename)
 		return OsmFormat::O5m;
 	if(EndsWith(name, ".pbf"))
 		return OsmFormat::Pbf;
+	if(EndsWith(name, ".json"))
+		return OsmFormat::OsmJson;
 	throw invalid_argument(std::string("Output file name must end in ") + SupportedNames());
 }
 
-OsmFileWriter::OsmFileWriter(const std::string &destinationIn, const TagMap &xmlAttribs) :
+bool OsmFileWriter::HasHeaderAttribs(OsmFormat format)
+{
+	return format == OsmFormat::OsmXml || format == OsmFormat::OsmJson;
+}
+
+OsmFileWriter::OsmFileWriter(const std::string &destinationIn, const TagMap &headerAttribs) :
 	destination(destinationIn)
 {
 	OsmFormat format = FormatOf(destination);
@@ -58,7 +65,7 @@ OsmFileWriter::OsmFileWriter(const std::string &destinationIn, const TagMap &xml
 		gzip.reset(new EncodeGzip(file));
 		stream = gzip.get();
 	}
-	encoder = MakeEncoder(format, *stream, xmlAttribs);
+	encoder = MakeEncoder(format, *stream, headerAttribs);
 }
 
 OsmFileWriter::~OsmFileWriter()

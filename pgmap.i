@@ -129,6 +129,7 @@ namespace std {
 %ignore O5mDecode;
 %ignore OsmXmlDecode;
 %ignore OsmChangeXmlDecode;
+%ignore OsmJsonDecode;
 %ignore OsmXmlObjectReader;
 %ignore MakeDecoder;
 %ignore MakeEncoder;
