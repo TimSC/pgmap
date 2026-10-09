@@ -2,7 +2,7 @@
 #include <iostream>
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 #include "cppo5m/osmxml.h"
 #include "pgmap.h"
 #include <boost/program_options.hpp>

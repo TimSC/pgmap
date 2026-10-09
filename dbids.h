@@ -3,7 +3,7 @@
 
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include "cppo5m/o5m.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 
 bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	const std::string &objType, 

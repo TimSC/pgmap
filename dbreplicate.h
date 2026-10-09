@@ -5,7 +5,7 @@
 #include <string>
 #include "dbusername.h"
 #include "cppo5m/o5m.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 
 void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 

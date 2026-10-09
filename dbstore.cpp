@@ -67,11 +67,17 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		}
 		else if(relationObject != nullptr)
 		{
-			if(relationObject->refTypeStrs.size() != relationObject->refIds.size() || relationObject->refTypeStrs.size() != relationObject->refRoles.size())
-				throw std::invalid_argument("Length of ref vectors must be equal");
+			std::vector<std::string> refTypeStrs, refRoles;
+			std::vector<int64_t> refIds;
+			for(const RelationMember &member : relationObject->members)
+			{
+				refTypeStrs.push_back(ObjectTypeName(member.type));
+				refIds.push_back(member.ref);
+				refRoles.push_back(member.role);
+			}
 
-			EncodeRelationMems(relationObject->refTypeStrs, relationObject->refIds, refsJson);
-			EncodeStringVec(relationObject->refRoles, rolesJson);
+			EncodeRelationMems(refTypeStrs, refIds, refsJson);
+			EncodeStringVec(refRoles, rolesJson);
 		}
 
 		//Get existing object object in live table (if any)
@@ -731,11 +737,12 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 		else if(relationObject != nullptr)
 		{
 			//Update relation member tables
-			for(size_t j=0;j < relationObject->refIds.size(); j++)
+			for(size_t j=0;j < relationObject->members.size(); j++)
 			{
+				const RelationMember &member = relationObject->members[j];
 				stringstream ssrm;
-				ssrm << "INSERT INTO "<< c.quote_name(tablePrefix+"relation_mems_"+relationObject->refTypeStrs[j][0]) << " (id, version, index, member) VALUES ";
-				ssrm << "("<<objId<<","<<relationObject->metaData.version<<","<<j<<","<<relationObject->refIds[j]<<");";
+				ssrm << "INSERT INTO "<< c.quote_name(tablePrefix+"relation_mems_"+ObjectTypeName(member.type)[0]) << " (id, version, index, member) VALUES ";
+				ssrm << "("<<objId<<","<<relationObject->metaData.version<<","<<j<<","<<member.ref<<");";
 
 				try
 				{
@@ -804,18 +811,18 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	for(size_t i=0; i<osmData.relations.size(); i++)
 	{
 		class OsmRelation &rel = osmData.relations[i];
-		for(size_t j=0; j<rel.refIds.size(); j++)
+		for(RelationMember &member : rel.members)
 		{
-			if(rel.refTypeStrs[j] != "node" or rel.refIds[j] > 0) continue;
-			std::map<int64_t, int64_t>::iterator it = createdNodeIds.find(rel.refIds[j]);
+			if(member.type != ObjectType::Node or member.ref > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdNodeIds.find(member.ref);
 			if(it == createdNodeIds.end())
 			{
 				stringstream ss;
-				ss << "Relation "<< rel.objId << " depends on undefined node " << rel.refIds[j];
+				ss << "Relation "<< rel.objId << " depends on undefined node " << member.ref;
 				errStr = ss.str();
 				return false;
 			}
-			rel.refIds[j] = it->second;
+			member.ref = it->second;
 		}
 	}
 
@@ -831,18 +838,18 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	for(size_t i=0; i<osmData.relations.size(); i++)
 	{
 		class OsmRelation &rel = osmData.relations[i];
-		for(size_t j=0; j<rel.refIds.size(); j++)
+		for(RelationMember &member : rel.members)
 		{
-			if(rel.refTypeStrs[j] != "way" or rel.refIds[j] > 0) continue;
-			std::map<int64_t, int64_t>::iterator it = createdWayIds.find(rel.refIds[j]);
+			if(member.type != ObjectType::Way or member.ref > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdWayIds.find(member.ref);
 			if(it == createdWayIds.end())
 			{
 				stringstream ss;
-				ss << "Relation "<< rel.objId << " depends on undefined way " << rel.refIds[j];
+				ss << "Relation "<< rel.objId << " depends on undefined way " << member.ref;
 				errStr = ss.str();
 				return false;
 			}
-			rel.refIds[j] = it->second;
+			member.ref = it->second;
 		}
 	}
 
@@ -851,18 +858,18 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		//Check refs for the relation we are about to add
 		class OsmRelation &rel = osmData.relations[i];
-		for(size_t j=0; j<rel.refIds.size(); j++)
+		for(RelationMember &member : rel.members)
 		{
-			if(rel.refTypeStrs[j] != "relation" or rel.refIds[j] > 0) continue;
-			std::map<int64_t, int64_t>::iterator it = createdRelationIds.find(rel.refIds[j]);
+			if(member.type != ObjectType::Relation or member.ref > 0) continue;
+			std::map<int64_t, int64_t>::iterator it = createdRelationIds.find(member.ref);
 			if(it == createdRelationIds.end())
 			{
 				stringstream ss;
-				ss << "Relation "<< rel.objId << " depends on undefined relation " << rel.refIds[j];
+				ss << "Relation "<< rel.objId << " depends on undefined relation " << member.ref;
 				errStr = ss.str();
 				return false;
 			}
-			rel.refIds[j] = it->second;
+			member.ref = it->second;
 		}
 
 		//Add to database
@@ -929,13 +936,12 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 	class DbUsernameLookup dbUsernameLookup(conn, work, "", ""); //Don't care about accurate usernames
 
 	std::set<int64_t> memNodeIds, memWayIds, memRelIds;
-	for(size_t i=0; i<rel.refTypeStrs.size(); i++)
+	for(const RelationMember &member : rel.members)
 	{
-		string &memType = rel.refTypeStrs[i];
-		if(memType == "node") memNodeIds.insert(rel.refIds[i]);
-		if(memType == "way") memWayIds.insert(rel.refIds[i]);
-		if(memType == "relation" and skipRelIds.find(rel.refIds[i]) == skipRelIds.end()) 
-			memRelIds.insert(rel.refIds[i]);
+		if(member.type == ObjectType::Node) memNodeIds.insert(member.ref);
+		if(member.type == ObjectType::Way) memWayIds.insert(member.ref);
+		if(member.type == ObjectType::Relation and skipRelIds.find(member.ref) == skipRelIds.end()) 
+			memRelIds.insert(member.ref);
 	}
 
 	//Check of member relations have already been processed

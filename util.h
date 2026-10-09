@@ -2,6 +2,7 @@
 #define _UTIL_H
 
 #include <string>
+#include <memory>
 #include <vector>
 #include <map>
 #include <rapidjson/reader.h> //rapidjson-dev
@@ -10,7 +11,7 @@ using namespace rapidjson;
 using namespace std;
 #include "cppGzip/DecodeGzip.h"
 #include "cppGzip/EncodeGzip.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 
 int ReadFileContents(const char *filename, int binaryMode, std::string &contentOut);
 

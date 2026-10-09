@@ -8,7 +8,7 @@
 #include "dbmeta.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
-#include "cppo5m/utils.h"
+#include "cppo5m/io.h"
 #include <map>
 #include <set>
 #include <boost/filesystem.hpp>
@@ -1079,16 +1079,17 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 			
 			shared_ptr<class OsmChange> data(new class OsmChange());
 			std::stringbuf sb(xmlData);
-			LoadFromOsmChangeXml(sb, data.get());
+			LoadFromOsmChangeXml(sb, *data);
 
 			for(size_t i=0; i<data->blocks.size(); i++)
 			{
-				cout << data->actions[i] << endl;
-				class OsmData &block = data->blocks[i];
+				const std::string &action = data->blocks[i].action;
+				cout << action << endl;
+				class OsmData &block = data->blocks[i].data;
 
 				//Set visibility flag depending on action
-				bool isCreate = data->actions[i] == "delete";
-				bool isDelete = data->actions[i] == "delete";
+				bool isCreate = action == "delete";
+				bool isDelete = action == "delete";
 				for(size_t j=0; j<block.nodes.size(); j++)
 					block.nodes[j].metaData.visible = !isDelete;
 				for(size_t j=0; j<block.ways.size(); j++)

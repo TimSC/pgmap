@@ -32,7 +32,7 @@ void GetReplicateDiffNodes(pqxx::connection &c, pqxx::transaction_base *work, cl
 	for(size_t i=0; i < data->nodes.size(); i++)
 	{
 		const class OsmObject &obj = data->nodes[i];
-		out.StoreOsmData(&obj, false);
+		out.StoreObject(obj, false);
 	}
 }
 
@@ -65,7 +65,7 @@ void GetReplicateDiffWays(pqxx::connection &c, pqxx::transaction_base *work, cla
 	for(size_t i=0; i < data->ways.size(); i++)
 	{
 		const class OsmObject &obj = data->ways[i];
-		out.StoreOsmData(&obj, false);
+		out.StoreObject(obj, false);
 	}
 }
 
@@ -97,7 +97,7 @@ void GetReplicateDiffRelations(pqxx::connection &c, pqxx::transaction_base *work
 	for(size_t i=0; i < data->relations.size(); i++)
 	{
 		const class OsmObject &obj = data->relations[i];
-		out.StoreOsmData(&obj, false);
+		out.StoreObject(obj, false);
 	}
 }
 

@@ -164,15 +164,14 @@ void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work,
 		for(size_t i=0; i<relationObjs->relations.size(); i++)
 		{
 			OsmRelation &rel = relationObjs->relations[i];
-			for(size_t j=0; j<rel.refTypeStrs.size(); j++)
+			for(const RelationMember &member : rel.members)
 			{	
-				const std::string &refType = rel.refTypeStrs[j];
-				if(refType == "node")
-					nodeIdsSet.insert(rel.refIds[j]);
-				else if(refType == "way")
-					wayIdsSet.insert(rel.refIds[j]);
-				else if(refType == "relation")
-					relationIdsSet.insert(rel.refIds[j]);
+				if(member.type == ObjectType::Node)
+					nodeIdsSet.insert(member.ref);
+				else if(member.type == ObjectType::Way)
+					wayIdsSet.insert(member.ref);
+				else if(member.type == ObjectType::Relation)
+					relationIdsSet.insert(member.ref);
 			}
 		}
 		relationObjs.reset();
@@ -196,19 +195,18 @@ void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work,
 			for(size_t i=0; i<childRelationObjs->relations.size(); i++)
 			{
 				OsmRelation &rel = childRelationObjs->relations[i];
-				for(size_t j=0; j<rel.refTypeStrs.size(); j++)
+				for(const RelationMember &member : rel.members)
 				{	
-					const std::string &refType = rel.refTypeStrs[j];
-					if(refType == "node")
-						nodeIdsSet.insert(rel.refIds[j]);
-					else if(refType == "way")
-						wayIdsSet.insert(rel.refIds[j]);
-					else if(refType == "relation")
+					if(member.type == ObjectType::Node)
+						nodeIdsSet.insert(member.ref);
+					else if(member.type == ObjectType::Way)
+						wayIdsSet.insert(member.ref);
+					else if(member.type == ObjectType::Relation)
 					{
-						if (relationIdsSet.find(rel.refIds[j]) == relationIdsSet.end())
+						if (relationIdsSet.find(member.ref) == relationIdsSet.end())
 						{
-							relationIdsSet.insert(rel.refIds[j]);
-							pendingRelationIds.insert(rel.refIds[j]);
+							relationIdsSet.insert(member.ref);
+							pendingRelationIds.insert(member.ref);
 						}					
 					}
 				}

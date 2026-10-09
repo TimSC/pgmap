@@ -1,119 +1,80 @@
 #include "dbfilters.h"
-#include <stdexcept>
 using namespace std;
 
-DataStreamRetainIds::DataStreamRetainIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
+DataStreamRetainIds::DataStreamRetainIds(IDataStreamHandler &outObj) : out(outObj)
 {
 
 }
 
-DataStreamRetainIds::DataStreamRetainIds(const DataStreamRetainIds &obj) : IDataStreamHandler(), out(obj.out)
+void DataStreamRetainIds::StoreIsDiff(bool diff)
 {
-	nodeIds = obj.nodeIds;
-	wayIds = obj.wayIds;
-	relationIds = obj.relationIds;
+	out.StoreIsDiff(diff);
 }
 
-DataStreamRetainIds::~DataStreamRetainIds()
+void DataStreamRetainIds::StoreBounds(const Bounds &bounds)
 {
-
+	out.StoreBounds(bounds);
 }
 
-bool DataStreamRetainIds::StoreIsDiff(bool diff)
+void DataStreamRetainIds::StoreNode(const OsmNode &node)
 {
-	return out.StoreIsDiff(diff);
+	this->nodeIds.insert(node.objId);
+	out.StoreNode(node);
 }
 
-bool DataStreamRetainIds::StoreBounds(double x1, double y1, double x2, double y2)
+void DataStreamRetainIds::StoreWay(const OsmWay &way)
 {
-	return out.StoreBounds(x1, y1, x2, y2);
+	this->wayIds.insert(way.objId);
+	out.StoreWay(way);
 }
 
-bool DataStreamRetainIds::StoreNode(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, double lat, double lon)
+void DataStreamRetainIds::StoreRelation(const OsmRelation &relation)
 {
-	this->nodeIds.insert(objId);
-	return out.StoreNode(objId, metaData, tags, lat, lon);
-}
-
-bool DataStreamRetainIds::StoreWay(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, const std::vector<int64_t> &refs)
-{
-	this->wayIds.insert(objId);
-	return out.StoreWay(objId, metaData, tags, refs);
-}
-
-bool DataStreamRetainIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
-	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-	const std::vector<std::string> &refRoles)
-{
-	if(refTypeStrs.size() != refIds.size() || refTypeStrs.size() != refRoles.size())
-		throw std::invalid_argument("Length of ref vectors must be equal");
-	this->relationIds.insert(objId);
-	return out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
+	this->relationIds.insert(relation.objId);
+	out.StoreRelation(relation);
 }
 
 // ******************************
 
-DataStreamRetainMemIds::DataStreamRetainMemIds(IDataStreamHandler &outObj) : IDataStreamHandler(), out(outObj)
+DataStreamRetainMemIds::DataStreamRetainMemIds(IDataStreamHandler &outObj) : out(outObj)
 {
 
 }
 
-DataStreamRetainMemIds::DataStreamRetainMemIds(const DataStreamRetainMemIds &obj) : IDataStreamHandler(), out(obj.out)
+void DataStreamRetainMemIds::StoreIsDiff(bool diff)
 {
-	nodeIds = obj.nodeIds;
-	wayIds = obj.wayIds;
-	relationIds = obj.relationIds;
+	out.StoreIsDiff(diff);
 }
 
-DataStreamRetainMemIds::~DataStreamRetainMemIds()
+void DataStreamRetainMemIds::StoreBounds(const Bounds &bounds)
 {
-
+	out.StoreBounds(bounds);
 }
 
-bool DataStreamRetainMemIds::StoreIsDiff(bool diff)
+void DataStreamRetainMemIds::StoreNode(const OsmNode &node)
 {
-	return out.StoreIsDiff(diff);
+	out.StoreNode(node);
 }
 
-bool DataStreamRetainMemIds::StoreBounds(double x1, double y1, double x2, double y2)
+void DataStreamRetainMemIds::StoreWay(const OsmWay &way)
 {
-	return out.StoreBounds(x1, y1, x2, y2);
+	for(size_t i=0; i < way.refs.size(); i++)
+		this->nodeIds.insert(way.refs[i]);
+	out.StoreWay(way);
 }
 
-bool DataStreamRetainMemIds::StoreNode(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, double lat, double lon)
+void DataStreamRetainMemIds::StoreRelation(const OsmRelation &relation)
 {
-	return out.StoreNode(objId, metaData, tags, lat, lon);
-}
-
-bool DataStreamRetainMemIds::StoreWay(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, const std::vector<int64_t> &refs)
-{
-	for(size_t i=0; i < refs.size(); i++)
-		this->nodeIds.insert(refs[i]);
-	return out.StoreWay(objId, metaData, tags, refs);
-}
-
-bool DataStreamRetainMemIds::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
-	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-	const std::vector<std::string> &refRoles)
-{
-	if(refTypeStrs.size() != refIds.size() || refTypeStrs.size() != refRoles.size())
-		throw std::invalid_argument("Length of ref vectors must be equal");
-	for(size_t i=0; i < refTypeStrs.size(); i++)
+	for(const RelationMember &member : relation.members)
 	{
-		if(refTypeStrs[i] == "node")
-			this->nodeIds.insert(refIds[i]);
-		else if(refTypeStrs[i] == "way")
-			this->wayIds.insert(refIds[i]);
-		else if(refTypeStrs[i] == "relation")
-			this->relationIds.insert(refIds[i]);
-		else
-			throw runtime_error("Unknown member type in relation");
+		switch(member.type)
+		{
+		case ObjectType::Node: this->nodeIds.insert(member.ref); break;
+		case ObjectType::Way: this->wayIds.insert(member.ref); break;
+		case ObjectType::Relation: this->relationIds.insert(member.ref); break;
+		}
 	}
-	return out.StoreRelation(objId, metaData, tags, refTypeStrs, refIds, refRoles);
+	out.StoreRelation(relation);
 }
 
 // ****************************************************
@@ -123,74 +84,40 @@ FilterObjectsUnique::FilterObjectsUnique(std::shared_ptr<IDataStreamHandler> enc
 
 }
 
-FilterObjectsUnique::~FilterObjectsUnique()
+void FilterObjectsUnique::Reset()
 {
-
+	enc->Reset();
 }
 
-bool FilterObjectsUnique::Sync()
+void FilterObjectsUnique::Finish()
 {
-	return enc->Sync();
+	enc->Finish();
 }
 
-bool FilterObjectsUnique::Reset()
+void FilterObjectsUnique::StoreIsDiff(bool isDiff)
 {
-	return enc->Reset();
+	enc->StoreIsDiff(isDiff);
 }
 
-bool FilterObjectsUnique::Finish()
+void FilterObjectsUnique::StoreBounds(const Bounds &bounds)
 {
-	return enc->Finish();
+	enc->StoreBounds(bounds);
 }
 
-bool FilterObjectsUnique::StoreIsDiff(bool isDiff)
+void FilterObjectsUnique::StoreNode(const OsmNode &node)
 {
-	return enc->StoreIsDiff(isDiff);
+	if(this->nodeIds.insert(node.objId).second)
+		enc->StoreNode(node);
 }
 
-bool FilterObjectsUnique::StoreBounds(double x1, double y1, double x2, double y2)
+void FilterObjectsUnique::StoreWay(const OsmWay &way)
 {
-	return enc->StoreBounds(x1, y1, x2, y2);
+	if(this->wayIds.insert(way.objId).second)
+		enc->StoreWay(way);
 }
 
-bool FilterObjectsUnique::StoreNode(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, double lat, double lon)
+void FilterObjectsUnique::StoreRelation(const OsmRelation &relation)
 {
-	auto it = this->nodeIds.find(objId);
-	if(it == this->nodeIds.end())
-	{
-		this->nodeIds.insert(objId);
-		return enc->StoreNode(objId, metaData, 
-			tags, lat, lon);
-	}
-	return false;
+	if(this->relationIds.insert(relation.objId).second)
+		enc->StoreRelation(relation);
 }
-
-bool FilterObjectsUnique::StoreWay(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, const std::vector<int64_t> &refs)
-{
-	auto it = this->wayIds.find(objId);
-	if(it == this->wayIds.end())
-	{
-		this->wayIds.insert(objId);
-		return enc->StoreWay(objId, metaData, 
-			tags, refs);
-	}
-	return false;
-}
-
-bool FilterObjectsUnique::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
-	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-	const std::vector<std::string> &refRoles)
-{
-	auto it = this->relationIds.find(objId);
-	if(it == this->relationIds.end())
-	{
-		this->relationIds.insert(objId);
-		return enc->StoreRelation(objId, metaData, tags, 
-			refTypeStrs, refIds, 
-			refRoles);
-	}
-	return false;
-}
-

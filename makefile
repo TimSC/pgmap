@@ -8,18 +8,22 @@ all: dump extract export_extract update_extract compare_extract admin applydiffs
 %.o: %.cpp %.h
 	g++ $(cppflags) -fPIC -c -o $@ $<
 
+# cppo5m is built by its own makefile as a static library
+cppo5m = cppo5m/libcppo5m.a
+
+cppo5m/libcppo5m.a: FORCE
+	$(MAKE) -C cppo5m libcppo5m.a
+
+FORCE:
+
 common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
 	dbdecode.o dbextract.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o dbusername.o \
 	dboverpass.o dbeditactivity.o dbprepared.o pgcommon.o pgmap.o \
-	cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
-	cppo5m/utils.o cppo5m/pbf.o cppo5m/pbf/fileformat.pb.cc cppo5m/pbf/osmformat.pb.cc\
-	cppo5m/iso8601lib/iso8601.co cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
+	$(cppo5m) cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o
 
-osmdata = cppo5m/o5m.o cppo5m/varint.o cppo5m/OsmData.o cppo5m/osmxml.o \
-	cppo5m/utils.o cppo5m/pbf.o cppo5m/pbf/fileformat.pb.cc cppo5m/pbf/osmformat.pb.cc\
-	cppo5m/iso8601lib/iso8601.co cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o
+osmdata = $(cppo5m) cppGzip/DecodeGzip.o cppGzip/EncodeGzip.o
 
-libs = -lboost_filesystem -lboost_program_options -lboost_system -lprotobuf -lboost_iostreams -lpqxx -lexpat -lz
+libs = -lboost_filesystem -lboost_program_options -lboost_system -lprotobuf -lpqxx -lexpat -lz
 
 dump: dump.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
@@ -53,11 +57,11 @@ checkdata: checkdata.cpp dbjson.o util.o $(osmdata) $(common)
 
 swigpy2: pgmap.i $(common)
 	swig -python -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
-	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE -DPY_SSIZE_T_CLEAN pgmap_wrap.cxx $(common) ${shell python2-config --includes --libs} $(libs) -o _pgmap.so
+	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE -DPY_SSIZE_T_CLEAN pgmap_wrap.cxx cppo5m/pysink.cpp $(common) ${shell python2-config --includes --libs} $(libs) -o _pgmap.so
 
 swigpy3: pgmap.i $(common)
 	swig -python -py3 -c++ -DPYTHON_AWARE -DSWIGWORDSIZE64 pgmap.i
-	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE -DPY_SSIZE_T_CLEAN pgmap_wrap.cxx $(common) ${shell python3-config --includes --libs} $(libs) -o _pgmap.so
+	g++ -shared -fPIC $(cppflags) -DPYTHON_AWARE -DPY_SSIZE_T_CLEAN pgmap_wrap.cxx cppo5m/pysink.cpp $(common) ${shell python3-config --includes --libs} $(libs) -o _pgmap.so
 
 quickinit: quickinit.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@

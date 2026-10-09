@@ -7,7 +7,7 @@
 #include <pqxx/pqxx> //apt install libpqxx-dev
 #include "cppo5m/o5m.h"
 #include "cppo5m/osmxml.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 #include "dbusername.h"
 #include "pgcommon.h"
 #include "dbeditactivity.h"
@@ -133,7 +133,7 @@ public:
 		class PgChangeset &changesetOut,
 		class PgMapError &errStr);
 	int GetChangesetOsmChange(int64_t changesetId,
-		std::shared_ptr<class IOsmChangeBlock> output,
+		std::shared_ptr<class IOsmChangeHandler> output,
 		class PgMapError &errStr);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		int64_t user_uid, //0 means don't filter
@@ -278,11 +278,6 @@ public:
 		const std::string &tableActivePrefixIn,
 		const std::string &tableModPrefixIn,
 		const std::string &tableTestPrefixIn);
-	PgMap(const std::string &connection, const std::string &tableStaticPrefixIn, 
-		const std::string &tableActivePrefixIn,
-		const std::string &tableModPrefixIn,
-		const std::string &tableTestPrefixIn,
-		const std::map<std::string, int64_t> &limits);
 	virtual ~PgMap();
 	PgMap& operator=(const PgMap&) {return *this;};
 

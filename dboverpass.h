@@ -3,7 +3,7 @@
 
 #include <pqxx/pqxx>
 #include "cppo5m/o5m.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 #include "dbusername.h"
 
 //Returns complete objects

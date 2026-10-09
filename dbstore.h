@@ -4,7 +4,7 @@
 #include <pqxx/pqxx>
 #include <string>
 #include "cppo5m/o5m.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 
 void EncodeTags(const TagMap &tagmap, std::string &out);
 

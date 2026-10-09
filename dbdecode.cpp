@@ -82,6 +82,7 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 	uint64_t count = 0;
 	class MetaData metaData;
 	JsonToStringMap tagHandler;
+	OsmNode node;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
 
 	pqxx::result rows;
@@ -128,7 +129,14 @@ int NodeResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &us
 			lastUpdateTime = timeNow;
 
 		if(enc)
-			enc->StoreNode(objId, metaData, tagHandler.tagMap, lat, lon);
+		{
+			node.objId = objId;
+			node.metaData = metaData;
+			node.tags = tagHandler.tagMap;
+			node.lat = lat;
+			node.lon = lon;
+			enc->StoreNode(node);
+		}
 	}
 	return count;
 }
@@ -140,7 +148,7 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 	class MetaData metaData;
 	JsonToStringMap tagHandler;
 	JsonToWayMembers wayMemHandler;
-	const std::vector<int64_t> refs;
+	OsmWay way;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
 
 	pqxx::result rows;
@@ -186,7 +194,13 @@ int WayResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLookup &use
 			lastUpdateTime = timeNow;
 
 		if(enc)
-			enc->StoreWay(objId, metaData, tagHandler.tagMap, wayMemHandler.refs);
+		{
+			way.objId = objId;
+			way.metaData = metaData;
+			way.tags = tagHandler.tagMap;
+			way.refs = wayMemHandler.refs;
+			enc->StoreWay(way);
+		}
 	}
 	return count;
 }
@@ -199,8 +213,7 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 	JsonToStringMap tagHandler;
 	JsonToRelMembers relMemHandler;
 	JsonToRelMemberRoles relMemRolesHandler;
-	std::vector<std::string> refRoles;
-	const std::vector<int64_t> refs;
+	OsmRelation relation;
 	double lastUpdateTime = (double)clock() / CLOCKS_PER_SEC;
 
 	for ( size_t batch = 0; true; batch ++ )
@@ -258,8 +271,22 @@ void RelationResultsToEncoder(pqxx::icursorstream &cursor, class DbUsernameLooku
 				lastUpdateTime = timeNow;
 
 			if(enc)
-				enc->StoreRelation(objId, metaData, tagHandler.tagMap, 
-					relMemHandler.refTypeStrs, relMemHandler.refIds, relMemRolesHandler.refRoles);
+			{
+				relation.objId = objId;
+				relation.metaData = metaData;
+				relation.tags = tagHandler.tagMap;
+				relation.members.clear();
+				for(size_t i=0; i<relMemHandler.refIds.size(); i++)
+				{
+					RelationMember member;
+					if(!ObjectTypeFromName(relMemHandler.refTypeStrs[i], member.type))
+						throw runtime_error("Decoded relation has an unknown member type");
+					member.ref = relMemHandler.refIds[i];
+					member.role = relMemRolesHandler.refRoles[i];
+					relation.members.push_back(member);
+				}
+				enc->StoreRelation(relation);
+			}
 		}
 	}
 }

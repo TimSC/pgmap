@@ -164,8 +164,8 @@ PgExtractExport::PgExtractExport(shared_ptr<pqxx::connection> connectionIn,
         connection->quote_name(prefix + "edit_activity"));
     pendingActivity = rows[0][6].is_null() || latest[0][0].as<int64_t>() != rows[0][6].as<int64_t>();
     output->StoreIsDiff(false);
-    output->StoreBounds(rows[0][1].as<double>(), rows[0][2].as<double>(),
-        rows[0][3].as<double>(), rows[0][4].as<double>());
+    output->StoreBounds(Bounds(rows[0][1].as<double>(), rows[0][2].as<double>(),
+        rows[0][3].as<double>(), rows[0][4].as<double>()));
 }
 
 int PgExtractExport::Continue()
@@ -210,26 +210,21 @@ public:
 	map<pair<int, int64_t>, int64_t> versions;
 	vector<double> bounds;
 
-	bool StoreBounds(double x1, double y1, double x2, double y2) override
+	void StoreBounds(const Bounds &b) override
 	{
-		bounds = {x1, y1, x2, y2};
-		return false;
+		bounds = {b.minLon, b.minLat, b.maxLon, b.maxLat};
 	}
-	bool StoreNode(int64_t id, const MetaData &meta, const TagMap &, double, double) override
+	void StoreNode(const OsmNode &node) override
 	{
-		versions[{0, id}] = meta.version;
-		return false;
+		versions[{0, node.objId}] = node.metaData.version;
 	}
-	bool StoreWay(int64_t id, const MetaData &meta, const TagMap &, const vector<int64_t> &) override
+	void StoreWay(const OsmWay &way) override
 	{
-		versions[{1, id}] = meta.version;
-		return false;
+		versions[{1, way.objId}] = way.metaData.version;
 	}
-	bool StoreRelation(int64_t id, const MetaData &meta, const TagMap &,
-		const vector<string> &, const vector<int64_t> &, const vector<string> &) override
+	void StoreRelation(const OsmRelation &relation) override
 	{
-		versions[{2, id}] = meta.version;
-		return false;
+		versions[{2, relation.objId}] = relation.metaData.version;
 	}
 };
 

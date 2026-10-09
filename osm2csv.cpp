@@ -1,6 +1,6 @@
 #include "cppGzip/DecodeGzip.h"
 #include "cppGzip/EncodeGzip.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -64,20 +64,11 @@ public:
 	CsvStore(const std::string &outPrefix);
 	virtual ~CsvStore();
 
-	virtual bool Sync() {return false;};
-	virtual bool Reset() {return false;};
-	virtual bool Finish();
+	void Finish() override;
 
-	virtual bool StoreIsDiff(bool) {return false;};
-	virtual bool StoreBounds(double x1, double y1, double x2, double y2) {return false;};
-	virtual bool StoreNode(int64_t objId, const class MetaData &metaData, 
-		const TagMap &tags, double lat, double lon);
-	virtual bool StoreWay(int64_t objId, const class MetaData &metaData, 
-		const TagMap &tags, const std::vector<int64_t> &refs);
-	virtual bool StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
-		const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-		const std::vector<std::string> &refRoles);
-
+	void StoreNode(const OsmNode &node) override;
+	void StoreWay(const OsmWay &way) override;
+	void StoreRelation(const OsmRelation &relation) override;
 };
 
 CsvStore::CsvStore(const std::string &outPrefix)
@@ -148,14 +139,17 @@ CsvStore::~CsvStore()
 	relationMemRelsFile.close();
 }
 
-bool CsvStore::Finish()
+void CsvStore::Finish()
 {
-	return false;
+	return;
 }
 
-bool CsvStore::StoreNode(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, double lat, double lon)
+void CsvStore::StoreNode(const OsmNode &node)
 {
+	const int64_t objId = node.objId;
+	const MetaData &metaData = node.metaData;
+	const TagMap &tags = node.tags;
+	const double lat = node.lat, lon = node.lon;
 	if(lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0)
 		cerr << "Warning: node " << objId << " has invalid lat/lon: " << lat << "," << lon << endl;
 	WarnZeroLengthTags("node", objId, tags);
@@ -207,12 +201,15 @@ bool CsvStore::StoreNode(int64_t objId, const class MetaData &metaData,
 	objIdStr += "\n";
 	this->nodeIdsFileGzip->sputn(objIdStr.c_str(), objIdStr.size());
 
-	return false;
+	return;
 }
 
-bool CsvStore::StoreWay(int64_t objId, const class MetaData &metaData, 
-	const TagMap &tags, const std::vector<int64_t> &refs)
+void CsvStore::StoreWay(const OsmWay &way)
 {
+	const int64_t objId = way.objId;
+	const MetaData &metaData = way.metaData;
+	const TagMap &tags = way.tags;
+	const std::vector<int64_t> &refs = way.refs;
 	if(refs.size() == 0)
 		cerr << "Warning: way " << objId << " has zero nodes" << endl;
 	else if(refs.size() < 2)
@@ -277,13 +274,22 @@ bool CsvStore::StoreWay(int64_t objId, const class MetaData &metaData,
 		this->wayMembersFileGzip->sputn(memStr.c_str(), memStr.size());
 	}
 
-	return false;
+	return;
 }
 
-bool CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, const TagMap &tags, 
-	const std::vector<std::string> &refTypeStrs, const std::vector<int64_t> &refIds, 
-	const std::vector<std::string> &refRoles)
+void CsvStore::StoreRelation(const OsmRelation &relation)
 {
+	const int64_t objId = relation.objId;
+	const MetaData &metaData = relation.metaData;
+	const TagMap &tags = relation.tags;
+	std::vector<std::string> refTypeStrs, refRoles;
+	std::vector<int64_t> refIds;
+	for(const RelationMember &member : relation.members)
+	{
+		refTypeStrs.push_back(ObjectTypeName(member.type));
+		refIds.push_back(member.ref);
+		refRoles.push_back(member.role);
+	}
 	if(refIds.size() == 0)
 		cerr << "Warning: relation " << objId << " has zero members" << endl;
 	if(refTypeStrs.size() != refIds.size() || refTypeStrs.size() != refRoles.size())
@@ -369,7 +375,7 @@ bool CsvStore::StoreRelation(int64_t objId, const class MetaData &metaData, cons
 		}
 	}
 
-	return false;
+	return;
 }
 
 int main(int argc, char **argv)

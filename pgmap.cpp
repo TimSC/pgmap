@@ -14,7 +14,7 @@
 #include "dbcommon.h"
 #include "dboverpass.h"
 #include "util.h"
-#include "cppo5m/OsmData.h"
+#include "cppo5m/model.h"
 #include <algorithm>
 #include <cmath>
 using namespace std;
@@ -239,7 +239,7 @@ int PgMapQuery::Continue()
 	{
 		this->mapQueryEnc->StoreIsDiff(false);
 		if(this->mapQueryBbox.size() == 4)
-			this->mapQueryEnc->StoreBounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]);
+			this->mapQueryEnc->StoreBounds(Bounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]));
 		this->mapQueryPhase = 3;
 		if(verbose >= 1)
 			cout << "mapQueryPhase increased to " << this->mapQueryPhase << endl;
@@ -632,14 +632,14 @@ void PgTransaction::GetFullObjectById(const std::string &type, int64_t objectId,
 		class OsmRelation &mainRelation = outData->relations[0];
 
 		std::set<int64_t> memberNodes, memberWays, memberRelations;
-		for(size_t i=0; i<mainRelation.refIds.size(); i++)
+		for(const RelationMember &member : mainRelation.members)
 		{
-			if(mainRelation.refTypeStrs[i]=="node")
-				memberNodes.insert(mainRelation.refIds[i]);
-			else if(mainRelation.refTypeStrs[i]=="way")
-				memberWays.insert(mainRelation.refIds[i]);
-			else if(mainRelation.refTypeStrs[i]=="relation")
-				memberRelations.insert(mainRelation.refIds[i]);
+			if(member.type == ObjectType::Node)
+				memberNodes.insert(member.ref);
+			else if(member.type == ObjectType::Way)
+				memberWays.insert(member.ref);
+			else if(member.type == ObjectType::Relation)
+				memberRelations.insert(member.ref);
 		}
 
 		std::shared_ptr<class OsmData> memberWayObjs(new class OsmData());
@@ -824,8 +824,10 @@ class ExtractDatabaseWriter : public IDataStreamHandler
 			to_string(id) + " ON CONFLICT (extract_id, id) DO NOTHING");
 	}
 
+	// types, when given, selects the members whose type starts with the
+	// letter ending the table suffix.
 	void Membership(const string &suffix, int64_t id, int64_t version,
-		const vector<int64_t> &refs, const vector<string> *types = nullptr)
+		const vector<int64_t> &refs, const vector<ObjectType> *types = nullptr)
 	{
 		// Bound each SQL batch even for unusually large ways or relations.
 		for(size_t start = 0; start < refs.size(); start += 1000)
@@ -835,7 +837,7 @@ class ExtractDatabaseWriter : public IDataStreamHandler
 			bool any = false;
 			for(size_t i = start; i < refs.size() && i < start + 1000; ++i)
 			{
-				if(types && suffix != "relation_mems_" + (*types)[i].substr(0,1)) continue;
+				if(types && suffix.back() != ObjectTypeName((*types)[i])[0]) continue;
 				if(any) sql += ",";
 				any = true;
 				sql += "(" + to_string(extractId) + "," + to_string(id) + "," +
@@ -847,25 +849,27 @@ class ExtractDatabaseWriter : public IDataStreamHandler
 public:
 	ExtractDatabaseWriter(pqxx::connection &c, pqxx::transaction_base &w,
 		const string &p, int64_t id): connection(c), work(w), prefix(p), extractId(id) {}
-	bool StoreNode(int64_t id, const MetaData &, const TagMap &, double, double) override
+	void StoreNode(const OsmNode &node) override
 	{
-		CopyObject("node", id);
-		return false;
+		CopyObject("node", node.objId);
 	}
-	bool StoreWay(int64_t id, const MetaData &meta, const TagMap &, const vector<int64_t> &refs) override
+	void StoreWay(const OsmWay &way) override
 	{
-		CopyObject("way", id);
-		Membership("way_mems", id, meta.version, refs);
-		return false;
+		CopyObject("way", way.objId);
+		Membership("way_mems", way.objId, way.metaData.version, way.refs);
 	}
-	bool StoreRelation(int64_t id, const MetaData &meta, const TagMap &,
-		const vector<string> &types, const vector<int64_t> &refs, const vector<string> &) override
+	void StoreRelation(const OsmRelation &relation) override
 	{
-		if(types.size() != refs.size()) throw runtime_error("Invalid relation membership");
-		CopyObject("relation", id);
+		vector<int64_t> refs;
+		vector<ObjectType> types;
+		for(const RelationMember &member : relation.members)
+		{
+			refs.push_back(member.ref);
+			types.push_back(member.type);
+		}
+		CopyObject("relation", relation.objId);
 		for(const char *suffix : {"relation_mems_n", "relation_mems_w", "relation_mems_r"})
-			Membership(suffix, id, meta.version, refs, &types);
-		return false;
+			Membership(suffix, relation.objId, relation.metaData.version, refs, &types);
 	}
 };
 
@@ -1278,7 +1282,7 @@ int PgTransaction::GetChangeset(int64_t objId,
 }
 
 int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
-	std::shared_ptr<class IOsmChangeBlock> output,
+	std::shared_ptr<class IOsmChangeHandler> output,
 	class PgMapError &errStr)
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
@@ -1317,12 +1321,16 @@ int PgTransaction::GetChangesetOsmChange(int64_t changesetId,
 	FilterObjectsInOsmChange(2, *data, modified);
 	FilterObjectsInOsmChange(3, *data, deleted);
 
-	if(!created.IsEmpty())
-		output->StoreOsmData("create", created, false);
-	if(!modified.IsEmpty())
-		output->StoreOsmData("modify", modified, false);
-	if(!deleted.IsEmpty())	
-		output->StoreOsmData("delete", deleted, false);
+	const std::pair<const char *, const OsmData *> groups[] = {
+		{"create", &created}, {"modify", &modified}, {"delete", &deleted}};
+	for(const auto &group : groups)
+	{
+		if(group.second->IsEmpty())
+			continue;
+		OsmChangeBlock block(group.first);
+		block.data = *group.second;
+		output->StoreChangeBlock(block);
+	}
 	return 1;
 }
 
@@ -2247,18 +2255,6 @@ PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn,
 	tableActivePrefix = tableActivePrefixIn;
 	tableModPrefix = tableModPrefixIn;
 	tableTestPrefix = tableTestPrefixIn;
-}
-
-PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn, 
-	const string &tableActivePrefixIn,
-	const string &tableModPrefixIn,
-	const string &tableTestPrefixIn,
-	const std::map<std::string, int64_t> &limits):
-	PgMap(connection, tableStaticPrefixIn, tableActivePrefixIn, tableModPrefixIn, tableTestPrefixIn)
-{
-	class OsmXmlLimits xmlLimits;
-	xmlLimits.Apply(limits);
-	SetDefaultOsmXmlLimits(xmlLimits);
 }
 
 PgMap::~PgMap()

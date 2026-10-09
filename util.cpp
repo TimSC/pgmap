@@ -2,7 +2,7 @@
 #include <sstream>
 #include <cmath>
 #include "util.h"
-#include "cppo5m/utils.h"
+#include "cppo5m/io.h"
 using namespace std;
 
 int ReadFileContents(const char *filename, int binaryMode, std::string &contentOut)
@@ -161,14 +161,13 @@ void LoadOsmFromFile(const std::string &filename, shared_ptr<class IDataStreamHa
 		fb2.swap(fb);
 	}
 
+	//The decoder sends Finish to the handler when it reaches the end
 	if(filenameSplit[filePart] == "o5m")
-		LoadFromO5m(*fb2.get(), csvStore.get());
+		LoadFromO5m(*fb2.get(), *csvStore);
 	else if (filenameSplit[filePart] == "osm")
-		LoadFromOsmXml(*fb2.get(), csvStore.get());
+		LoadFromOsmXml(*fb2.get(), *csvStore);
 	else
 		throw runtime_error("File extension not supported");
-
-	csvStore->Finish();
 }
 
 // From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames

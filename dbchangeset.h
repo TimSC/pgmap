@@ -3,6 +3,7 @@
 
 #include <pqxx/pqxx>
 #include <string>
+#include <expat.h>
 #include "pgmap.h"
 
 bool GetAllNodesByChangeset(pqxx::connection &c, pqxx::transaction_base *work, class DbUsernameLookup &usernames, 
