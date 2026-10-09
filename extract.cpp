@@ -19,6 +19,7 @@ int main(int argc, char **argv)
 		("save-db", "Save rectangular extract to database instead of a file")
 		("name", po::value<string>()->default_value(""), "Optional database extract name")
 		("out", po::value<string>(), "Output file name (extension must be .osm.gz or .o5m.gz)")
+		("edit-ids", "Add the latest edit activity ID and atomic edit ID as attributes of the root XML element (.osm.gz only)")
 	;
 
 	po::variables_map vm;
@@ -68,9 +69,9 @@ int main(int argc, char **argv)
 
 	if(vm.count("save-db"))
 	{
-		if(bbox.size() != 4 || vm.count("wkt") || vm.count("out"))
+		if(bbox.size() != 4 || vm.count("wkt") || vm.count("out") || vm.count("edit-ids"))
 		{
-			cerr << "--save-db requires --bbox and cannot be combined with --wkt or --out" << endl;
+			cerr << "--save-db requires --bbox and cannot be combined with --wkt, --out or --edit-ids" << endl;
 			return 2;
 		}
 		try
@@ -105,29 +106,17 @@ int main(int argc, char **argv)
 	}
 
 
-	std::filebuf outfi;
-	EncodeGzip *gzipEnc = nullptr;
-	shared_ptr<IDataStreamHandler> enc;
-
-	if(outFinaSp[outFinaSp.size()-1] == "gz" && outFinaSp[outFinaSp.size()-2] == "o5m")
-	{
-		outfi.open(outFina, std::ios::out);
-		gzipEnc = new class EncodeGzip(outfi);
-
-		enc.reset(new O5mEncode(*gzipEnc));
-	}
-	else if(outFinaSp[outFinaSp.size()-1] == "gz" && outFinaSp[outFinaSp.size()-2] == "osm")
-	{
-		outfi.open(outFina, std::ios::out);
-		gzipEnc = new class EncodeGzip(outfi);
-
-		TagMap empty;
-		enc.reset(new OsmXmlEncode(*gzipEnc, empty));
-	}
-	else
+	bool o5mOut = outFinaSp[outFinaSp.size()-1] == "gz" && outFinaSp[outFinaSp.size()-2] == "o5m";
+	bool xmlOut = outFinaSp[outFinaSp.size()-1] == "gz" && outFinaSp[outFinaSp.size()-2] == "osm";
+	if(!o5mOut && !xmlOut)
 	{
 		cerr << "Output file name does not have a recognized extension" << endl;
 		exit(-2);
+	}
+	if(vm.count("edit-ids") && !xmlOut)
+	{
+		cerr << "--edit-ids requires .osm.gz output; o5m has no root element to hold attributes" << endl;
+		return 2;
 	}
 
 	cout << "Reading settings from config.cfg" << endl;
@@ -146,6 +135,21 @@ int main(int argc, char **argv)
 	}
 
 	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
+
+	// The encoder writes the root element when constructed, so the edit IDs are
+	// read first. They come from the same snapshot as the map query below.
+	TagMap rootAttribs;
+	if(vm.count("edit-ids"))
+		rootAttribs = transaction->GetLatestEditIdAttribs();
+
+	std::filebuf outfi;
+	outfi.open(outFina, std::ios::out);
+	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
+	shared_ptr<IDataStreamHandler> enc;
+	if(o5mOut)
+		enc.reset(new O5mEncode(*gzipEnc));
+	else
+		enc.reset(new OsmXmlEncode(*gzipEnc, rootAttribs));
 
 	std::shared_ptr<class PgMapQuery> mapQuery = transaction->GetQueryMgr();
 	int ret = 0;

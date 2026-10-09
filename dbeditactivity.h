@@ -72,6 +72,10 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr);
 
+// Latest edit activity row ID and atomic edit ID; zero when there is no activity.
+void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, int64_t &editActivityId, int64_t &atomicEditId);
+
 void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &out,

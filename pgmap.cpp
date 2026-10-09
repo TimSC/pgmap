@@ -1661,6 +1661,23 @@ bool PgTransaction::GetEditActivityById(int64_t editActivityId,
 	return found;
 }
 
+std::pair<int64_t, int64_t> PgTransaction::GetLatestEditIds()
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work) throw runtime_error("Transaction has been deleted");
+	std::pair<int64_t, int64_t> ids(0, 0);
+	DbGetLatestEditIds(*dbconn, work.get(), this->tableActivePrefix, ids.first, ids.second);
+	return ids;
+}
+
+std::map<std::string, std::string> PgTransaction::GetLatestEditIdAttribs()
+{
+	auto ids = this->GetLatestEditIds();
+	return {{"edit_activity_id", to_string(ids.first)}, {"atomic_edit_id", to_string(ids.second)}};
+}
+
 void PgTransaction::QueryEditActivityByIds(int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &editActivity,
 	class PgMapError &errStr)

@@ -265,6 +265,23 @@ brings up to date with later edits. Stored extracts can be exported with
 tables. Already-version-14 databases will not automatically run the amended
 migration; adding these tables requires a separate application of the DDL.
 
+Recording the edit IDs in an extract or dump
+--------------------------------------------
+
+The `extract` and `dump` tools can record which edits their output includes:
+
+    ./extract --bbox=-1.078,50.788,-1.074,50.790 --out=portsmouth.osm.gz --edit-ids
+    ./dump --out=dump.osm.gz --edit-ids
+
+`--edit-ids` adds `edit_activity_id` and `atomic_edit_id` attributes to the root
+`<osm>` element, holding the latest edit activity row ID and atomic edit ID (zero
+if there is no activity). They are read in the same transaction snapshot as the
+data, so the file contains exactly the edits up to those IDs. The option needs
+`.osm.gz` output, because o5m has no root element to hold attributes; with
+`.o5m.gz` the tools stop with an error. Without the option the output is
+unchanged. `dump` writes `dump.o5m.gz` unless `--out` names another file.
+`PgTransaction::GetLatestEditIds` returns the same IDs through the bindings.
+
 Saving a rectangular extract to the database
 --------------------------------------------
 

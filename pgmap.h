@@ -188,6 +188,12 @@ public:
 	bool GetEditActivityById(int64_t editActivityId,
 		class EditActivity &activity,
 		class PgMapError &errStr);
+	// Latest edit activity row ID and atomic edit ID in this transaction's
+	// snapshot, in that order; zero when there is no activity. Anything read in
+	// the same transaction reflects exactly the edits up to these IDs.
+	std::pair<int64_t, int64_t> GetLatestEditIds();
+	// The same IDs as attributes for the root element of an OSM XML document.
+	std::map<std::string, std::string> GetLatestEditIdAttribs();
 	// Inclusive row range; lastId/atomicEditId zero means no corresponding filter.
 	void QueryEditActivityByIds(int64_t firstId, int64_t lastId, int64_t atomicEditId,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,

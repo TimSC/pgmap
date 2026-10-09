@@ -382,3 +382,12 @@ void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
 }
 
 
+
+void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, int64_t &editActivityId, int64_t &atomicEditId)
+{
+	auto latest = work->exec("SELECT COALESCE(max(id),0), COALESCE(max(atomic_edit_id),0) FROM " +
+		c.quote_name(tablePrefix + "edit_activity"));
+	editActivityId = latest[0][0].as<int64_t>();
+	atomicEditId = latest[0][1].as<int64_t>();
+}
