@@ -12,6 +12,7 @@
 #include "pgcommon.h"
 #include "dbeditactivity.h"
 #include "dbextract.h"
+#include "dboverpass.h"
 
 class PgMapError
 {
@@ -253,6 +254,24 @@ public:
 		const std::string &tagValue,
 		const std::vector<double> &bbox, 
 		std::shared_ptr<IDataStreamHandler> enc);
+	// Finds visible objects of one type by tag conditions, bbox and IDs, without
+	// completing ways or relations. See DbOverpassQueryObjVisible.
+	void OverpassQuery(const std::string &objType,
+		const std::vector<OverpassTagFilter> &filters,
+		const std::vector<double> &bbox,
+		const std::vector<int64_t> &ids,
+		size_t limit,
+		std::shared_ptr<IDataStreamHandler> enc);
+	// The same search, giving only the IDs of what it finds.
+	void OverpassQueryIds(const std::string &objType,
+		const std::vector<OverpassTagFilter> &filters,
+		const std::vector<double> &bbox,
+		const std::vector<int64_t> &ids,
+		size_t limit,
+		std::vector<int64_t> &idsOut);
+	// Ends any later statement in this transaction that runs for longer than
+	// this; zero removes the limit. A query ended this way fails.
+	void SetStatementTimeout(int64_t milliseconds);
 	void GetMostActiveUsers(int64_t startTimestamp,
 		std::vector<int64_t> &uidOut,
 		std::vector<std::vector<int64_t> > &objectCountOut);

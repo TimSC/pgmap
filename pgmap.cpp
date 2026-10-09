@@ -1840,6 +1840,54 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 	return true;
 }
 
+void PgTransaction::OverpassQuery(const std::string &objType,
+	const std::vector<OverpassTagFilter> &filters,
+	const std::vector<double> &bbox,
+	const std::vector<int64_t> &ids,
+	size_t limit,
+	std::shared_ptr<IDataStreamHandler> enc)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	DbOverpassQueryObjVisible(*dbconn, work.get(),
+		this->dbUsernameLookup,
+		this->tableActivePrefix,
+		objType, filters, bbox, ids, limit, enc);
+}
+
+void PgTransaction::OverpassQueryIds(const std::string &objType,
+	const std::vector<OverpassTagFilter> &filters,
+	const std::vector<double> &bbox,
+	const std::vector<int64_t> &ids,
+	size_t limit,
+	std::vector<int64_t> &idsOut)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	DbOverpassQueryIdsVisible(*dbconn, work.get(),
+		this->tableActivePrefix,
+		objType, filters, bbox, ids, limit, idsOut);
+}
+
+void PgTransaction::SetStatementTimeout(int64_t milliseconds)
+{
+	if(milliseconds < 0)
+		throw invalid_argument("Timeout must not be negative");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	// SET LOCAL lasts until the transaction ends, so nothing leaks to its next user
+	work->exec("SET LOCAL statement_timeout = " + to_string(milliseconds));
+}
+
 void PgTransaction::XapiQuery(const std::string &objType,
 	const std::string &tagKey,
 	const std::string &tagValue,

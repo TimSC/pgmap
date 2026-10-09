@@ -254,6 +254,15 @@ namespace std {
 	%template(vectorextractinfo) vector<ExtractInfo>;
 };
 
+%ignore DbXapiQueryVisible;
+%ignore DbXapiQueryObjVisible;
+%ignore DbOverpassQueryObjVisible;
+%ignore DbOverpassQueryIdsVisible;
+%include "dboverpass.h"
+namespace std {
+	%template(vectoroverpasstagfilter) vector<OverpassTagFilter>;
+};
+
 %shared_ptr(PgMapQuery)
 %shared_ptr(PgTransaction)
 %shared_ptr(PgAdmin)
