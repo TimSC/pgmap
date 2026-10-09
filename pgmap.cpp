@@ -1845,7 +1845,8 @@ void PgTransaction::OverpassQuery(const std::string &objType,
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	std::shared_ptr<IDataStreamHandler> enc)
+	std::shared_ptr<IDataStreamHandler> enc,
+	const OverpassQueryOptions &options)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1856,7 +1857,7 @@ void PgTransaction::OverpassQuery(const std::string &objType,
 	DbOverpassQueryObjVisible(*dbconn, work.get(),
 		this->dbUsernameLookup,
 		this->tableActivePrefix,
-		objType, filters, bbox, ids, limit, enc);
+		objType, filters, bbox, ids, limit, enc, options);
 }
 
 void PgTransaction::OverpassQueryIds(const std::string &objType,
@@ -1864,7 +1865,8 @@ void PgTransaction::OverpassQueryIds(const std::string &objType,
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	std::vector<int64_t> &idsOut)
+	std::vector<int64_t> &idsOut,
+	const OverpassQueryOptions &options)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1874,7 +1876,25 @@ void PgTransaction::OverpassQueryIds(const std::string &objType,
 
 	DbOverpassQueryIdsVisible(*dbconn, work.get(),
 		this->tableActivePrefix,
-		objType, filters, bbox, ids, limit, idsOut);
+		objType, filters, bbox, ids, limit, idsOut, options);
+}
+
+bool PgTransaction::UseBboxInQuery()
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	// Read as the map query reads it, so both treat the map the same way
+	string errStrNative, value;
+	try
+	{
+		value = DbGetMetaValue(*dbconn, work.get(), "useBboxInQuery",
+			this->tableActivePrefix, errStrNative);
+	}
+	catch(runtime_error &err)
+	{
+	}
+	return atoi(value.c_str()) == 1;
 }
 
 void PgTransaction::SetStatementTimeout(int64_t milliseconds)

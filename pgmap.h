@@ -261,14 +261,19 @@ public:
 		const std::vector<double> &bbox,
 		const std::vector<int64_t> &ids,
 		size_t limit,
-		std::shared_ptr<IDataStreamHandler> enc);
+		std::shared_ptr<IDataStreamHandler> enc,
+		const OverpassQueryOptions &options = OverpassQueryOptions());
 	// The same search, giving only the IDs of what it finds.
 	void OverpassQueryIds(const std::string &objType,
 		const std::vector<OverpassTagFilter> &filters,
 		const std::vector<double> &bbox,
 		const std::vector<int64_t> &ids,
 		size_t limit,
-		std::vector<int64_t> &idsOut);
+		std::vector<int64_t> &idsOut,
+		const OverpassQueryOptions &options = OverpassQueryOptions());
+	// Whether the map's useBboxInQuery setting is on: every way and relation
+	// then has its bounding box stored, and searches by area may rely on it.
+	bool UseBboxInQuery();
 	// Ends any later statement in this transaction that runs for longer than
 	// this; zero removes the limit. A query ended this way fails.
 	void SetStatementTimeout(int64_t milliseconds);

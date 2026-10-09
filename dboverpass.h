@@ -43,9 +43,28 @@ public:
 		bool ignoreCaseIn = false) : key(keyIn), value(valueIn), op(opIn), ignoreCase(ignoreCaseIn) {}
 };
 
+///Further conditions of an Overpass query, beyond tags, bbox and IDs. Left as
+///constructed, it adds none.
+class OverpassQueryOptions
+{
+public:
+	//Last edited by one of these users, matched by ID or by the name stored
+	//with the object. Both empty means any user.
+	std::vector<int64_t> uids;
+	std::vector<std::string> usernames;
+	int64_t newerThan = -1; //Last edited after this time; -1 means any time
+	int64_t changedSince = -1; //Last edited at or after this time; -1 means any time
+	int64_t changedUntil = -1; //Last edited at or before this time; -1 means any time
+	//Within aroundRadius metres of one of these positions, given as lon, lat,
+	//lon, lat and so on. Only nodes can be found this way.
+	std::vector<double> aroundPoints;
+	double aroundRadius = 0.0;
+};
+
 ///Finds the visible objects of one type that meet every condition given.
 ///bbox is empty or left, bottom, right, top; a way or relation is selected if
-///its own bounding box overlaps it. ids, if not empty, limits the search to
+///its own stored bounding box overlaps it, so use a bbox for those only on a
+///map whose useBboxInQuery setting says the boxes are stored. ids, if not empty, limits the search to
 ///those objects. limit is the most objects to return, or zero for no limit.
 ///Throws std::invalid_argument for a regular expression the database rejects,
 ///and std::runtime_error starting "Query timed out" if the statement timeout
@@ -58,7 +77,8 @@ void DbOverpassQueryObjVisible(pqxx::connection &c, pqxx::transaction_base *work
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	std::shared_ptr<IDataStreamHandler> enc);
+	std::shared_ptr<IDataStreamHandler> enc,
+	const OverpassQueryOptions &options = OverpassQueryOptions());
 
 ///As DbOverpassQueryObjVisible, but appends only the IDs of the objects found.
 void DbOverpassQueryIdsVisible(pqxx::connection &c, pqxx::transaction_base *work,
@@ -68,6 +88,7 @@ void DbOverpassQueryIdsVisible(pqxx::connection &c, pqxx::transaction_base *work
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	std::vector<int64_t> &idsOut);
+	std::vector<int64_t> &idsOut,
+	const OverpassQueryOptions &options = OverpassQueryOptions());
 
 #endif //_DB_OVERPASS_H

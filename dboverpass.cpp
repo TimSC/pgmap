@@ -319,7 +319,8 @@ static std::string OverpassQuerySql(pqxx::connection &c, pqxx::transaction_base 
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	bool idsOnly)
+	bool idsOnly,
+	const OverpassQueryOptions &options)
 {
 	if(objType != "node" && objType != "way" && objType != "relation")
 		throw invalid_argument("Object type must be node, way or relation");
@@ -386,6 +387,64 @@ static std::string OverpassQuerySql(pqxx::connection &c, pqxx::transaction_base 
 		sql += "]::bigint[])";
 	}
 
+	if(!options.uids.empty() || !options.usernames.empty())
+	{
+		sql += " AND (FALSE";
+		if(!options.uids.empty())
+		{
+			sql += " OR uid = ANY(ARRAY[";
+			for(size_t i=0; i<options.uids.size(); i++)
+				sql += (i ? "," : "") + to_string(options.uids[i]);
+			sql += "]::bigint[])";
+		}
+		if(!options.usernames.empty())
+		{
+			sql += " OR username = ANY(ARRAY[";
+			for(size_t i=0; i<options.usernames.size(); i++)
+				sql += (i ? "," : "") + work->quote(options.usernames[i]);
+			sql += "]::text[])";
+		}
+		sql += ")";
+	}
+	if(options.newerThan >= 0)
+		sql += " AND timestamp > " + to_string(options.newerThan);
+	if(options.changedSince >= 0)
+		sql += " AND timestamp >= " + to_string(options.changedSince);
+	if(options.changedUntil >= 0)
+		sql += " AND timestamp <= " + to_string(options.changedUntil);
+
+	if(!options.aroundPoints.empty())
+	{
+		if(objType != "node")
+			throw invalid_argument("Only nodes can be found around a position");
+		if(options.aroundPoints.size() % 2 != 0)
+			throw invalid_argument("Around positions must be pairs of lon and lat");
+		if(!std::isfinite(options.aroundRadius) || options.aroundRadius < 0.0)
+			throw invalid_argument("Around radius must not be negative");
+		// Each position is first narrowed with the spatial index, by a box sure
+		// to hold the circle, and then measured exactly over the earth's surface.
+		// The positions are written out as alternatives, not joined to, so that
+		// the database can apply each one inside the view of visible nodes.
+		const double metresPerDegree = 111000.0; //Slightly short, so the box is slightly generous
+		double dy = options.aroundRadius / metresPerDegree + 1e-7;
+		stringstream around;
+		around.precision(9);
+		around << fixed << " AND (";
+		for(size_t i=0; i<options.aroundPoints.size(); i+=2)
+		{
+			double lon = options.aroundPoints[i], lat = options.aroundPoints[i+1];
+			if(!std::isfinite(lon) || !std::isfinite(lat) || lat < -90.0 || lat > 90.0)
+				throw invalid_argument("Around positions must be valid coordinates");
+			double dx = dy / std::max(0.01, cos(lat * M_PI / 180.0));
+			if(i) around << " OR ";
+			around << "(geom && ST_MakeEnvelope(" << (lon-dx) << "," << (lat-dy) << "," << (lon+dx) << "," << (lat+dy)
+				<< ",4326) AND ST_DWithin(geom::geography, ST_SetSRID(ST_MakePoint(" << lon << "," << lat
+				<< "),4326)::geography, " << options.aroundRadius << "))";
+		}
+		around << ")";
+		sql += around.str();
+	}
+
 	if(limit > 0)
 		sql += " LIMIT " + to_string(limit);
 	sql += ";";
@@ -410,9 +469,10 @@ void DbOverpassQueryIdsVisible(pqxx::connection &c, pqxx::transaction_base *work
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	std::vector<int64_t> &idsOut)
+	std::vector<int64_t> &idsOut,
+	const OverpassQueryOptions &options)
 {
-	string sql = OverpassQuerySql(c, work, tablePrefix, objType, filters, bbox, ids, limit, true);
+	string sql = OverpassQuerySql(c, work, tablePrefix, objType, filters, bbox, ids, limit, true, options);
 	try
 	{
 		pqxx::icursorstream cursor( *work, sql, "overpasscursor", 10000 );
@@ -432,9 +492,10 @@ void DbOverpassQueryObjVisible(pqxx::connection &c, pqxx::transaction_base *work
 	const std::vector<double> &bbox,
 	const std::vector<int64_t> &ids,
 	size_t limit,
-	std::shared_ptr<IDataStreamHandler> enc)
+	std::shared_ptr<IDataStreamHandler> enc,
+	const OverpassQueryOptions &options)
 {
-	string sql = OverpassQuerySql(c, work, tablePrefix, objType, filters, bbox, ids, limit, false);
+	string sql = OverpassQuerySql(c, work, tablePrefix, objType, filters, bbox, ids, limit, false, options);
 	try
 	{
 		pqxx::icursorstream cursor( *work, sql, "overpasscursor", 1000 );
