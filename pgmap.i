@@ -263,11 +263,46 @@ namespace std {
 %include "cppo5m/io.h"
 %include "dbeditactivity.h"
 
-/*
-%shared_ptr(PbfDecode)
-%shared_ptr(PbfEncodeBase)
 %shared_ptr(PbfEncode)
 %shared_ptr(PyPbfEncode)
+%ignore PbfDecode;
+%ignore PyBytesToString;
 
 %include "cppo5m/pbf.h"
-*/
+
+%inline %{
+static std::string PyBytesToString(PyObject *data)
+{
+	char *buffer = nullptr;
+	Py_ssize_t length = 0;
+	if(PyBytes_AsStringAndSize(data, &buffer, &length) < 0)
+		throw std::invalid_argument("Expected a bytes object");
+	return std::string(buffer, (size_t)length);
+}
+
+///Decodes an o5m document held in a Python bytes object. LoadFromO5m takes a
+///str, which cannot hold a binary format.
+void LoadFromO5mBytes(PyObject *data, IDataStreamHandler &output)
+{
+	LoadFromO5m(PyBytesToString(data), output);
+}
+
+///Decodes an OSM PBF document held in a Python bytes object.
+void LoadFromPbfBytes(PyObject *data, IDataStreamHandler &output)
+{
+	LoadFromPbf(PyBytesToString(data), output);
+}
+
+///Writes OSM PBF to a Python file object. Output appears a block at a time.
+class PyPbfEncode : public PbfEncode
+{
+public:
+	PyPbfEncode(PyObject *obj) : PbfEncode(std::make_shared<PySink>(obj)) {}
+
+	///Sends later output to another file object, such as a fresh buffer
+	void SetOutput(PyObject *obj)
+	{
+		std::static_pointer_cast<PySink>(this->GetSink())->SetOutput(obj);
+	}
+};
+%}
