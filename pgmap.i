@@ -101,6 +101,8 @@ namespace std {
 %shared_ptr(OsmXmlEncode)
 %shared_ptr(PyOsmXmlEncode)
 %shared_ptr(OsmChangeXmlEncode)
+%shared_ptr(OsmJsonEncode)
+%shared_ptr(PyOsmJsonEncode)
 %shared_ptr(FindBbox)
 %shared_ptr(DeduplicateOsm)
 %shared_ptr(SortOsm)
@@ -150,6 +152,7 @@ namespace std {
 %include "cppo5m/o5m.h"
 %include "cppo5m/osmxml.h"
 %include "cppo5m/osmchangexml.h"
+%include "cppo5m/osmjson.h"
 %include "cppo5m/filters.h"
 
 %extend RelationMember {
@@ -185,6 +188,20 @@ class PyOsmXmlEncode : public OsmXmlEncode
 public:
 	PyOsmXmlEncode(PyObject *obj, const TagMap &customAttribs = TagMap()) :
 		OsmXmlEncode(std::make_shared<PySink>(obj), customAttribs) {}
+
+	///Sends later output to another file object, such as a fresh buffer
+	void SetOutput(PyObject *obj)
+	{
+		std::static_pointer_cast<PySink>(this->GetSink())->SetOutput(obj);
+	}
+};
+
+///Writes OSM JSON to a Python file object.
+class PyOsmJsonEncode : public OsmJsonEncode
+{
+public:
+	PyOsmJsonEncode(PyObject *obj, const TagMap &customAttribs = TagMap()) :
+		OsmJsonEncode(std::make_shared<PySink>(obj), customAttribs) {}
 
 	///Sends later output to another file object, such as a fresh buffer
 	void SetOutput(PyObject *obj)
