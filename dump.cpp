@@ -14,7 +14,7 @@ int main(int argc, char **argv)
 	desc.add_options()
 		("help", "produce help message")
 		("out", po::value<string>()->default_value("dump.o5m.gz"), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
-		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (.osm or .json output, with or without .gz)")
+		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (not available for .pbf)")
 	;
 	po::variables_map vm;
 	try
@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 	}
 	if(vm.count("edit-ids") && !OsmFileWriter::HasHeaderAttribs(outFormat))
 	{
-		cerr << "--edit-ids requires .osm or .json output; the other formats have nowhere to hold the IDs" << endl;
+		cerr << "--edit-ids is not available for .pbf output, which has nowhere to hold the IDs" << endl;
 		return 2;
 	}
 

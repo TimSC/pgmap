@@ -198,6 +198,239 @@ int PgExtractExport::Continue()
     return 0;
 }
 
+#include "dbjson.h"
+#include <cmath>
+#include <cstdio>
+
+// Objects per INSERT statement, and the number of membership rows that
+// forces an early write when ways or relations have many members.
+static const size_t IMPORT_BATCH_OBJECTS = 1000;
+static const size_t IMPORT_BATCH_MEMBERS = 20000;
+
+static void CheckExtractBbox(const vector<double> &bbox)
+{
+    if(bbox.size() != 4) throw invalid_argument("Bbox must have four coordinates");
+    for(double value : bbox)
+        if(!std::isfinite(value)) throw invalid_argument("Bbox coordinates must be finite");
+    if(bbox[0] < -180 || bbox[2] > 180 || bbox[1] < -90 || bbox[3] > 90 ||
+        bbox[0] >= bbox[2] || bbox[1] >= bbox[3])
+        throw invalid_argument("Bbox must be a nonempty longitude/latitude rectangle");
+}
+
+static string ExactDouble(double value)
+{
+    char buffer[40];
+    snprintf(buffer, sizeof(buffer), "%.17g", value);
+    return buffer;
+}
+
+static bool ParseEditId(const string &text, int64_t &out)
+{
+    if(text.empty() || text.size() > 18 || text.find_first_not_of("0123456789") != string::npos)
+        return false;
+    out = stoll(text);
+    return true;
+}
+
+PgExtractImport::PgExtractImport(shared_ptr<pqxx::connection> connectionIn,
+    shared_ptr<PgWork> workIn, const string &prefixIn, const string &name,
+    const vector<double> &bboxIn, int64_t editActivityIdIn, int64_t atomicEditIdIn):
+    connection(connectionIn), work(workIn), prefix(prefixIn)
+{
+    if(!bboxIn.empty())
+    {
+        CheckExtractBbox(bboxIn);
+        bbox = bboxIn;
+        haveBbox = true;
+    }
+    if((editActivityIdIn < 0) != (atomicEditIdIn < 0))
+        throw invalid_argument("Give both the edit activity ID and the atomic edit ID, or neither");
+    if(editActivityIdIn >= 0)
+    {
+        editActivityId = editActivityIdIn;
+        atomicEditId = atomicEditIdIn;
+        haveCheckpoint = true;
+    }
+    auto &w = Work();
+    auto mode = w.exec("SELECT value FROM " + connection->quote_name(prefix + "meta") +
+        " WHERE key='useBboxInQuery'");
+    bool bboxMode = !mode.empty() && atoi(mode[0][0].as<string>().c_str()) == 1;
+    // Objects refer to the extract's row, so it has to exist before the stream
+    // says what the rectangle is. Finish replaces this empty placeholder.
+    extractId = w.exec("INSERT INTO " + connection->quote_name(prefix + "extracts") +
+        " (name, bbox, use_bbox_in_query, performed_at) VALUES (" +
+        (name.empty() ? string("NULL") : w.quote(name)) + ",ST_MakeEnvelope(0,0,0,0,4326)," +
+        (bboxMode ? "true" : "false") + ",CURRENT_TIMESTAMP) RETURNING id")[0][0].as<int64_t>();
+}
+
+pqxx::transaction_base &PgExtractImport::Work()
+{
+    if(!work || !work->work) throw runtime_error("Transaction has been deleted");
+    return *work->work;
+}
+
+void PgExtractImport::StoreIsDiff(bool isDiff)
+{
+    if(isDiff) throw runtime_error("A diff cannot be imported as an extract");
+}
+
+void PgExtractImport::StoreAttributes(const TagMap &attributes)
+{
+    auto activity = attributes.find("edit_activity_id");
+    auto atomic = attributes.find("atomic_edit_id");
+    if(activity != attributes.end()) fileEditActivityId = activity->second;
+    if(atomic != attributes.end()) fileAtomicEditId = atomic->second;
+}
+
+void PgExtractImport::StoreBounds(const Bounds &bounds)
+{
+    if(haveBbox) return; // A bbox from the caller, or the first in the stream, wins
+    bbox = {bounds.minLon, bounds.minLat, bounds.maxLon, bounds.maxLat};
+    CheckExtractBbox(bbox);
+    haveBbox = true;
+}
+
+// Columns: extract_id, id, changeset, username, uid, timestamp, version, tags.
+// Metadata a file leaves out is stored as NULL, which reads back as absent.
+string PgExtractImport::CommonValues(const OsmObject &object)
+{
+    auto &w = Work();
+    const MetaData &meta = object.metaData;
+    string tags;
+    EncodeTags(object.tags, tags);
+    return to_string(extractId) + "," + to_string(object.objId) + "," +
+        (meta.changeset ? to_string(meta.changeset) : string("NULL")) + "," +
+        (meta.username.empty() ? string("NULL") : w.quote(meta.username)) + "," +
+        (meta.uid ? to_string(meta.uid) : string("NULL")) + "," +
+        (meta.timestamp ? to_string(meta.timestamp) : string("NULL")) + "," +
+        to_string(meta.version) + "," + w.quote(tags) + "::jsonb";
+}
+
+void PgExtractImport::StoreNode(const OsmNode &node)
+{
+    if(finished) throw runtime_error("Extract import has already finished");
+    if(!node.metaData.visible) return; // An extract holds current objects only
+    if(!std::isfinite(node.lon) || !std::isfinite(node.lat))
+        throw runtime_error("Node " + to_string(node.objId) + " has no usable position");
+    objectRows[0].push_back("(" + CommonValues(node) + ",ST_SetSRID(ST_MakePoint(" +
+        ExactDouble(node.lon) + "," + ExactDouble(node.lat) + "),4326))");
+    numNodes++;
+    FlushIfLarge();
+}
+
+void PgExtractImport::StoreWay(const OsmWay &way)
+{
+    if(finished) throw runtime_error("Extract import has already finished");
+    if(!way.metaData.visible) return;
+    string members;
+    EncodeInt64Vec(way.refs, members);
+    objectRows[1].push_back("(" + CommonValues(way) + "," + Work().quote(members) + "::jsonb)");
+    string owner = "(" + to_string(extractId) + "," + to_string(way.objId) + "," +
+        to_string(way.metaData.version) + ",";
+    for(size_t i = 0; i < way.refs.size(); i++)
+        memberRows[0].push_back(owner + to_string(i) + "," + to_string(way.refs[i]) + ")");
+    numWays++;
+    FlushIfLarge();
+}
+
+void PgExtractImport::StoreRelation(const OsmRelation &relation)
+{
+    if(finished) throw runtime_error("Extract import has already finished");
+    if(!relation.metaData.visible) return;
+    auto &w = Work();
+    vector<string> types, roles;
+    vector<int64_t> refs;
+    string owner = "(" + to_string(extractId) + "," + to_string(relation.objId) + "," +
+        to_string(relation.metaData.version) + ",";
+    for(size_t i = 0; i < relation.members.size(); i++)
+    {
+        const RelationMember &member = relation.members[i];
+        types.push_back(ObjectTypeName(member.type));
+        refs.push_back(member.ref);
+        roles.push_back(member.role);
+        // Tables follow the order node, way, relation
+        size_t table = member.type == ObjectType::Node ? 1 : (member.type == ObjectType::Way ? 2 : 3);
+        memberRows[table].push_back(owner + to_string(i) + "," + to_string(member.ref) + ")");
+    }
+    string members, memberRoles;
+    EncodeRelationMems(types, refs, members);
+    EncodeStringVec(roles, memberRoles);
+    objectRows[2].push_back("(" + CommonValues(relation) + "," + w.quote(members) + "::jsonb," +
+        w.quote(memberRoles) + "::jsonb)");
+    numRelations++;
+    FlushIfLarge();
+}
+
+void PgExtractImport::FlushIfLarge()
+{
+    size_t objects = 0, members = 0;
+    for(const auto &rows : objectRows) objects += rows.size();
+    for(const auto &rows : memberRows) members += rows.size();
+    if(objects >= IMPORT_BATCH_OBJECTS || members >= IMPORT_BATCH_MEMBERS) Flush();
+}
+
+void PgExtractImport::Flush()
+{
+    auto &w = Work();
+    auto insert = [&](const string &table, const string &columns, vector<string> &rows)
+    {
+        if(rows.empty()) return;
+        string sql = "INSERT INTO " + connection->quote_name(prefix + table) + " (" + columns + ") VALUES ";
+        for(size_t i = 0; i < rows.size(); i++)
+        {
+            if(i) sql += ",";
+            sql += rows[i];
+        }
+        rows.clear();
+        w.exec(sql);
+    };
+    // An object appearing twice breaks the primary key and fails the import,
+    // because there would be no telling which copy the extract should hold.
+    const string common = "extract_id,id,changeset,username,uid,timestamp,version,tags";
+    insert("extract_livenodes", common + ",geom", objectRows[0]);
+    insert("extract_liveways", common + ",members", objectRows[1]);
+    insert("extract_liverelations", common + ",members,memberroles", objectRows[2]);
+    // Membership rows refer to their way or relation, so they follow it
+    const char *memberTables[] = {"extract_way_mems", "extract_relation_mems_n",
+        "extract_relation_mems_w", "extract_relation_mems_r"};
+    for(size_t i = 0; i < 4; i++)
+        insert(memberTables[i], "extract_id,id,version,index,member", memberRows[i]);
+}
+
+void PgExtractImport::Finish()
+{
+    if(finished) return;
+    Flush();
+    auto &w = Work();
+    if(!haveBbox)
+        throw runtime_error("The file does not say what area it covers; give a bbox");
+    if(!haveCheckpoint && (!fileEditActivityId.empty() || !fileAtomicEditId.empty()))
+    {
+        if(!ParseEditId(fileEditActivityId, editActivityId) || !ParseEditId(fileAtomicEditId, atomicEditId))
+            throw runtime_error("The file's edit_activity_id and atomic_edit_id are not a usable checkpoint");
+        haveCheckpoint = true;
+    }
+    string id = to_string(extractId);
+    string sql = "UPDATE " + connection->quote_name(prefix + "extracts") + " SET bbox=ST_MakeEnvelope(";
+    for(double value : bbox) sql += ExactDouble(value) + ",";
+    sql += "4326)";
+    if(haveCheckpoint)
+        sql += ",edit_activity_id=" + to_string(editActivityId) + ",atomic_edit_id=" + to_string(atomicEditId);
+    w.exec(sql + " WHERE id=" + id);
+    // Ways get the bbox of whichever of their nodes the extract holds, as the
+    // map's own ways have. Relation bboxes are left unset: working one out
+    // needs members the extract may not hold, and nothing reads it from here.
+    // Naming the extract in each lookup, rather than joining on it, keeps
+    // every step on a primary key however stale the planner's statistics are
+    // after the bulk insert.
+    w.exec("UPDATE " + connection->quote_name(prefix + "extract_liveways") + " w SET bbox=("
+        "SELECT ST_Envelope(ST_Collect(n.geom)) FROM " +
+        connection->quote_name(prefix + "extract_way_mems") + " m JOIN " +
+        connection->quote_name(prefix + "extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member "
+        "WHERE m.extract_id=" + id + " AND m.id=w.id) WHERE w.extract_id=" + id);
+    finished = true;
+}
+
 #include "pgmap.h"
 #include <map>
 #include <ctime>

@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <array>
+#include "cppo5m/handler.h"
+#include "cppo5m/model.h"
 
 // Resumable export. The caller keeps its transaction alive until completion.
 class PgExtractExport
@@ -29,6 +32,55 @@ public:
     bool HasPendingActivity() const { return pendingActivity; }
     // Encode up to 1000 objects; return 1 when the XML document is complete.
     int Continue();
+};
+
+// Stores a stream of map data as a new extract: the reverse of PgExtractExport.
+// Send it the contents of a map file, ending with Finish, then commit the
+// transaction. The caller must abort the transaction if the stream fails or
+// ends before Finish, because the extract is incomplete until then.
+//
+// The extract's rectangle is the bbox given when starting, or else the first
+// bounds in the stream. Its checkpoint is the edit_activity_id and
+// atomic_edit_id given when starting, or else those document attributes in the
+// stream (as written by export_extract --edit-ids). Without a checkpoint the
+// extract can be exported and compared but not updated.
+class PgExtractImport : public IDataStreamHandler
+{
+    friend class PgTransaction;
+    std::shared_ptr<pqxx::connection> connection;
+    std::shared_ptr<class PgWork> work;
+    std::string prefix;
+    int64_t extractId = 0;
+    bool haveBbox = false, haveCheckpoint = false, finished = false;
+    std::vector<double> bbox;
+    int64_t editActivityId = 0, atomicEditId = 0;
+    std::string fileEditActivityId, fileAtomicEditId;
+    int64_t numNodes = 0, numWays = 0, numRelations = 0;
+    // Pending rows, as SQL value lists: 0 nodes, 1 ways, 2 relations
+    std::array<std::vector<std::string>, 3> objectRows;
+    // 0 way_mems, then relation_mems_n, _w and _r
+    std::array<std::vector<std::string>, 4> memberRows;
+
+    PgExtractImport(std::shared_ptr<pqxx::connection>, std::shared_ptr<class PgWork>,
+        const std::string &prefix, const std::string &name, const std::vector<double> &bbox,
+        int64_t editActivityId, int64_t atomicEditId);
+    pqxx::transaction_base &Work();
+    std::string CommonValues(const class OsmObject &object);
+    void Flush();
+    void FlushIfLarge();
+public:
+    int64_t GetId() const { return extractId; }
+    int64_t GetNumNodes() const { return numNodes; }
+    int64_t GetNumWays() const { return numWays; }
+    int64_t GetNumRelations() const { return numRelations; }
+
+    void StoreIsDiff(bool isDiff) override;
+    void StoreAttributes(const TagMap &attributes) override;
+    void StoreBounds(const Bounds &bounds) override;
+    void StoreNode(const OsmNode &node) override;
+    void StoreWay(const OsmWay &way) override;
+    void StoreRelation(const OsmRelation &relation) override;
+    void Finish() override;
 };
 
 // Caller holds main-map locks followed by EXCLUSIVE locks on all extract tables.

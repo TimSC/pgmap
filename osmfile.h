@@ -29,12 +29,12 @@ public:
 	static OsmFormat FormatOf(const std::string &filename);
 
 	///True if the format has somewhere to put header attributes: the root
-	///element in XML, the top level object in JSON.
+	///element in XML, the top level object in JSON, and in o5m a dataset of
+	///cppo5m's own that other programs skip. PBF has nowhere.
 	static bool HasHeaderAttribs(OsmFormat format);
 
-	///headerAttribs become attributes of the root element of XML output, or
-	///string members of the top level object of JSON output, and are ignored
-	///for other formats. Throws if the file cannot be created.
+	///headerAttribs are written wherever HasHeaderAttribs describes and are
+	///ignored for PBF. Throws if the file cannot be created.
 	OsmFileWriter(const std::string &destination, const TagMap &headerAttribs = TagMap());
 	~OsmFileWriter();
 	OsmFileWriter(const OsmFileWriter &) = delete;

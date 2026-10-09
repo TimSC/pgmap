@@ -1,11 +1,13 @@
 cppflags= -std=c++17 -Wall -DPY_SSIZE_T_CLEAN
 
-all: dump extract export_extract update_extract compare_extract admin applydiffs osm2csv checkdata
+all: dump extract export_extract import_extract update_extract compare_extract admin applydiffs osm2csv checkdata
 
 %.co: %.c %.h
 	gcc -Wall -fPIC -c -o $@ $<
 
-%.o: %.cpp %.h
+# cppo5m's classes are compiled into these objects, so a change to its headers
+# must rebuild them: mixing old objects with a new library crashes at run time.
+%.o: %.cpp %.h $(wildcard cppo5m/*.h)
 	g++ $(cppflags) -fPIC -c -o $@ $<
 
 # cppo5m is built by its own makefile as a static library
@@ -32,6 +34,9 @@ extract: extract.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 export_extract: export_extract.cpp $(common)
+	g++ $^ $(cppflags) $(libs) -o $@
+
+import_extract: import_extract.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 update_extract: update_extract.cpp $(common)
@@ -67,5 +72,5 @@ quickinit: quickinit.cpp $(common)
 	g++ $^ $(cppflags) $(libs) -o $@
 
 clean:
-	rm *.o admin dump extract export_extract update_extract compare_extract applydiffs osm2csv checkdata quickinit
+	rm *.o admin dump extract export_extract import_extract update_extract compare_extract applydiffs osm2csv checkdata quickinit
 

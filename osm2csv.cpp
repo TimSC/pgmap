@@ -384,10 +384,18 @@ int main(int argc, char **argv)
 	std::map<string, string> config;
 	ReadSettingsFile("config.cfg", config);
 
-	cout << "Writing output to " << config["csv_absolute_path"] << endl;
-	shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore(config["csv_absolute_path"]));
-	LoadOsmFromFile(config["dump_path"], csvStore);
-
-	csvStore.reset();
+	try
+	{
+		cout << "Writing output to " << config["csv_absolute_path"] << endl;
+		shared_ptr<class IDataStreamHandler> csvStore(new class CsvStore(config["csv_absolute_path"]));
+		LoadOsmFromFile(config["dump_path"], csvStore);
+		csvStore.reset();
+	}
+	catch(const exception &error)
+	{
+		cerr << "Conversion failed: " << error.what() << endl;
+		return 1;
+	}
 	cout << "All done!" << endl;
+	return 0;
 }

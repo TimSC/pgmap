@@ -246,7 +246,12 @@ void WriteSettingsFile(const std::string &settingsPath, const std::map<std::stri
 void StrReplaceAll( string &s, const string &search, const string &replace );
 std::string EscapeQuotes(std::string str);
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
-void LoadOsmFromFile(const std::string &filename, std::shared_ptr<class IDataStreamHandler> csvStore);
+///Describes the file names LoadOsmFromFile accepts, for help and error messages.
+const char *OsmInputFileNames();
+///Reads a map file, sending its contents and then Finish to the handler. The
+///name selects the format: .osm, .o5m, .pbf or .json, optionally followed by
+///.gz. Throws if the name is not one of those, or the file cannot be read.
+void LoadOsmFromFile(const std::string &filename, std::shared_ptr<class IDataStreamHandler> output);
 
 double long2tilex(double lon, int z);
 double lat2tiley(double lat, int z);

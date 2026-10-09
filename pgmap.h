@@ -171,6 +171,14 @@ public:
 	std::shared_ptr<PgExtractExport> StartExportExtract(int64_t extractId,
 		const std::string &name, std::shared_ptr<IDataStreamHandler> output);
 
+	// Store a stream of map data as a new extract: send the returned handler a
+	// map file's contents ending with Finish, then commit. An empty bbox takes the
+	// rectangle from the stream's bounds; negative edit IDs take the checkpoint
+	// from the stream's attributes, leaving none if it has no such attributes.
+	std::shared_ptr<PgExtractImport> StartImportExtract(const std::string &name,
+		const std::vector<double> &bbox = std::vector<double>(),
+		int64_t editActivityId = -1, int64_t atomicEditId = -1);
+
 	// Remove a stored extract and its contents; returns its ID.
 	int64_t DeleteExtract(int64_t extractId, const std::string &name);
 

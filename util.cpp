@@ -122,52 +122,40 @@ std::string GeneratePgConnectionString(std::map<std::string, std::string> config
 	return ss.str();
 }
 
-void LoadOsmFromFile(const std::string &filename, shared_ptr<class IDataStreamHandler> csvStore)
+const char *OsmInputFileNames()
 {
-	vector<string> filenameSplit = split(filename, '.');
-	size_t filePart = filenameSplit.size()-1;
-	
-	//Open file
-	std::filebuf *fbRaw = new std::filebuf();
-	fbRaw->open(filename, std::ios::in | std::ios::binary);
-	if(!fbRaw->is_open())
+	return ".osm, .o5m, .pbf or .json, optionally followed by .gz";
+}
+
+void LoadOsmFromFile(const std::string &filename, shared_ptr<class IDataStreamHandler> output)
+{
+	//Check the name before opening anything, so a typing mistake is reported as one
+	OsmFormat format;
+	try
 	{
-		cout << "Error opening input file " << filename << endl;
-		exit(0);
+		format = FormatFromFilename(filename);
+	}
+	catch(const invalid_argument &)
+	{
+		throw invalid_argument(string("Input file name must end in ") + OsmInputFileNames() + ": " + filename);
 	}
 
-	shared_ptr<std::streambuf> fb(fbRaw);
-	if(fb->in_avail() == 0)
-	{
-		cout << "Error reading from input file " << filename << endl;
-		exit(0);
-	}
+	std::filebuf file;
+	if(!file.open(filename, std::ios::in | std::ios::binary))
+		throw runtime_error("Cannot open input file " + filename);
 	cout << "Reading from input " << filename << endl;
 
-	shared_ptr<std::streambuf> fb2;	
-	if(filenameSplit[filePart] == "gz")
+	std::unique_ptr<DecodeGzip> gzip;
+	std::streambuf *stream = &file;
+	if(filename.size() > 3 && filename.compare(filename.size() - 3, 3, ".gz") == 0)
 	{
-		//Perform gzip decoding
-		fb2.reset(new class DecodeGzip(*fb.get()));
-		if(fb2->in_avail() == 0)
-		{
-			cout << "Error reading from input file" << endl;
-			exit(0);
-		}
-		filePart --;
-	}
-	else
-	{
-		fb2.swap(fb);
+		gzip.reset(new DecodeGzip(file));
+		stream = gzip.get();
 	}
 
 	//The decoder sends Finish to the handler when it reaches the end
-	if(filenameSplit[filePart] == "o5m")
-		LoadFromO5m(*fb2.get(), *csvStore);
-	else if (filenameSplit[filePart] == "osm")
-		LoadFromOsmXml(*fb2.get(), *csvStore);
-	else
-		throw runtime_error("File extension not supported");
+	std::unique_ptr<OsmDecoder> decoder = MakeDecoder(format, *stream, *output);
+	decoder->Decode();
 }
 
 // From https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames

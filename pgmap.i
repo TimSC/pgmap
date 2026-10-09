@@ -215,7 +215,8 @@ public:
 class PyO5mEncode : public O5mEncode
 {
 public:
-	PyO5mEncode(PyObject *obj) : O5mEncode(std::make_shared<PySink>(obj)) {}
+	PyO5mEncode(PyObject *obj, const TagMap &customAttribs = TagMap()) :
+		O5mEncode(std::make_shared<PySink>(obj), customAttribs) {}
 
 	void SetOutput(PyObject *obj)
 	{
@@ -237,6 +238,7 @@ namespace std {
 
 %include "pgcommon.h"
 %shared_ptr(PgExtractExport)
+%shared_ptr(PgExtractImport)
 %ignore DbUpdateExtract;
 %ignore DbCompareExtract;
 %ignore DbListExtractIds;

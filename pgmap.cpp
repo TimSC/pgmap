@@ -963,6 +963,16 @@ int64_t PgTransaction::ExportExtract(int64_t extractId, const string &name,
     return exporter->GetId();
 }
 
+std::shared_ptr<PgExtractImport> PgTransaction::StartImportExtract(const string &name,
+	const vector<double> &bbox, int64_t editActivityId, int64_t atomicEditId)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while importing an extract");
+	LockExtractTables("EXCLUSIVE");
+	return shared_ptr<PgExtractImport>(new PgExtractImport(dbconn, sharedWork,
+		tableActivePrefix, name, bbox, editActivityId, atomicEditId));
+}
+
 int64_t PgTransaction::DeleteExtract(int64_t extractId, const string &name)
 {
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")

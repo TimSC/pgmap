@@ -36,7 +36,7 @@ OsmFormat OsmFileWriter::FormatOf(const std::string &filename)
 
 bool OsmFileWriter::HasHeaderAttribs(OsmFormat format)
 {
-	return format == OsmFormat::OsmXml || format == OsmFormat::OsmJson;
+	return format != OsmFormat::Pbf;
 }
 
 OsmFileWriter::OsmFileWriter(const std::string &destinationIn, const TagMap &headerAttribs) :

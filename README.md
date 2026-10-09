@@ -113,7 +113,7 @@ Add your database config info to config.cfg then check we can connect:
 
 Download a regional or planet map dump, for example this one: https://archive.org/details/uk-eire-fosm-2017-jan.o5m
 
-The file format should be indicated by one of the supported extensions: .osm.gz .o5m.gz .osm .o5m
+The file format is chosen by the file name, which must end in .osm, .o5m, .pbf or .json, optionally followed by .gz (for example .o5m.gz).
 
 Set the dump_path variable in pgmap's config.cfg to the actual path of the data to import. Set the csv_absolute_path variable in config.cfg to a folder for temporary files (it is possible to use the pgmap source folder). To convert the data to csv format: 
 
@@ -291,16 +291,31 @@ Recording the edit IDs in an extract or dump
 The `extract` and `dump` tools can record which edits their output includes:
 
     ./extract --bbox=-1.078,50.788,-1.074,50.790 --out=portsmouth.osm.gz --edit-ids
-    ./dump --out=dump.osm.gz --edit-ids
+    ./dump --out=dump.o5m.gz --edit-ids
+    ./export_extract --id=1 --out=portsmouth.json --edit-ids
 
-`--edit-ids` adds `edit_activity_id` and `atomic_edit_id` attributes to the root
-`<osm>` element, or the same two names as string members at the top of a JSON
-file, holding the latest edit activity row ID and atomic edit ID (zero
-if there is no activity). They are read in the same transaction snapshot as the
-data, so the file contains exactly the edits up to those IDs. The option needs
-`.osm` or `.json` output, compressed or not, because o5m and PBF have nowhere to
-hold the IDs; with those the tools stop with an error. Without the option the
-output is unchanged. `dump` writes `dump.o5m.gz` unless `--out` names another file.
+`--edit-ids` records two values in the file header: `edit_activity_id`, the latest
+edit activity row ID, and `atomic_edit_id`, the latest atomic edit ID (zero if
+there is no activity). They are read in the same transaction snapshot as the
+data, so the file contains exactly the edits up to those IDs. Where they go
+depends on the format:
+
+* `.osm`: attributes of the root `<osm>` element.
+* `.json`: string members at the top of the document.
+* `.o5m`: o5m has no standard place for them, so they are written in a dataset
+  of cppo5m's own (type `0xc0`) straight after the header. Programs that do not
+  know it skip it, as the o5m format requires, so the file reads normally
+  elsewhere; osmconvert prints an "unknown .o5m dataset" warning, and drops
+  the IDs if it rewrites the file.
+* `.pbf`: not available; the tools stop with an error.
+
+`export_extract --edit-ids` writes the same two names, holding the stored
+extract's checkpoint: the edits the extract is current to, which is behind the
+map if the extract is waiting for an update. cppo5m reads the values back from
+all three formats as the document's attributes.
+
+Without the option the output is unchanged. `dump` writes `dump.o5m.gz` unless
+`--out` names another file.
 `PgTransaction::GetLatestEditIds` returns the same IDs through the bindings.
 
 Saving a rectangular extract to the database
@@ -352,6 +367,41 @@ An unknown ID/name is an error; duplicate names require selecting by ID.
 The output is written to a temporary file beside the destination and renamed
 only on success. An existing destination is replaced on success and retained
 on failure. Export does not modify the database or require a schema change.
+
+Importing a file as a stored extract
+------------------------------------
+
+`import_extract` is the reverse of `export_extract`: it stores the contents of
+a map file as a new extract. Build with `make import_extract`, then:
+
+    ./import_extract --in=portsmouth.osm.gz --name=portsmouth
+    ./import_extract --in=area.pbf --name=area --bbox=-1.078,50.788,-1.074,50.790
+
+The input format follows the file name, which must end in .osm, .o5m, .pbf or
+.json, optionally followed by .gz. The command prints the new extract's ID and
+how many objects it holds. Each invocation creates a new extract; `--name` is
+optional and is not checked for uniqueness. The tool reads `config.cfg` unless
+`--config` names another file, and uses `dbtablemodifyprefix` for the extract
+tables.
+
+The extract's rectangle is the bounds recorded in the file. Give `--bbox` if
+the file has none, or to use a different rectangle. The contents are stored as
+they are and are not filtered against the rectangle.
+
+The extract's checkpoint is taken from the `edit_activity_id` and
+`atomic_edit_id` header attributes that `export_extract --edit-ids` writes, or
+from `--edit-activity-id` and `--atomic-edit-id` if given (both or neither). A
+.pbf file cannot hold these attributes. An extract imported without a
+checkpoint can be exported and compared, but `update_extract` refuses it. The
+checkpoint is only meaningful for a file that came from this map: an update
+compares it with this map's own edit activity.
+
+Every object is stored with its ID, version, tags, members, roles and metadata.
+Positions in .o5m and .pbf files have seven decimal places, so a round trip
+through those formats rounds any finer coordinate. Deleted objects in the file
+are skipped. A diff (.osc style content), an object that appears twice, or a
+file that cannot be decoded fails the import. The extract and its contents
+commit together, so a failed import leaves nothing behind.
 
 Extract table locking
 ---------------------
