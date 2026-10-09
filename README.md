@@ -265,6 +265,25 @@ brings up to date with later edits. Stored extracts can be exported with
 tables. Already-version-14 databases will not automatically run the amended
 migration; adding these tables requires a separate application of the DDL.
 
+Output file formats
+-------------------
+
+`dump`, `extract` and `export_extract` choose the output format from the file
+name given to `--out`:
+
+* `.osm` for OSM XML
+* `.o5m` for o5m
+* `.pbf` for PBF
+
+Add `.gz` to any of them, for example `.osm.gz`, to gzip the file. PBF is
+already compressed internally, so `.pbf.gz` gains almost nothing. Any other
+name is refused before the database is read.
+
+The tools write to a temporary file beside the destination and move it into
+place only when the output is complete, so a failed run leaves an existing file
+as it was. o5m and PBF store coordinates to seven decimal places, where XML
+keeps everything the database holds.
+
 Recording the edit IDs in an extract or dump
 --------------------------------------------
 
@@ -277,9 +296,9 @@ The `extract` and `dump` tools can record which edits their output includes:
 `<osm>` element, holding the latest edit activity row ID and atomic edit ID (zero
 if there is no activity). They are read in the same transaction snapshot as the
 data, so the file contains exactly the edits up to those IDs. The option needs
-`.osm.gz` output, because o5m has no root element to hold attributes; with
-`.o5m.gz` the tools stop with an error. Without the option the output is
-unchanged. `dump` writes `dump.o5m.gz` unless `--out` names another file.
+`.osm` or `.osm.gz` output, because the other formats have no root element to
+hold attributes; with those the tools stop with an error. Without the option the
+output is unchanged. `dump` writes `dump.o5m.gz` unless `--out` names another file.
 `PgTransaction::GetLatestEditIds` returns the same IDs through the bindings.
 
 Saving a rectangular extract to the database
@@ -317,7 +336,8 @@ Build with `make export_extract`, then select by ID or unique name:
     ./export_extract --id=1 --out=portsmouth.osm.gz
     ./export_extract --name=portsmouth --out=portsmouth.o5m.gz
 
-Supported extensions are `.osm`, `.o5m`, `.osm.gz`, and `.o5m.gz`. The tool reads
+The output format follows the file name, as described under "Output file
+formats" below. The tool reads
 `config.cfg` by default; use `--config=/path/to/config.cfg` to select another
 configuration. It uses `dbtablemodifyprefix` for extract tables.
 

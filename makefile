@@ -16,7 +16,7 @@ cppo5m/libcppo5m.a: FORCE
 
 FORCE:
 
-common = util.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
+common = util.o osmfile.o dbquery.o dbids.o dbadmin.o dbcommon.o dbreplicate.o \
 	dbdecode.o dbextract.o dbstore.o dbdump.o dbfilters.o dbchangeset.o dbjson.o dbmeta.o dbusername.o \
 	dboverpass.o dbeditactivity.o dbprepared.o pgcommon.o pgmap.o \
 	$(cppo5m) cppGzip/EncodeGzip.o cppGzip/DecodeGzip.o

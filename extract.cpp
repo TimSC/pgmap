@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include "util.h"
+#include "osmfile.h"
 #include "cppGzip/EncodeGzip.h"
 #include "cppo5m/model.h"
 #include "cppo5m/osmxml.h"
@@ -18,8 +19,8 @@ int main(int argc, char **argv)
 		("bbox", po::value<string>(), "bbox shape (e.g -1.078,50.788,-1.074,50.790)")
 		("save-db", "Save rectangular extract to database instead of a file")
 		("name", po::value<string>()->default_value(""), "Optional database extract name")
-		("out", po::value<string>(), "Output file name (extension must be .osm.gz or .o5m.gz)")
-		("edit-ids", "Add the latest edit activity ID and atomic edit ID as attributes of the root XML element (.osm.gz only)")
+		("out", po::value<string>(), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
+		("edit-ids", "Add the latest edit activity ID and atomic edit ID as attributes of the root XML element (.osm or .osm.gz only)")
 	;
 
 	po::variables_map vm;
@@ -98,24 +99,19 @@ int main(int argc, char **argv)
 	{
 		outFina = vm["out"].as<string>();
 	}
-	vector<string> outFinaSp = split(outFina, '.');
-	if(outFinaSp.size() < 3)
+	OsmFormat outFormat = OsmFormat::O5m;
+	try
 	{
-		cerr << "Output file name does not have a recognized extension" << endl;
-		exit(-2);
+		outFormat = OsmFileWriter::FormatOf(outFina);
 	}
-
-
-	bool o5mOut = outFinaSp[outFinaSp.size()-1] == "gz" && outFinaSp[outFinaSp.size()-2] == "o5m";
-	bool xmlOut = outFinaSp[outFinaSp.size()-1] == "gz" && outFinaSp[outFinaSp.size()-2] == "osm";
-	if(!o5mOut && !xmlOut)
+	catch(const invalid_argument &error)
 	{
-		cerr << "Output file name does not have a recognized extension" << endl;
-		exit(-2);
+		cerr << error.what() << endl;
+		return 2;
 	}
-	if(vm.count("edit-ids") && !xmlOut)
+	if(vm.count("edit-ids") && outFormat != OsmFormat::OsmXml)
 	{
-		cerr << "--edit-ids requires .osm.gz output; o5m has no root element to hold attributes" << endl;
+		cerr << "--edit-ids requires .osm or .osm.gz output; other formats have no root element to hold attributes" << endl;
 		return 2;
 	}
 
@@ -134,35 +130,38 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
-
-	// The encoder writes the root element when constructed, so the edit IDs are
-	// read first. They come from the same snapshot as the map query below.
-	TagMap rootAttribs;
-	if(vm.count("edit-ids"))
-		rootAttribs = transaction->GetLatestEditIdAttribs();
-
-	std::filebuf outfi;
-	outfi.open(outFina, std::ios::out);
-	EncodeGzip *gzipEnc = new class EncodeGzip(outfi);
-	shared_ptr<IDataStreamHandler> enc;
-	if(o5mOut)
-		enc.reset(new O5mEncode(*gzipEnc));
-	else
-		enc.reset(new OsmXmlEncode(*gzipEnc, rootAttribs));
-
-	std::shared_ptr<class PgMapQuery> mapQuery = transaction->GetQueryMgr();
-	int ret = 0;
-	if(bbox.size() > 0)
-		ret = mapQuery->Start(bbox, time(nullptr), enc);
-	else
-		ret = mapQuery->Start(wkt, time(nullptr), enc);
-	while(ret == 0)
+	try
 	{
-		ret = mapQuery->Continue();
-	}
+		std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
 
-	delete gzipEnc;
-	outfi.close();
+		// The edit IDs come from the same snapshot as the map query below.
+		TagMap rootAttribs;
+		if(vm.count("edit-ids"))
+			rootAttribs = transaction->GetLatestEditIdAttribs();
+
+		OsmFileWriter writer(outFina, rootAttribs);
+		shared_ptr<IDataStreamHandler> enc = writer.Encoder();
+
+		std::shared_ptr<class PgMapQuery> mapQuery = transaction->GetQueryMgr();
+		int ret = 0;
+		if(bbox.size() > 0)
+			ret = mapQuery->Start(bbox, time(nullptr), enc);
+		else
+			ret = mapQuery->Start(wkt, time(nullptr), enc);
+		while(ret == 0)
+		{
+			ret = mapQuery->Continue();
+		}
+		if(ret < 0)
+			throw runtime_error("Map query failed");
+		mapQuery.reset();
+		enc.reset();
+		writer.Close();
+	}
+	catch(const exception &error)
+	{
+		cerr << "Extract failed: " << error.what() << endl;
+		return 1;
+	}
 	return 0;
 }
