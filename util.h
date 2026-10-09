@@ -246,6 +246,13 @@ void WriteSettingsFile(const std::string &settingsPath, const std::map<std::stri
 void StrReplaceAll( string &s, const string &search, const string &replace );
 std::string EscapeQuotes(std::string str);
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
+///One value from a pgmap settings file such as config.cfg, by name, with the
+///spaces around it removed. Returns defaultValue if the file cannot be read or
+///has no line for that name. This is how other programs, such as the Python
+///bindings' users, share the settings of the command line tools without
+///keeping a copy of them.
+std::string GetConfigValue(const std::string &settingsPath, const std::string &name,
+	const std::string &defaultValue = std::string());
 ///Describes the file names LoadOsmFromFile accepts, for help and error messages.
 const char *OsmInputFileNames();
 ///Reads a map file, sending its contents and then Finish to the handler. The

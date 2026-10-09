@@ -1879,6 +1879,39 @@ void PgTransaction::OverpassQueryIds(const std::string &objType,
 		objType, filters, bbox, ids, limit, idsOut, options);
 }
 
+void PgTransaction::GetMetaValues(std::map<std::string, std::string> &valuesOut, bool staticTables)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	DbGetMetaValues(*dbconn, work.get(),
+		staticTables ? this->tableStaticPrefix : this->tableActivePrefix, valuesOut);
+}
+
+bool PgTransaction::DeleteMetaValue(const std::string &key)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	return DbDeleteMetaValue(*dbconn, work.get(), key, this->tableActivePrefix);
+}
+
+std::vector<int64_t> PgTransaction::CountWaysWithoutBbox()
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	pqxx::result r = work->exec("SELECT count(*), count(*) - count(bbox) FROM " +
+		dbconn->quote_name(this->tableActivePrefix + "visibleways") + ";");
+	return {r[0][0].as<int64_t>(), r[0][1].as<int64_t>()};
+}
+
 bool PgTransaction::UseBboxInQuery()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

@@ -19,6 +19,7 @@ using std::string;
 #include "pgmap.h"
 #include "cppo5m/cppo5m.h"
 #include "cppo5m/pysink.h"
+#include "util.h"
 
 // Python classes for the cppo5m exception types, created when the module loads
 static PyObject *pyOsmDecodeError = nullptr;
@@ -270,6 +271,11 @@ namespace std {
 
 %include "pgmap.h"
 %include "cppo5m/io.h"
+
+// From util.h, most of which is for the command line tools: one value of a
+// pgmap settings file by name, so that Python programs can share config.cfg.
+std::string GetConfigValue(const std::string &settingsPath, const std::string &name,
+	const std::string &defaultValue = std::string());
 %include "dbeditactivity.h"
 
 %shared_ptr(PbfEncode)

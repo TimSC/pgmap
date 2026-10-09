@@ -106,6 +106,34 @@ std::string EscapeQuotes(std::string str)
 	return str;
 }
 
+std::string GetConfigValue(const std::string &settingsPath, const std::string &name,
+	const std::string &defaultValue)
+{
+	string configContent;
+	if(!ReadFileContents(settingsPath.c_str(), false, configContent))
+		return defaultValue;
+	std::vector<std::string> lines = split(configContent, '\n');
+	bool found = false;
+	string value;
+	for(size_t i=0; i < lines.size(); i++)
+	{
+		// The same reading of a line as ReadSettingsFile: a name, a colon and
+		// the value, which may itself contain colons. A later line replaces
+		// an earlier one of the same name.
+		size_t colon = lines[i].find(':');
+		if(colon == string::npos || lines[i].substr(0, colon) != name) continue;
+		value = lines[i].substr(colon + 1);
+		found = true;
+	}
+	if(!found)
+		return defaultValue;
+	const char *blank = " \t\r";
+	size_t first = value.find_first_not_of(blank);
+	if(first == string::npos)
+		return "";
+	return value.substr(first, value.find_last_not_of(blank) - first + 1);
+}
+
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config)
 {
 	std::stringstream ss;

@@ -80,3 +80,25 @@ bool DbSetMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+
+void DbGetMetaValues(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix,
+	std::map<std::string, std::string> &valuesOut)
+{
+	valuesOut.clear();
+	pqxx::result r = work->exec("SELECT key, value FROM " + c.quote_name(tablePrefix + "meta") + ";");
+	for (pqxx::result::const_iterator row = r.begin(); row != r.end(); ++row)
+	{
+		if(row[0].is_null()) continue;
+		valuesOut[row[0].as<string>()] = row[1].is_null() ? string() : row[1].as<string>();
+	}
+}
+
+bool DbDeleteMetaValue(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &key,
+	const std::string &tablePrefix)
+{
+	pqxx::result r = work->exec("DELETE FROM " + c.quote_name(tablePrefix + "meta") +
+		" WHERE key = " + work->quote(key) + ";");
+	return r.affected_rows() > 0;
+}

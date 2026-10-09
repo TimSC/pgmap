@@ -246,6 +246,16 @@ public:
 	bool SetMetaValue(const std::string &key, 
 		const std::string &value, 
 		class PgMapError &errStr);
+	// Every metadata key and value: of the tables being edited, where the
+	// settings that change how the map behaves are kept, or with staticTables
+	// of the static tables beneath them.
+	void GetMetaValues(std::map<std::string, std::string> &valuesOut, bool staticTables = false);
+	// Remove a metadata key of the tables being edited, so that its default
+	// applies again. Returns false if it was not set.
+	bool DeleteMetaValue(const std::string &key);
+	// How many current ways there are, followed by how many of them have no
+	// stored bounding box, which a search by area in useBboxInQuery mode misses.
+	std::vector<int64_t> CountWaysWithoutBbox();
 	bool UpdateUsername(int uid, const std::string &username,
 		class PgMapError &errStr);
 
