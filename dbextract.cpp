@@ -477,6 +477,33 @@ int64_t DbDeleteExtract(pqxx::connection &c, pqxx::transaction_base &w,
 	return extractId;
 }
 
+int64_t DbSetExtractAutoUpdate(pqxx::connection &c, pqxx::transaction_base &w,
+	const string &prefix, int64_t extractId, const string &name,
+	bool autoUpdate, const string &updateUrl)
+{
+	if(extractId < 0 || (!extractId && name.empty()))
+		throw invalid_argument("Select by positive extract ID or nonempty name");
+	if(!updateUrl.empty())
+	{
+		if(updateUrl.compare(0, 7, "http://") != 0 && updateUrl.compare(0, 8, "https://") != 0)
+			throw invalid_argument("Update URL must be blank or begin with http:// or https://");
+		if(updateUrl.size() > 2000)
+			throw invalid_argument("Update URL is too long");
+		for(unsigned char ch : updateUrl)
+			if(ch <= ' ' || ch == 0x7f)
+				throw invalid_argument("Update URL must not contain spaces or control characters");
+	}
+	string extracts = c.quote_name(prefix + "extracts");
+	string condition = extractId ? "id=" + to_string(extractId) : "name=" + w.quote(name);
+	auto rows = w.exec("SELECT id FROM " + extracts + " WHERE " + condition + " ORDER BY id LIMIT 2");
+	if(rows.empty()) throw runtime_error("Extract not found");
+	if(rows.size() != 1) throw runtime_error("Extract name is ambiguous; select by ID");
+	extractId = rows[0][0].as<int64_t>();
+	w.exec("UPDATE " + extracts + " SET auto_update=" + (autoUpdate ? "true" : "false") +
+		", update_url=" + w.quote(updateUrl) + " WHERE id=" + to_string(extractId));
+	return extractId;
+}
+
 void DbListExtracts(pqxx::connection &c, pqxx::transaction_base &w, const string &prefix,
 	int64_t extractId, bool withCounts, vector<ExtractInfo> &out)
 {
@@ -490,7 +517,7 @@ void DbListExtracts(pqxx::connection &c, pqxx::transaction_base &w, const string
 		"ST_YMax(e.bbox), e.use_bbox_in_query, EXTRACT(EPOCH FROM e.performed_at)::bigint, "
 		"e.edit_activity_id, e.atomic_edit_id, (SELECT COALESCE(max(id),0) FROM " + table("edit_activity") +
 		"), " + count("node") + ", " + count("way") + ", " + count("relation") +
-		" FROM " + table("extracts") + " e" +
+		", e.auto_update, e.update_url FROM " + table("extracts") + " e" +
 		(extractId > 0 ? " WHERE e.id=" + to_string(extractId) : string()) + " ORDER BY e.id");
 	for(const auto &row : rows)
 	{
@@ -506,6 +533,8 @@ void DbListExtracts(pqxx::connection &c, pqxx::transaction_base &w, const string
 		info.nodes = row[11].as<int64_t>();
 		info.ways = row[12].as<int64_t>();
 		info.relations = row[13].as<int64_t>();
+		info.autoUpdate = row[14].as<bool>();
+		info.updateUrl = row[15].as<string>();
 		out.push_back(info);
 	}
 }

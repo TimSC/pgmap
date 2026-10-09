@@ -101,7 +101,7 @@ If necessary, enable log in by password by changing pg_hba.conf as administrator
 
 	sudo nano /etc/postgresql/9.5/main/pg_hba.conf
 
-Update the pgmap config.cfg files with your new password. Use 127.0.0.1 rather than localhost, if the database is on the same machine.
+Update the pgmap config.cfg files with your new password. Use 127.0.0.1 rather than localhost, if the database is on the same machine. Set `dbport` if the database does not listen on the usual port, 5432; the line can be left out otherwise.
 
 	cp config.cfg.template config.cfg
 
@@ -244,6 +244,12 @@ extracts by extract ID; each extract has one current state without an overlay.
   query-mode flag `use_bbox_in_query`, `performed_at` timestamp, last applied
   `edit_activity_id`, and last applied `atomic_edit_id`. A NULL
   checkpoint denotes an extract whose initial snapshot is not established.
+  `auto_update` (default false) says whether the extract is to be kept up to
+  date automatically, and `update_url` (default blank) names the API to update
+  it from, blank meaning this map's own. Both only record what is wanted so
+  far: no tool acts on them yet. They were added to schema 14 after it was
+  first in use; on a map already at version 14, asking the admin tool for
+  schema version 14 again adds them.
 * `extract_livenodes`, `extract_liveways`, `extract_liverelations`: columns match
   the main live objects, with `extract_id` added. Primary keys are
   `(extract_id, id)`; tags/members/roles use JSONB, node coordinates use Point

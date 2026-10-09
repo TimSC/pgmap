@@ -977,6 +977,17 @@ std::shared_ptr<PgExtractImport> PgTransaction::StartImportExtract(const string 
 		tableActivePrefix, name, bbox, editActivityId, atomicEditId));
 }
 
+int64_t PgTransaction::SetExtractAutoUpdate(int64_t extractId, const string &name,
+	bool autoUpdate, const string &updateUrl)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while changing an extract");
+	LockExtractTables("EXCLUSIVE");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	return DbSetExtractAutoUpdate(*dbconn, *work, tableActivePrefix, extractId, name, autoUpdate, updateUrl);
+}
+
 int64_t PgTransaction::DeleteExtract(int64_t extractId, const string &name)
 {
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")

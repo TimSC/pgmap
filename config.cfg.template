@@ -1,5 +1,6 @@
 dbname:db_map
 dbhost:127.0.0.1
+dbport:5432
 dbuser:pycrocosm
 dbpass:k8AY^p$Ytnrh
 dbtableprefix:planet_static_

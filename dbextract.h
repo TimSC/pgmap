@@ -140,7 +140,19 @@ public:
 	bool pendingActivity = false;
 	// Object counts; -1 when they were not requested.
 	int64_t nodes = -1, ways = -1, relations = -1;
+	// Whether the extract is to be kept up to date automatically, and the base
+	// URL of the API to update it from. A blank URL means this map's own API.
+	// These record what is wanted: nothing in pgmap acts on them yet.
+	bool autoUpdate = false;
+	std::string updateUrl;
 };
+
+// Caller holds main-map locks followed by EXCLUSIVE locks on all extract tables.
+// Sets whether an extract is updated automatically and where from, returning
+// its ID. The URL must be blank or begin with http:// or https://.
+int64_t DbSetExtractAutoUpdate(pqxx::connection &connection, pqxx::transaction_base &work,
+	const std::string &prefix, int64_t extractId, const std::string &name,
+	bool autoUpdate, const std::string &updateUrl);
 
 // Describe stored extracts in ascending ID order: all of them, or only the one
 // with a positive extractId. Counting objects reads every row of each extract,

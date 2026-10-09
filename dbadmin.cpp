@@ -252,7 +252,17 @@ bool DbCreateExtractTables(pqxx::connection &c, pqxx::transaction_base *work,
 		"use_bbox_in_query BOOLEAN NOT NULL DEFAULT false, "
 		"performed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, "
 		"edit_activity_id BIGINT CHECK (edit_activity_id >= 0), "
-		"atomic_edit_id BIGINT CHECK (atomic_edit_id >= 0));";
+		"atomic_edit_id BIGINT CHECK (atomic_edit_id >= 0), "
+		"auto_update BOOLEAN NOT NULL DEFAULT false, "
+		"update_url TEXT NOT NULL DEFAULT '');";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+
+	// Columns added to schema 14 after it was first in use: whether the extract
+	// is to be kept up to date automatically, and the API to update it from,
+	// blank meaning this map. An extracts table made before then gains them here.
+	sql = "ALTER TABLE " + metadata +
+		" ADD COLUMN IF NOT EXISTS auto_update BOOLEAN NOT NULL DEFAULT false, "
+		"ADD COLUMN IF NOT EXISTS update_url TEXT NOT NULL DEFAULT '';";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 
 	// Match live map object columns, adding extract_id to scope every object.
@@ -523,6 +533,14 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		if(!DbUpgradeTables13to14(c, work, verbose, tablePrefix, errStr)) return false;
 		if(!DbSetMetaValue(c, work, "schema_version", "14", tablePrefix, errStr)) return false;
 		schemaVersion = 14;
+	}
+
+	if(schemaVersion == 14 and targetVer >= 14)
+	{
+		// Schema 14 has gained columns since it was introduced. Every step of
+		// creating its extract tables leaves alone whatever is already there,
+		// so asking for version 14 again brings an older version 14 up to date.
+		if(!DbCreateExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	}
 
 	//Downgrading

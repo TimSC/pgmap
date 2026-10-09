@@ -212,6 +212,13 @@ public:
 	// Remove a stored extract and its contents; returns its ID.
 	int64_t DeleteExtract(int64_t extractId, const std::string &name);
 
+	// Set whether an extract is to be updated automatically, and the API to
+	// update it from: blank for this map's own, else an http or https URL.
+	// Returns the extract's ID. Select by positive ID, or by a unique name
+	// when ID is zero.
+	int64_t SetExtractAutoUpdate(int64_t extractId, const std::string &name,
+		bool autoUpdate, const std::string &updateUrl);
+
 	// Describe every stored extract in ID order, without object counts.
 	void ListExtracts(std::vector<ExtractInfo> &out);
 	// Describe one extract, including object counts. Returns false if not found.

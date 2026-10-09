@@ -245,6 +245,7 @@ namespace std {
 %ignore DbListExtractIds;
 %ignore DbDeleteExtract;
 %ignore DbListExtracts;
+%ignore DbSetExtractAutoUpdate;
 %copyctor ExtractInfo;
 %copyctor ExtractDifference;
 %copyctor ExtractComparison;
@@ -272,9 +273,9 @@ namespace std {
 %include "pgmap.h"
 %include "cppo5m/io.h"
 
-// From util.h, most of which is for the command line tools: one value of a
-// pgmap settings file by name, so that Python programs can share config.cfg.
-std::string GetConfigValue(const std::string &settingsPath, const std::string &name,
+// From util.h, most of which is for the command line tools: one value of
+// pgmap's settings file by name, so that Python programs can share config.cfg.
+std::string GetConfigValue(const std::string &name,
 	const std::string &defaultValue = std::string());
 %include "dbeditactivity.h"
 

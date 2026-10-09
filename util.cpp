@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <cmath>
@@ -106,9 +107,11 @@ std::string EscapeQuotes(std::string str)
 	return str;
 }
 
-std::string GetConfigValue(const std::string &settingsPath, const std::string &name,
+std::string GetConfigValue(const std::string &name,
 	const std::string &defaultValue)
 {
+	const char *named = getenv("PGMAP_CONFIG");
+	string settingsPath = (named != nullptr && named[0] != '\0') ? named : "config.cfg";
 	string configContent;
 	if(!ReadFileContents(settingsPath.c_str(), false, configContent))
 		return defaultValue;
@@ -145,8 +148,18 @@ std::string GeneratePgConnectionString(std::map<std::string, std::string> config
 	ss << "'" << EscapeQuotes(config["dbpass"]) << "'";
 	ss << " hostaddr=";
 	ss << "'" << EscapeQuotes(config["dbhost"]) << "'";
+	// The port is optional in the settings file. It is checked here because,
+	// unlike the other values, it goes into the connection string unquoted.
+	string port = config["dbport"];
+	size_t first = port.find_first_not_of(" \t\r");
+	port = first == string::npos ? "" : port.substr(first, port.find_last_not_of(" \t\r") - first + 1);
+	if(port.empty())
+		port = "5432";
+	if(port.size() > 5 || port.find_first_not_of("0123456789") != string::npos ||
+		atoi(port.c_str()) < 1 || atoi(port.c_str()) > 65535)
+		throw invalid_argument("dbport in the settings file must be a port number from 1 to 65535");
 	ss << " port=";
-	ss << "5432";
+	ss << port;
 	return ss.str();
 }
 
