@@ -271,50 +271,108 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	class DbUsernameLookup &usernames,
-	size_t limit,
-	int64_t user_uid,
-	int64_t openedBeforeTimestamp,
-	int64_t closedAfterTimestamp,
-	bool is_open_only,
-	bool is_closed_only,
+	const class PgChangesetQuery &query,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr)
 {
+	if(!query.bbox.empty() && query.bbox.size() != 4)
+		throw invalid_argument("Changeset query bbox must have four coordinates");
 	string changesetTable = c.quote_name(tablePrefix + "changesets");
 	string excludeTable;
 	if(excludePrefix.size() > 0)
 		excludeTable = c.quote_name(excludePrefix + "changesets");
 
 	stringstream sql;
+	sql.precision(17);
 	sql << "SELECT "<<changesetTable<<".*, ST_XMin("<<changesetTable<<".geom) as xmin, ST_XMax("<<changesetTable<<".geom) as xmax,";
 	sql << " ST_YMin("<<changesetTable<<".geom) as ymin, ST_YMax("<<changesetTable<<".geom) as ymax";
 	sql << " FROM " << changesetTable;
 	if(excludeTable.size() > 0)
 		sql << " LEFT JOIN " << excludeTable << " ON " << changesetTable <<".id = " << excludeTable << ".id";
-	if(excludeTable.size() > 0 || user_uid != 0 || is_open_only || is_closed_only || openedBeforeTimestamp != -1)
-		sql << " WHERE TRUE"; 
+	sql << " WHERE TRUE"; 
 	if(excludeTable.size() > 0)
 		sql << " AND " << excludeTable << ".id IS NULL";
-	if(user_uid != 0)
-		sql << " AND " << changesetTable << ".uid=" << user_uid;
-	if(is_open_only)
+	if(query.user_uid != 0)
+		sql << " AND " << changesetTable << ".uid=" << query.user_uid;
+	if(query.is_open_only)
 		sql << " AND "<<changesetTable<<".is_open=TRUE";
-	if(is_closed_only)
+	if(query.is_closed_only)
 		sql << " AND "<<changesetTable<<".is_open=FALSE";
-	if(openedBeforeTimestamp != -1)
-		sql << " AND "<<changesetTable<<".open_timestamp<" << openedBeforeTimestamp;
-	if(closedAfterTimestamp != -1)
-		sql << " AND "<<changesetTable<<".close_timestamp>" << closedAfterTimestamp;
+	if(query.openedBeforeTimestamp != -1)
+		sql << " AND "<<changesetTable<<".open_timestamp<" << query.openedBeforeTimestamp;
+	if(query.openedFromTimestamp != -1)
+		sql << " AND "<<changesetTable<<".open_timestamp>=" << query.openedFromTimestamp;
+	if(query.closedAfterTimestamp != -1)
+		sql << " AND ("<<changesetTable<<".is_open=TRUE OR "<<changesetTable<<".close_timestamp>=" << query.closedAfterTimestamp << ")";
+	if(!query.ids.empty())
+	{
+		sql << " AND "<<changesetTable<<".id IN (";
+		for(size_t i=0; i<query.ids.size(); i++)
+			sql << (i ? "," : "") << query.ids[i];
+		sql << ")";
+	}
+	if(!query.bbox.empty())
+		sql << " AND "<<changesetTable<<".geom && ST_MakeEnvelope("<<query.bbox[0]<<","<<query.bbox[1]
+			<<","<<query.bbox[2]<<","<<query.bbox[3]<<",4326)";
 
-	sql << " ORDER BY open_timestamp DESC NULLS LAST";
-	if(limit > 0)
-		sql << " LIMIT "<<limit;
+	const char *direction = query.oldestFirst ? "ASC" : "DESC";
+	sql << " ORDER BY "<<changesetTable<<".open_timestamp "<<direction<<" NULLS LAST, "<<changesetTable<<".id "<<direction;
+	if(query.limit > 0)
+		sql << " LIMIT "<<query.limit;
 	sql << ";";
 
 	pqxx::result r = work->exec(sql.str());
 
 	DecodeRowsToChangesets(r, usernames, changesetOut);
 	return true;
+}
+
+void DbGetChangesetChangeCounts(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix,
+	std::vector<class PgChangeset> &changesets)
+{
+	if(changesets.empty()) return;
+	std::map<int64_t, std::vector<size_t> > positions;
+	stringstream sql;
+	sql << "SELECT changeset, action, SUM(COALESCE(nodes,0)+COALESCE(ways,0)+COALESCE(relations,0)) FROM "
+		<< c.quote_name(tablePrefix + "edit_activity") << " WHERE changeset IN (";
+	for(size_t i=0; i<changesets.size(); i++)
+	{
+		changesets[i].created_count = 0;
+		changesets[i].modified_count = 0;
+		changesets[i].deleted_count = 0;
+		sql << (i ? "," : "") << changesets[i].objId;
+		positions[changesets[i].objId].push_back(i);
+	}
+	sql << ") GROUP BY changeset, action;";
+
+	pqxx::result r = work->exec(sql.str());
+	for(pqxx::result::const_iterator row = r.begin(); row != r.end(); ++row)
+	{
+		if(row[0].is_null() || row[1].is_null()) continue;
+		string action = row[1].as<string>();
+		int64_t count = row[2].as<int64_t>();
+		for(size_t i : positions[row[0].as<int64_t>()])
+		{
+			if(action == "create") changesets[i].created_count += count;
+			else if(action == "modify") changesets[i].modified_count += count;
+			else if(action == "delete") changesets[i].deleted_count += count;
+		}
+	}
+}
+
+int64_t DbCountChangesets(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix,
+	const std::string &excludePrefix,
+	int64_t user_uid)
+{
+	string changesetTable = c.quote_name(tablePrefix + "changesets");
+	stringstream sql;
+	sql << "SELECT COUNT(*) FROM " << changesetTable << " WHERE uid=" << user_uid;
+	if(excludePrefix.size() > 0)
+		sql << " AND NOT EXISTS (SELECT 1 FROM " << c.quote_name(excludePrefix + "changesets")
+			<< " e WHERE e.id=" << changesetTable << ".id)";
+	return work->exec(sql.str())[0][0].as<int64_t>();
 }
 
 bool InsertChangesetInDb(pqxx::connection &c, 

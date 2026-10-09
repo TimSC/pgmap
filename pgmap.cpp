@@ -98,6 +98,7 @@ PgChangeset::PgChangeset()
 	close_timestamp = 0;
 	is_open = true; bbox_set = false;
 	x1 = 0.0; y1 = 0.0; x2 = 0.0; y2 = 0.0;
+	created_count = 0; modified_count = 0; deleted_count = 0;
 }
 
 PgChangeset::PgChangeset(const PgChangeset &obj)
@@ -121,6 +122,9 @@ PgChangeset& PgChangeset::operator=(const PgChangeset &obj)
 	is_open = obj.is_open;
 	bbox_set = obj.bbox_set;
 	x1 = obj.x1; y1 = obj.y1; x2 = obj.x2; y2 = obj.y2;
+	created_count = obj.created_count;
+	modified_count = obj.modified_count;
+	deleted_count = obj.deleted_count;
 	return *this;
 }
 
@@ -1352,23 +1356,30 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 	bool is_closed_only,
 	class PgMapError &errStr)
 {
+	class PgChangesetQuery query;
+	query.user_uid = user_uid;
+	query.openedBeforeTimestamp = openedBeforeTimestamp;
+	query.closedAfterTimestamp = closedAfterTimestamp;
+	query.is_open_only = is_open_only;
+	query.is_closed_only = is_closed_only;
+	return this->GetChangesets(changesetsOut, query, errStr);
+}
+
+bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
+	const class PgChangesetQuery &query,
+	class PgMapError &errStr)
+{
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
 
 	string errStrNative;
-	size_t targetNum = 100;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableActivePrefix, "",
 		this->dbUsernameLookup, 
-		targetNum,
-		user_uid, 
-		openedBeforeTimestamp, 
-		closedAfterTimestamp,
-		is_open_only,
-		is_closed_only,
+		query,
 		changesetsOut,
 		errStrNative);
 	if(!ok)
@@ -1377,30 +1388,61 @@ bool PgTransaction::GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		return false;
 	}
 
-	if(changesetsOut.size() < targetNum)
+	//Either set of tables could hold all of the changesets wanted, so each is
+	//asked for the full number before the two are merged
+	std::vector<class PgChangeset> changesetsStatic;
+	ok = GetChangesetsFromDb(*dbconn, work.get(),
+		this->tableStaticPrefix,
+		this->tableActivePrefix,
+		this->dbUsernameLookup, 
+		query,
+		changesetsStatic,
+		errStrNative);
+	if(!ok)
 	{
-		std::vector<class PgChangeset> changesetsStatic;
-		ok = GetChangesetsFromDb(*dbconn, work.get(),
-			this->tableStaticPrefix,
-			this->tableActivePrefix,
-			this->dbUsernameLookup, 
-			targetNum - changesetsOut.size(),
-			user_uid,
-			openedBeforeTimestamp, 
-			closedAfterTimestamp,
-			is_open_only,
-			is_closed_only,
-			changesetsStatic,
-			errStrNative);
-		if(!ok)
-		{
-			errStr.errStr = errStrNative;
-			return false;
-		}
-		changesetsOut.insert(changesetsOut.end(), changesetsStatic.begin(), changesetsStatic.end());
+		errStr.errStr = errStrNative;
+		return false;
 	}
+	changesetsOut.insert(changesetsOut.end(), changesetsStatic.begin(), changesetsStatic.end());
 
+	bool oldestFirst = query.oldestFirst;
+	std::stable_sort(changesetsOut.begin(), changesetsOut.end(),
+		[oldestFirst](const PgChangeset &a, const PgChangeset &b) {
+			if(a.open_timestamp != b.open_timestamp)
+				return oldestFirst ? a.open_timestamp < b.open_timestamp : a.open_timestamp > b.open_timestamp;
+			return oldestFirst ? a.objId < b.objId : a.objId > b.objId;
+		});
+	if(query.limit > 0 && changesetsOut.size() > query.limit)
+		changesetsOut.resize(query.limit);
 	return true;
+}
+
+void PgTransaction::GetChangesetChangeCounts(std::vector<class PgChangeset> &changesets)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	DbGetChangesetChangeCounts(*dbconn, work.get(), this->tableActivePrefix, changesets);
+}
+
+void PgTransaction::GetChangesetChangeCounts(class PgChangeset &changeset)
+{
+	std::vector<class PgChangeset> changesets = {changeset};
+	this->GetChangesetChangeCounts(changesets);
+	changeset = changesets[0];
+}
+
+int64_t PgTransaction::GetChangesetCount(int64_t user_uid)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	return DbCountChangesets(*dbconn, work.get(), this->tableActivePrefix, "", user_uid) +
+		DbCountChangesets(*dbconn, work.get(), this->tableStaticPrefix, this->tableActivePrefix, user_uid);
 }
 
 int64_t PgTransaction::CreateChangeset(const class PgChangeset &changeset,
@@ -1609,15 +1651,14 @@ bool PgTransaction::CloseChangesetsOlderThan(int64_t whereBeforeTimestamp,
 
 	//Find changesets in static that have not been closed in active tables
 	std::vector<class PgChangeset> openStaticChangesets;
+	class PgChangesetQuery openQuery;
+	openQuery.limit = 0; //Get all
+	openQuery.openedBeforeTimestamp = whereBeforeTimestamp;
+	openQuery.is_open_only = true;
 	bool ok = GetChangesetsFromDb(*dbconn, work.get(),
 		this->tableStaticPrefix, this->tableActivePrefix,
 		this->dbUsernameLookup, 
-		0, //Get all
-		0, //Any user 
-		whereBeforeTimestamp, 
-		-1,
-		true, //That are open
-		false,
+		openQuery,
 		openStaticChangesets,
 		errStrNative);
 	if(!ok)

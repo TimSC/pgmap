@@ -37,6 +37,25 @@ public:
 	TagMap tags;
 	bool is_open, bbox_set;
 	double x1, y1, x2, y2;
+	// Objects created, modified and deleted in the changeset. These are not
+	// stored with it: they stay zero until GetChangesetChangeCounts fills them.
+	int64_t created_count, modified_count, deleted_count;
+};
+
+// Selects and orders the changesets returned by PgTransaction::GetChangesets.
+class PgChangesetQuery
+{
+public:
+	int64_t user_uid = 0; //0 means don't filter
+	int64_t openedBeforeTimestamp = -1; //Opened before this; -1 means don't filter
+	int64_t openedFromTimestamp = -1; //Opened at or after this; -1 means don't filter
+	int64_t closedAfterTimestamp = -1; //Still open, or closed at or after this; -1 means don't filter
+	bool is_open_only = false;
+	bool is_closed_only = false;
+	bool oldestFirst = false; //Order by opening time, newest first unless set
+	size_t limit = 100; //0 means no limit
+	std::vector<int64_t> ids; //Empty means don't filter
+	std::vector<double> bbox; //Empty, or left, bottom, right, top to find changesets overlapping it
 };
 
 class PgMapQuery
@@ -135,6 +154,16 @@ public:
 	int GetChangesetOsmChange(int64_t changesetId,
 		std::shared_ptr<class IOsmChangeHandler> output,
 		class PgMapError &errStr);
+	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
+		const class PgChangesetQuery &query,
+		class PgMapError &errStr);
+	// Fill in the created, modified and deleted counts from the edit activity
+	// recorded for each changeset. Changesets with no recorded activity, such
+	// as those imported with the map, are left at zero.
+	void GetChangesetChangeCounts(std::vector<class PgChangeset> &changesets);
+	void GetChangesetChangeCounts(class PgChangeset &changeset);
+	// The number of changesets a user has opened.
+	int64_t GetChangesetCount(int64_t user_uid);
 	bool GetChangesets(std::vector<class PgChangeset> &changesetsOut,
 		int64_t user_uid, //0 means don't filter
 		int64_t openedBeforeTimestamp, //-1 means don't filter

@@ -35,14 +35,22 @@ bool GetChangesetsFromDb(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix,
 	const std::string &excludePrefix,
 	class DbUsernameLookup &usernames,
-	size_t limit, //0 means no limit
-	int64_t user_uid, //0 means don't filter
-	int64_t openedBeforeTimestamp, //-1 means don't filter
-	int64_t closedAfterTimestamp, //-1 means don't filter
-	bool is_open_only,
-	bool is_closed_only,
+	const class PgChangesetQuery &query,
 	std::vector<class PgChangeset> &changesetOut,
 	std::string &errStr);
+
+///Sets the created, modified and deleted counts of each changeset from the
+///edit activity table, leaving zero where no activity was recorded.
+void DbGetChangesetChangeCounts(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix,
+	std::vector<class PgChangeset> &changesets);
+
+///Counts a user's changesets in one set of tables, leaving out any that are
+///also in the tables named by excludePrefix.
+int64_t DbCountChangesets(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix,
+	const std::string &excludePrefix,
+	int64_t user_uid);
 
 bool InsertChangesetInDb(pqxx::connection &c, 
 	pqxx::transaction_base *work, 
