@@ -1,6 +1,7 @@
 #include "pgmap.h"
 #include "dbquery.h"
 #include "dbextract.h"
+#include "dbprepared.h"
 #include "dbids.h"
 #include "dbadmin.h"
 #include "dbdecode.h"
@@ -2217,7 +2218,13 @@ PgMap::PgMap(const string &connection, const string &tableStaticPrefixIn,
 	const string &tableModPrefixIn,
 	const string &tableTestPrefixIn)
 {
-	dbconn.reset(new pqxx::connection(connection));
+	// Transactions share ownership of the connection, so tidy the prepared
+	// statement record when the last owner lets go, not when PgMap does. A
+	// later connection may be allocated at the same address.
+	dbconn.reset(new pqxx::connection(connection), [](pqxx::connection *c) {
+		forget_prepared(*c);
+		delete c;
+	});
 	connectionString = connection;
 	tableStaticPrefix = tableStaticPrefixIn;
 	tableActivePrefix = tableActivePrefixIn;

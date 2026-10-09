@@ -5,13 +5,14 @@
 #include <mutex>
 using namespace std;
 
-static std::map<std::string, std::string> keyToSql;
+static std::map<const pqxx::connection *, std::map<std::string, std::string> > connectionKeyToSql;
 static std::mutex keyToSqlMutex;
 
 void prepare_deduplicated(pqxx::connection &c, std::string key, std::string sql)
 {
 	//cout << "prepare " << key << " " << sql << endl;
 	std::lock_guard<std::mutex> lock(keyToSqlMutex);
+	auto &keyToSql = connectionKeyToSql[&c];
 	auto existing = keyToSql.find(key);
 	if (existing != keyToSql.end())
 	{
@@ -23,5 +24,11 @@ void prepare_deduplicated(pqxx::connection &c, std::string key, std::string sql)
 	c.prepare(key, sql);
 
 	keyToSql[key] = sql;
+}
+
+void forget_prepared(pqxx::connection &c)
+{
+	std::lock_guard<std::mutex> lock(keyToSqlMutex);
+	connectionKeyToSql.erase(&c);
 }
 
