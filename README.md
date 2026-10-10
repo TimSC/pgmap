@@ -163,13 +163,11 @@ Atomic edit activity (schema version 14)
 
 The XML endpoints `/replication/edit_activity/<id>` and
 `/replication/edit_activities` expose `atomic_edit_id` and `block_index`
-attributes for grouped rows. Their `sync_before` and `sync_after` elements
-contain actual historical OSM objects resolved from type/ID/version references,
-in reference order. Corresponding `bbox_before` and `bbox_after` elements hold
-WKT with `format="wkt"` and `srid="4326"`. Unrecorded fields have `null="true"`;
-known empty sync context is an empty element. Missing referenced history is an
-error rather than a silently shortened list. Rebuild the bindings to expose the
-additional C++ reader fields before running these endpoints.
+attributes for grouped rows. Each record lists the objects involved in full
+(`existing`, `updated`, `affectedparents`, `related`, `relatedparents`),
+resolved from the stored type/ID/version references, with the bounding box
+elements described under "Edit activity records" below. Rebuild the bindings
+to expose the C++ reader fields before running these endpoints.
 
 The admin tool's "Drop tables" operation drops the known map tables, visible
 views, and atomic-edit sequence directly using IF EXISTS. It does not run the
@@ -183,16 +181,10 @@ through one `PgTransaction` share an atomic edit ID; block positions start at
 zero. Separate uploads in the same changeset receive separate IDs. The C++ and
 SWIG `EditActivity` fields are `atomicEditId` and `blockIndex`.
 
-Version 14 also adds `sync_before` and `sync_after` JSONB arrays, paired with
-`bbox_before` and `bbox_after` geometry collections (SRID 4326). Each reference
-contains an object type, ID, and version. Array entry i corresponds to geometry
-component i+1; constraints enforce matching counts and require each pair to be
-either fully NULL or fully populated. NULL means context has not been recorded;
-an empty array paired with an empty collection means known empty context.
-For node edits, the activity writer populates `sync_before` with old node
-references and `bbox_before` with matching point geometries. Node creation
-records an empty array and empty collection. Skipped if-unused deletions are
-excluded. After-state and way/relation context are not populated yet.
+Earlier builds of version 14 had `sync_before`, `sync_after`, `bbox_before`
+and `bbox_after` columns. They have been removed: `existing` holds what
+`sync_before` did, and the other three were never populated. Asking for schema
+14 again drops them from a database that has them.
 
 These additions amend migration 13-to-14. Databases already marked version 14
 will not rerun that migration and need the additional ALTER TABLE commands
@@ -246,10 +238,32 @@ them: a related node can be new to it, brought in as part of a way, and then
 the relations holding that node belong there too. With them a record carries
 everything such a consumer needs, and it has no reason to query the map.
 
-`related_parents` was added to schema 14 after it was first in use. It is NULL
-in rows recorded before then, which means not recorded, not that there were
-none. On a map already at version 14, asking the admin tool for schema version
-14 again adds the column; until then edits are recorded without it.
+Four columns hold bounding boxes for those lists, each a PostGIS
+GeometryCollection (SRID 4326) with one geometry for every entry of its list,
+in the same order:
+
+* `existing_bbox`: each `existing` object before the edit.
+* `updated_bbox`: each `updated` object once the edit is made. A deleted
+  object has no box afterwards.
+* `affectedparents_before_bbox` and `affectedparents_after_bbox`: each
+  `affectedparents` object on either side of the edit. Moving a node changes
+  the extent of the ways and relations holding it without changing their
+  version, so this is the only record of that change.
+
+A way or relation has a polygon of its box; a node, whose position is in the
+object itself, has `POLYGON EMPTY`, which keeps the positions in step. A way's
+box is the stored one, or is worked out from its nodes on a map that does not
+store boxes; a relation's is empty when none is stored. The boxes tell whether
+a way or relation reached into an area before or after the edit, without
+fetching its nodes, and being geometry they can be searched by area in the
+database (`existing_bbox && ...`). The web API publishes each as an element of
+the same name holding one `<bbox type id minlon minlat maxlon maxlat>` per
+object, with `null="true"` in place of the numbers where there is no box.
+
+`related_parents` and the bounding box columns were added to schema 14 after
+it was first in use. They are NULL in rows recorded before then, which means
+not recorded. On a map already at version 14, asking the admin tool for schema
+version 14 again adds the columns; until then edits are recorded without them.
 
 Extract storage (schema version 14)
 ----------------------------------

@@ -323,10 +323,23 @@ bool DbDropExtractTables(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
 {
-	// The relations holding an edit's related nodes: see EditActivity. Rows
-	// from before the column existed keep NULL there, meaning not recorded.
+	// related_parents: the relations holding an edit's related nodes. The four
+	// bbox columns: the boxes that go with the lists of existing, updated and
+	// affected parent objects, each a collection with one geometry for every
+	// object of its list. See EditActivity. Rows from before a column existed
+	// keep NULL there, meaning not recorded.
+	string box = " GEOMETRY(GeometryCollection, 4326)";
 	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
-		" ADD COLUMN IF NOT EXISTS related_parents JSONB;";
+		" ADD COLUMN IF NOT EXISTS related_parents JSONB,"
+		" ADD COLUMN IF NOT EXISTS existing_bbox" + box + ","
+		" ADD COLUMN IF NOT EXISTS updated_bbox" + box + ","
+		" ADD COLUMN IF NOT EXISTS affectedparents_before_bbox" + box + ","
+		" ADD COLUMN IF NOT EXISTS affectedparents_after_bbox" + box + ","
+		// Four columns that schema 14 began with and nothing came to use: the
+		// lists of existing objects and these boxes say what they were for.
+		// The checks that tied them together go with them.
+		" DROP COLUMN IF EXISTS sync_before, DROP COLUMN IF EXISTS bbox_before,"
+		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after;";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
@@ -339,16 +352,8 @@ bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	string sql = "CREATE SEQUENCE " + c.quote_name(tablePrefix + "atomic_edit_id_seq") + ";";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "ALTER TABLE " + table + " ADD COLUMN atomic_edit_id BIGINT, ADD COLUMN block_index BIGINT, "
-		"ADD COLUMN sync_before JSONB, ADD COLUMN bbox_before GEOMETRY(GeometryCollection, 4326), "
-		"ADD COLUMN sync_after JSONB, ADD COLUMN bbox_after GEOMETRY(GeometryCollection, 4326), "
 		"ADD CHECK ((atomic_edit_id IS NULL AND block_index IS NULL) OR "
-		"(atomic_edit_id IS NOT NULL AND atomic_edit_id > 0 AND block_index IS NOT NULL AND block_index >= 0)), "
-		"ADD CHECK (CASE WHEN sync_before IS NULL AND bbox_before IS NULL THEN true "
-		"WHEN sync_before IS NOT NULL AND bbox_before IS NOT NULL AND jsonb_typeof(sync_before) = 'array' "
-		"THEN jsonb_array_length(sync_before) = ST_NumGeometries(bbox_before) ELSE false END), "
-		"ADD CHECK (CASE WHEN sync_after IS NULL AND bbox_after IS NULL THEN true "
-		"WHEN sync_after IS NOT NULL AND bbox_after IS NOT NULL AND jsonb_typeof(sync_after) = 'array' "
-		"THEN jsonb_array_length(sync_after) = ST_NumGeometries(bbox_after) ELSE false END);";
+		"(atomic_edit_id IS NOT NULL AND atomic_edit_id > 0 AND block_index IS NOT NULL AND block_index >= 0));";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "CREATE UNIQUE INDEX " + c.quote_name(tablePrefix + "activity_atomic_block") +
 		" ON " + table + " (atomic_edit_id, block_index);";
@@ -361,8 +366,12 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
-		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN atomic_edit_id, DROP COLUMN block_index, "
-		"DROP COLUMN sync_before, DROP COLUMN bbox_before, DROP COLUMN sync_after, DROP COLUMN bbox_after;";
+		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN IF EXISTS existing_bbox,"
+		" DROP COLUMN IF EXISTS updated_bbox, DROP COLUMN IF EXISTS affectedparents_before_bbox,"
+		" DROP COLUMN IF EXISTS affectedparents_after_bbox,"
+		" DROP COLUMN atomic_edit_id, DROP COLUMN block_index,"
+		" DROP COLUMN IF EXISTS sync_before, DROP COLUMN IF EXISTS bbox_before,"
+		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after;";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "DROP SEQUENCE " + c.quote_name(tablePrefix + "atomic_edit_id_seq") + ";";
 	return DbExec(work, sql, errStr, nullptr, verbose);

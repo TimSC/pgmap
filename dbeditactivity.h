@@ -19,12 +19,6 @@ public:
 	int relations;
 	std::string action;
 	std::vector<double> bbox;
-	// JSON reference array and matching SRID-4326 GeometryCollection WKT.
-	// Empty strings mean context was not recorded.
-	std::string syncBefore;
-	std::string bboxBefore;
-	std::string syncAfter;
-	std::string bboxAfter;
 	int64_t changeset;
 	int64_t timestamp;
 	int64_t uid;
@@ -43,6 +37,18 @@ public:
 	// edit did not touch these relations, so nothing else here mentions them.
 	// relatedparentsRecorded is false for a row made before this was recorded,
 	// which is not the same as there being none.
+	// Bounding boxes that go with the lists of objects above. Each is the WKT
+	// of an SRID-4326 GeometryCollection with one geometry for every object of
+	// its list, in the same order. A way or relation whose box is known has a
+	// polygon of it; anything else has POLYGON EMPTY, which keeps the
+	// positions in step. Boxes are not kept for nodes, whose position is in
+	// the object itself, and an object that has been deleted has none. An
+	// empty string means the row was made before this was recorded; a list
+	// with no objects has an empty collection.
+	std::string existingBbox; // of the existing objects, before the edit
+	std::string updatedBbox; // of the updated objects, after the edit
+	std::string affectedparentsBeforeBbox; // of the affected parents, before the edit
+	std::string affectedparentsAfterBbox; // and after it: a parent's box moves with its members
 	std::vector<std::string> relatedparentsType;
 	std::vector<std::pair<int64_t, int64_t> > relatedparentsIdVer;
 	bool relatedparentsRecorded;

@@ -1083,22 +1083,19 @@ bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 	 * All lookups must respect the static baseline and active overlay, including
 	 * suppression of overridden/deleted static objects.
 	 *
-	 * sync_before/sync_after are intended to retain the relevant versioned
-	 * context on each side of the edit. bbox_before/bbox_after retain matching
-	 * spatial extents as SRID-4326 GeometryCollections. JSON array entry i matches
-	 * geometry component i+1: counts AND ordering must agree. Separate extents
-	 * matter because a node can enter or leave a rectangle, and an unchanged
-	 * parent object's version can acquire a different extent when a node moves.
+	 * Spatial extents are retained beside the object lists as SRID-4326
+	 * GeometryCollections: existing_bbox for existing, updated_bbox for updated,
+	 * and affectedparents_before_bbox/affectedparents_after_bbox for
+	 * affectedparents. Component i+1 of a collection belongs to entry i of its
+	 * list: counts AND ordering must agree. A way or relation has its bounding
+	 * rectangle; a node, whose position is in the object itself, or an object
+	 * whose extent is unknown, has POLYGON EMPTY as a placeholder. Both sides
+	 * matter for an affected parent because its version does not change when a
+	 * node moves, yet its extent can, so it may enter or leave a rectangle.
 	 * An object version alone also does not identify its members' versions at
 	 * this revision; retaining footprints does not reconstruct the whole graph.
-	 *
-	 * Current coverage is deliberately limited: the upload caller records old
-	 * versions and point geometries of accepted node modifications/deletions.
-	 * Creation has an empty before array and empty collection. Deletions skipped
-	 * by if-unused are excluded. After-state and complete parent/dependency sync
-	 * context are not populated yet, so these rows alone do not constitute a
-	 * complete extract-update algorithm. Unrecorded context is SQL NULL; known
-	 * empty context is [] paired with GEOMETRYCOLLECTION EMPTY.
+	 * A column that was not recorded is SQL NULL; a list with no objects is
+	 * paired with GEOMETRYCOLLECTION EMPTY.
 	 *
 	 * A future consumer uses retained spatial/dependency context to find candidate
 	 * edits, retrieves the referenced historical objects, and determines which

@@ -11,13 +11,24 @@ using namespace std;
 #define pqxxrow pqxx::result::tuple
 #endif
 
+// The geometry columns holding the boxes that go with the lists of objects,
+// all added to schema 14 after it was first in use, so a map may lack them.
+static const char *ACTIVITY_BBOX_COLUMNS[4] = {"existing_bbox", "updated_bbox",
+	"affectedparents_before_bbox", "affectedparents_after_bbox"};
+
+static std::string *ActivityBboxField(class EditActivity &activity, size_t index)
+{
+	std::string *fields[4] = {&activity.existingBbox, &activity.updatedBbox,
+		&activity.affectedparentsBeforeBbox, &activity.affectedparentsAfterBbox};
+	return fields[index];
+}
+
 class EditActivityCols
 {
 public:
 
 	int idCol;
 	int atomicEditIdCol, blockIndexCol;
-	int syncBeforeCol, bboxBeforeCol, syncAfterCol, bboxAfterCol;
 	int nodesCol;
 	int waysCol;
 	int relationsCol;
@@ -28,7 +39,9 @@ public:
 	int uidCol;
 
 	int existingCol, updatedCol, affectedParentsCol, relatedCol;
-	int relatedParentsCol; //-1 on a map whose table has not gained the column
+	//-1 on a map whose table has not gained the column
+	int relatedParentsCol;
+	int bboxCols[4]; //In the order of ACTIVITY_BBOX_COLUMNS
 
 	EditActivityCols(pqxx::result &r);
 };
@@ -36,10 +49,6 @@ public:
 EditActivityCols::EditActivityCols(pqxx::result &r)
 {
 	idCol = r.column_number("id");
-	syncBeforeCol = r.column_number("sync_before");
-	bboxBeforeCol = r.column_number("bbox_before_wkt");
-	syncAfterCol = r.column_number("sync_after");
-	bboxAfterCol = r.column_number("bbox_after_wkt");
 	atomicEditIdCol = r.column_number("atomic_edit_id");
 	blockIndexCol = r.column_number("block_index");
 	nodesCol = r.column_number("nodes");
@@ -62,6 +71,17 @@ EditActivityCols::EditActivityCols(pqxx::result &r)
 	catch(const std::exception &)
 	{
 		relatedParentsCol = -1;
+	}
+	for(size_t i = 0; i < 4; i++)
+	{
+		try
+		{
+			bboxCols[i] = r.column_number(string(ACTIVITY_BBOX_COLUMNS[i]) + "_wkt");
+		}
+		catch(const std::exception &)
+		{
+			bboxCols[i] = -1;
+		}
 	}
 }
 
@@ -94,10 +114,6 @@ EditActivity::EditActivity( const EditActivity &obj)
 EditActivity& EditActivity::operator=(const EditActivity &arg)
 {
 	objId = arg.objId;
-	syncBefore = arg.syncBefore;
-	bboxBefore = arg.bboxBefore;
-	syncAfter = arg.syncAfter;
-	bboxAfter = arg.bboxAfter;
 	atomicEditId = arg.atomicEditId;
 	blockIndex = arg.blockIndex;
 
@@ -118,6 +134,10 @@ EditActivity& EditActivity::operator=(const EditActivity &arg)
 	affectedparentsIdVer = arg.affectedparentsIdVer;
 	relatedType = arg.relatedType;
 	relatedIdVer = arg.relatedIdVer;
+	existingBbox = arg.existingBbox;
+	updatedBbox = arg.updatedBbox;
+	affectedparentsBeforeBbox = arg.affectedparentsBeforeBbox;
+	affectedparentsAfterBbox = arg.affectedparentsAfterBbox;
 	relatedparentsType = arg.relatedparentsType;
 	relatedparentsIdVer = arg.relatedparentsIdVer;
 	relatedparentsRecorded = arg.relatedparentsRecorded;
@@ -132,13 +152,8 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 	class EditActivity &out)
 {
 	out.objId = row[cols.idCol].as<int64_t>();
-	out.syncBefore = row[cols.syncBeforeCol].is_null() ? "" : row[cols.syncBeforeCol].as<string>();
-	out.bboxBefore = row[cols.bboxBeforeCol].is_null() ? "" : row[cols.bboxBeforeCol].as<string>();
 	out.atomicEditId = row[cols.atomicEditIdCol].is_null() ? 0 : row[cols.atomicEditIdCol].as<int64_t>();
 	out.blockIndex = row[cols.blockIndexCol].is_null() ? -1 : row[cols.blockIndexCol].as<int64_t>();
-
-	out.syncAfter = row[cols.syncAfterCol].is_null() ? "" : row[cols.syncAfterCol].as<string>();
-	out.bboxAfter = row[cols.bboxAfterCol].is_null() ? "" : row[cols.bboxAfterCol].as<string>();
 
 	out.nodes = row[cols.nodesCol].as<int64_t>();
 	out.ways = row[cols.waysCol].as<int64_t>();
@@ -166,6 +181,14 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 		out.relatedType,
 		out.relatedIdVer);
 
+	for(size_t i = 0; i < 4; i++)
+	{
+		std::string *field = ActivityBboxField(out, i);
+		field->clear();
+		if(cols.bboxCols[i] >= 0 && !row[cols.bboxCols[i]].is_null())
+			*field = row[cols.bboxCols[i]].as<string>();
+	}
+
 	out.relatedparentsType.clear();
 	out.relatedparentsIdVer.clear();
 	out.relatedparentsRecorded = cols.relatedParentsCol >= 0 && !row[cols.relatedParentsCol].is_null();
@@ -178,6 +201,25 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 	}
 }
 
+static bool ActivityTableHasColumn(pqxx::transaction_base *work, const std::string &tablePrefix, const char *column)
+{
+	return !work->exec("SELECT 1 FROM information_schema.columns WHERE table_schema = ANY(current_schemas(false))"
+		" AND table_name = " + work->quote(tablePrefix + "edit_activity") +
+		" AND column_name = " + work->quote(string(column))).empty();
+}
+
+///Select-list entries for columns added to schema 14 after it was first in
+///use, which a map may not have gained yet. Each ends with a comma.
+static std::string OptionalActivityColumns(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix)
+{
+	string table = c.quote_name(tablePrefix + "edit_activity"), out;
+	for(const char *column : ACTIVITY_BBOX_COLUMNS)
+		if(ActivityTableHasColumn(work, tablePrefix, column))
+			out += "ST_AsText(" + table + "." + column + ") AS " + column + "_wkt, ";
+	return out;
+}
+
 bool DbGetEditActivityById(pqxx::connection &c,
 	pqxx::transaction_base *work,
 	const std::string &tablePrefix,
@@ -188,7 +230,7 @@ bool DbGetEditActivityById(pqxx::connection &c,
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
 	stringstream sql;
-	sql << "SELECT "<<table<<".*, ST_AsText("<<table<<".bbox_before) AS bbox_before_wkt, ST_AsText("<<table<<".bbox_after) AS bbox_after_wkt, ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
+	sql << "SELECT "<<table<<".*, "<<OptionalActivityColumns(c, work, tablePrefix)<<"ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
 	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
 	sql << " FROM " << table << " WHERE id="<<editActivityId<<";" ;
 
@@ -231,7 +273,7 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
 	stringstream sql;
-	sql << "SELECT "<<table<<".*, ST_AsText("<<table<<".bbox_before) AS bbox_before_wkt, ST_AsText("<<table<<".bbox_after) AS bbox_after_wkt, ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
+	sql << "SELECT "<<table<<".*, "<<OptionalActivityColumns(c, work, tablePrefix)<<"ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
 	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
 	sql << " FROM " << table << " WHERE timestamp>="<<sinceTimestamp;
 	if (untilTimestamp > 0)
@@ -278,7 +320,7 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
 	stringstream sql;
-	sql << "SELECT "<<table<<".*, ST_AsText("<<table<<".bbox_before) AS bbox_before_wkt, ST_AsText("<<table<<".bbox_after) AS bbox_after_wkt, ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
+	sql << "SELECT "<<table<<".*, "<<OptionalActivityColumns(c, work, tablePrefix)<<"ST_XMin("<<table<<".bbox) as xmin, ST_XMax("<<table<<".bbox) as xmax,";
 	sql << " ST_YMin("<<table<<".bbox) as ymin, ST_YMax("<<table<<".bbox) as ymax";
 	sql << " FROM " << table << " WHERE id >= " << firstId;
 	if(lastId > 0) sql << " AND id <= " << lastId;
@@ -324,10 +366,10 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 	EncodeObjTypeIdVers(activity.relatedType, activity.relatedIdVer, relatedEnc);
 
 	stringstream sql;
-	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, action, nodes, ways, relations, existing, updated, affectedparents, related, atomic_edit_id, block_index, sync_before, bbox_before, bbox) VALUES ";
-	sql << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,'')::jsonb,ST_GeomFromText(NULLIF($15,''),4326),";
+	sql << "INSERT INTO "<< c.quote_name(tablePrefix+"edit_activity") << " (changeset, timestamp, uid, action, nodes, ways, relations, existing, updated, affectedparents, related, atomic_edit_id, block_index, bbox) VALUES ";
+	sql << "($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,";
 	if(activity.bbox.size() == 4)
-		sql << "ST_MakeEnvelope($16,$17,$18,$19,4326)";
+		sql << "ST_MakeEnvelope($14,$15,$16,$17,4326)";
 	else
 		sql << "null";
 	sql << ");";
@@ -343,11 +385,11 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 #if PQXX_VERSION_MAJOR >= 7
 			work->exec_prepared(tablePrefix+"insert_edit_activity1", activity.changeset, activity.timestamp,
 				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
-				affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex, activity.syncBefore, activity.bboxBefore, activity.bbox[0], activity.bbox[1], activity.bbox[2], activity.bbox[3]);
+				affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex, activity.bbox[0], activity.bbox[1], activity.bbox[2], activity.bbox[3]);
 #else
 			work->prepared(tablePrefix+"insert_edit_activity1")(activity.changeset)(activity.timestamp)
 				(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
-				(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex)(activity.syncBefore)(activity.bboxBefore)(activity.bbox[0])(activity.bbox[1])(activity.bbox[2])(activity.bbox[3]).exec();
+				(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex)(activity.bbox[0])(activity.bbox[1])(activity.bbox[2])(activity.bbox[3]).exec();
 #endif
 		}
 		else
@@ -356,11 +398,11 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 #if PQXX_VERSION_MAJOR >= 7
 			work->exec_prepared(tablePrefix+"insert_edit_activity2", activity.changeset, activity.timestamp,
 				activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
-				affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex, activity.syncBefore, activity.bboxBefore);
+				affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex);
 #else
 			work->prepared(tablePrefix+"insert_edit_activity2")(activity.changeset)(activity.timestamp)
 				(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
-				(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex)(activity.syncBefore)(activity.bboxBefore).exec();
+				(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex).exec();
 #endif
 		}
 	}
@@ -375,23 +417,41 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 		return false;
 	}
 
-	if(!activity.relatedparentsRecorded)
+	// What remains goes in columns added to schema 14 after it was first in use
+	class EditActivity recorded(activity);
+	bool anyBbox = false;
+	for(size_t i = 0; i < 4; i++)
+		anyBbox = anyBbox || !ActivityBboxField(recorded, i)->empty();
+	if(!activity.relatedparentsRecorded && !anyBbox)
 		return true;
 	try
 	{
-		// The column was added to schema 14 after it was first in use. A map
-		// that has not gained it yet goes on recording edits without it.
+		// A map that has not gained one of these columns yet goes on recording
+		// edits without it.
 		string tableName = tablePrefix + "edit_activity";
-		pqxx::result has = work->exec("SELECT 1 FROM information_schema.columns WHERE table_schema = ANY(current_schemas(false))"
-			" AND table_name = " + work->quote(tableName) + " AND column_name = 'related_parents'");
-		if(has.empty())
-			return true;
-		string relatedParentsEnc;
-		EncodeObjTypeIdVers(activity.relatedparentsType, activity.relatedparentsIdVer, relatedParentsEnc);
-		// The row just inserted, in this session: the map is locked for writing
 		string table = c.quote_name(tableName);
-		work->exec("UPDATE " + table + " SET related_parents = " + work->quote(relatedParentsEnc) +
-			"::jsonb WHERE id = currval(pg_get_serial_sequence(" + work->quote(table) + ", 'id'))");
+		auto hasColumn = [&](const char *column) { return ActivityTableHasColumn(work, tablePrefix, column); };
+		std::vector<string> values;
+		if(activity.relatedparentsRecorded && hasColumn("related_parents"))
+		{
+			string relatedParentsEnc;
+			EncodeObjTypeIdVers(activity.relatedparentsType, activity.relatedparentsIdVer, relatedParentsEnc);
+			values.push_back("related_parents = " + work->quote(relatedParentsEnc) + "::jsonb");
+		}
+		for(size_t i = 0; i < 4; i++)
+		{
+			const std::string &wkt = *ActivityBboxField(recorded, i);
+			if(!wkt.empty() && hasColumn(ACTIVITY_BBOX_COLUMNS[i]))
+				values.push_back(string(ACTIVITY_BBOX_COLUMNS[i]) + " = ST_GeomFromText(" + work->quote(wkt) + ", 4326)");
+		}
+		if(!values.empty())
+		{
+			string sql = "UPDATE " + table + " SET ";
+			for(size_t i = 0; i < values.size(); i++)
+				sql += (i ? ", " : "") + values[i];
+			// The row just inserted, in this session: the map is locked for writing
+			work->exec(sql + " WHERE id = currval(pg_get_serial_sequence(" + work->quote(table) + ", 'id'))");
+		}
 	}
 	catch (const std::exception &e)
 	{
