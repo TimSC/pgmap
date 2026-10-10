@@ -341,6 +341,11 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 		" DROP COLUMN IF EXISTS sync_before, DROP COLUMN IF EXISTS bbox_before,"
 		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after;";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	// Finding the records of a changeset, as its change counts do, without
+	// reading the whole table
+	sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_changeset") +
+		" ON " + c.quote_name(tablePrefix + "edit_activity") + " (changeset);";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
@@ -365,7 +370,9 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
 {
 	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
-	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
+	string sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_changeset") + ";";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
 		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN IF EXISTS existing_bbox,"
 		" DROP COLUMN IF EXISTS updated_bbox, DROP COLUMN IF EXISTS affectedparents_before_bbox,"
 		" DROP COLUMN IF EXISTS affectedparents_after_bbox,"

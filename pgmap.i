@@ -198,6 +198,12 @@ public:
 	}
 };
 
+///One object as an OSM XML element, as the encoder writes it, for callers
+///that place objects inside a document of their own.
+std::string OsmObjectXml(const OsmNode &obj) { std::string out; AppendXmlNode(obj, out); return out; }
+std::string OsmObjectXml(const OsmWay &obj) { std::string out; AppendXmlWay(obj, out); return out; }
+std::string OsmObjectXml(const OsmRelation &obj) { std::string out; AppendXmlRelation(obj, out); return out; }
+
 ///Writes OSM JSON to a Python file object.
 class PyOsmJsonEncode : public OsmJsonEncode
 {
