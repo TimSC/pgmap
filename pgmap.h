@@ -254,11 +254,13 @@ public:
 	// Both give rows in ID order. limit, if positive, is the most to return.
 	void QueryEditActivityByIds(int64_t firstId, int64_t lastId, int64_t atomicEditId,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-		class PgMapError &errStr, int64_t limit = 0);
+		class PgMapError &errStr, int64_t limit = 0,
+		const std::vector<double> &bbox = std::vector<double>(), bool newest = false);
 	void QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 		int64_t untilTimestamp,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-		class PgMapError &errStr, int64_t limit = 0);
+		class PgMapError &errStr, int64_t limit = 0,
+		const std::vector<double> &bbox = std::vector<double>(), bool newest = false);
 
 	std::string GetMetaValue(const std::string &key, 
 		class PgMapError &errStr);

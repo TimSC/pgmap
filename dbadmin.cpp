@@ -346,6 +346,14 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_changeset") +
 		" ON " + c.quote_name(tablePrefix + "edit_activity") + " (changeset);";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	// Finding the records that concern an area, which tests each of these
+	for(const char *column : {"bbox", "existing_bbox", "updated_bbox",
+		"affectedparents_before_bbox", "affectedparents_after_bbox"})
+	{
+		sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_gix_" + column) +
+			" ON " + c.quote_name(tablePrefix + "edit_activity") + " USING GIST (" + column + ");";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
@@ -371,6 +379,9 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	string sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_changeset") + ";";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	// The other box indices go with their columns, below
+	sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_gix_bbox") + ";";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
 		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN IF EXISTS existing_bbox,"

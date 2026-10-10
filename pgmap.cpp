@@ -1758,7 +1758,7 @@ std::map<std::string, std::string> PgTransaction::GetLatestEditIdAttribs()
 
 void PgTransaction::QueryEditActivityByIds(int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-	class PgMapError &errStr, int64_t limit)
+	class PgMapError &errStr, int64_t limit, const std::vector<double> &bbox, bool newest)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1767,13 +1767,13 @@ void PgTransaction::QueryEditActivityByIds(int64_t firstId, int64_t lastId,
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work) throw runtime_error("Transaction has been deleted");
 	DbQueryEditActivityByIds(*dbconn, work.get(), this->tableActivePrefix,
-		firstId, lastId, atomicEditId, editActivity, errStr.errStr, limit);
+		firstId, lastId, atomicEditId, editActivity, errStr.errStr, limit, bbox, newest);
 }
 
 void PgTransaction::QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-	class PgMapError &errStr, int64_t limit)
+	class PgMapError &errStr, int64_t limit, const std::vector<double> &bbox, bool newest)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1787,7 +1787,7 @@ void PgTransaction::QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 		this->tableActivePrefix,
 		sinceTimestamp, untilTimestamp,
 		editActivity,
-		errStrNative, limit);
+		errStrNative, limit, bbox, newest);
 
 	errStr.errStr = errStrNative;
 }

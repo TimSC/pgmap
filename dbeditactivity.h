@@ -18,6 +18,11 @@ public:
 	int ways;
 	int relations;
 	std::string action;
+	// Where the edit matters beyond the boxes below, as four values (min lon,
+	// min lat, max lon, max lat), or empty when there is nowhere. It covers
+	// the ways that share a member node with a relation being edited: an
+	// extract holding such a way holds the relation too, wherever the
+	// relation itself is. Searches by area test it along with the boxes.
 	std::vector<double> bbox;
 	int64_t changeset;
 	int64_t timestamp;
@@ -37,14 +42,14 @@ public:
 	// edit did not touch these relations, so nothing else here mentions them.
 	// relatedparentsRecorded is false for a row made before this was recorded,
 	// which is not the same as there being none.
-	// Bounding boxes that go with the lists of objects above. Each is the WKT
-	// of an SRID-4326 GeometryCollection with one geometry for every object of
-	// its list, in the same order. A way or relation whose box is known has a
-	// polygon of it; anything else has POLYGON EMPTY, which keeps the
-	// positions in step. Boxes are not kept for nodes, whose position is in
-	// the object itself, and an object that has been deleted has none. An
-	// empty string means the row was made before this was recorded; a list
-	// with no objects has an empty collection.
+	// Where the objects of the lists above are. Each is the WKT of an
+	// SRID-4326 GeometryCollection with one geometry for every object of its
+	// list, in the same order: a point for a node, a polygon of its box for a
+	// way or relation, and POLYGON EMPTY, which keeps the positions in step,
+	// for an object that has been deleted. An empty string means it was not
+	// recorded, either because the row is older than this or because the box
+	// of one of the objects was not known; a list with no objects has an
+	// empty collection.
 	std::string existingBbox; // of the existing objects, before the edit
 	std::string updatedBbox; // of the updated objects, after the edit
 	std::string affectedparentsBeforeBbox; // of the affected parents, before the edit
@@ -86,7 +91,15 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr,
-	int64_t limit = 0); //The rows come in ID order; limit, if positive, is the most to return
+	int64_t limit = 0, //The rows come in ID order; limit, if positive, is the most to return
+	//bbox, if it has four values (min lon, min lat, max lon, max lat), keeps
+	//the rows where the existing objects, the updated objects or the affected
+	//parents before or after the edit reach into it, those whose own bbox
+	//does, and those where one of the four collections was not recorded,
+	//which could concern anywhere. With
+	//newest, a limit keeps the highest IDs, not the lowest; still in ID order.
+	const std::vector<double> &bbox = std::vector<double>(),
+	bool newest = false);
 
 // Latest edit activity row ID and atomic edit ID; zero when there is no activity.
 void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
@@ -96,6 +109,8 @@ void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr,
-	int64_t limit = 0);
+	int64_t limit = 0,
+	const std::vector<double> &bbox = std::vector<double>(),
+	bool newest = false);
 
 #endif //_EDIT_ACTIVITY_H

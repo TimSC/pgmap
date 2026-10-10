@@ -217,6 +217,11 @@ The existing XML API supports:
 * `/replication/edit_activities?first_id=100&last_id=150`: an inclusive row range.
 * `/replication/edit_activities?first_id=100`: rows from 100 onwards.
 * `/replication/edit_activities?atomic_edit_id=42`: all rows of atomic edit 42.
+* `/replication/edit_activities`: the latest 20 rows.
+* `/replication/edit_activities?limit=50`: the latest 50. `limit` can be up to
+  100, and with a range it is how many rows are sent from the start of it.
+* `/replication/edit_activities?first_id=100&bbox=-1.1,50.7,-1.0,50.8`: only
+  the rows that may concern that area (min lon, min lat, max lon, max lat).
 
 ID queries return rows ordered by row ID; an unmatched collection query returns
 an empty collection. IDs must be positive integers. A row range can additionally
@@ -238,27 +243,44 @@ them: a related node can be new to it, brought in as part of a way, and then
 the relations holding that node belong there too. With them a record carries
 everything such a consumer needs, and it has no reason to query the map.
 
-Four columns hold bounding boxes for those lists, each a PostGIS
+Four columns say where the objects of those lists are, each a PostGIS
 GeometryCollection (SRID 4326) with one geometry for every entry of its list,
 in the same order:
 
 * `existing_bbox`: each `existing` object before the edit.
 * `updated_bbox`: each `updated` object once the edit is made. A deleted
-  object has no box afterwards.
+  object is nowhere afterwards and has `POLYGON EMPTY`, which keeps the
+  positions in step.
 * `affectedparents_before_bbox` and `affectedparents_after_bbox`: each
   `affectedparents` object on either side of the edit. Moving a node changes
   the extent of the ways and relations holding it without changing their
   version, so this is the only record of that change.
 
-A way or relation has a polygon of its box; a node, whose position is in the
-object itself, has `POLYGON EMPTY`, which keeps the positions in step. A way's
-box is the stored one, or is worked out from its nodes on a map that does not
-store boxes; a relation's is empty when none is stored. The boxes tell whether
-a way or relation reached into an area before or after the edit, without
-fetching its nodes, and being geometry they can be searched by area in the
-database (`existing_bbox && ...`). The web API publishes each as an element of
-the same name holding one `<bbox type id minlon minlat maxlon maxlat>` per
-object, with `null="true"` in place of the numbers where there is no box.
+A node has a point at its position and a way or relation a polygon of its box.
+A way's box is the stored one, or is worked out from its nodes on a map that
+does not store boxes. Where the box of an object is not known, as for a
+relation on such a map, the whole column is left NULL for that row. The web
+API publishes each as an element of the same name holding one
+`<bbox type id minlon minlat maxlon maxlat>` per object (a node's minimum and
+maximum are the same), with `null="true"` in place of the numbers for a deleted
+object, or on the element itself where the column is NULL.
+
+The `bbox` filter of the web API keeps a row when any of the four collections
+reaches into the area asked about, so that something keeping one area of the
+map up to date can ask only for the edits that could matter to it. Both sides
+of the edit count: an object can leave an area as well as enter it. A row with
+one of the four columns NULL could concern anywhere and is always kept. The
+comparison is with the extent of each whole collection, so a row is sometimes
+kept without need, never lost.
+
+One case is not covered by where the objects are. A copy of an area has a way
+when one of the way's nodes is in the area, has all of that way's nodes, and
+has the relations holding any of those nodes. A relation can therefore belong
+to an area that neither it nor its members touch. When an edit creates,
+modifies or deletes a relation, the row's `bbox` column is set to the extent
+of the ways that hold the relation's member nodes, and the filter tests that
+as well. It is NULL for every other edit. `bbox` and the four collections each
+have a GiST index.
 
 `related_parents` and the bounding box columns were added to schema 14 after
 it was first in use. They are NULL in rows recorded before then, which means

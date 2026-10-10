@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "dbeditactivity.h"
 #include "dbdecode.h"
 #include "dbjson.h"
@@ -261,6 +262,49 @@ bool DbGetEditActivityById(pqxx::connection &c,
 	return false;
 }
 
+// The condition keeping the rows that may concern an area. A row does if the
+// objects it had before the edit, those it has after, or the affected parents
+// on either side of it reach into the area. Old and new both count: an object
+// can leave an area as well as enter it, and a parent's extent changes with
+// its members while its version does not. The row's bbox column adds where an
+// edited relation matters beyond its own box. A row where one of these was not
+// recorded could concern anywhere, and is kept. && compares the area with the
+// extent of a whole collection, so a row may be kept without need, never lost.
+static std::string ActivityBboxCondition(pqxx::transaction_base *work, const std::string &tablePrefix,
+	const std::string &table, const std::vector<double> &bbox)
+{
+	if(bbox.empty()) return "";
+	if(bbox.size() != 4)
+		throw invalid_argument("bbox must have four values");
+	// A table that has not gained the columns cannot say, so nothing is left out
+	for(const char *column : ACTIVITY_BBOX_COLUMNS)
+		if(!ActivityTableHasColumn(work, tablePrefix, column)) return "";
+
+	stringstream area;
+	area.precision(17);
+	area << "ST_MakeEnvelope(" << bbox[0] << "," << bbox[1] << "," << bbox[2] << "," << bbox[3] << ",4326)";
+	stringstream sql;
+	sql << " AND (";
+	for(size_t i=0; i<4; i++)
+	{
+		string column = table + "." + ACTIVITY_BBOX_COLUMNS[i];
+		sql << (i ? " OR " : "") << column << " IS NULL OR " << column << " && " << area.str();
+	}
+	// Where a relation of the edit matters through ways sharing its member nodes
+	sql << " OR " << table << ".bbox && " << area.str() << ")";
+	return sql.str();
+}
+
+// How the rows are ordered and limited. The newest are chosen from the top and
+// then put back into ID order by the caller.
+static std::string ActivityOrder(int64_t limit, bool newest)
+{
+	stringstream sql;
+	sql << " ORDER BY id" << ((newest && limit > 0) ? " DESC" : "");
+	if(limit > 0) sql << " LIMIT " << limit;
+	return sql.str();
+}
+
 void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	pqxx::transaction_base *work,
 	const std::string &tablePrefix,
@@ -268,7 +312,9 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr,
-	int64_t limit)
+	int64_t limit,
+	const std::vector<double> &bbox,
+	bool newest)
 {
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
@@ -278,10 +324,7 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	sql << " FROM " << table << " WHERE timestamp>="<<sinceTimestamp;
 	if (untilTimestamp > 0)
 		sql << " AND timestamp<"<<untilTimestamp;
-	sql << " ORDER BY id";
-	if (limit > 0)
-		sql << " LIMIT " << limit;
-	sql <<";" ;
+	sql << ActivityBboxCondition(work, tablePrefix, table, bbox) << ActivityOrder(limit, newest) << ";";
 
 	try
 	{
@@ -296,6 +339,8 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 			DecodeEditActivityRow(cols, row, *activity);
 			out[rownum] = activity;
 		}
+		if(newest && limit > 0)
+			std::reverse(out.begin(), out.end());
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -315,7 +360,9 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	int64_t atomicEditId,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr,
-	int64_t limit)
+	int64_t limit,
+	const std::vector<double> &bbox,
+	bool newest)
 {
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
@@ -325,9 +372,7 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	sql << " FROM " << table << " WHERE id >= " << firstId;
 	if(lastId > 0) sql << " AND id <= " << lastId;
 	if(atomicEditId > 0) sql << " AND atomic_edit_id = " << atomicEditId;
-	sql << " ORDER BY id";
-	if(limit > 0) sql << " LIMIT " << limit;
-	sql << ";";
+	sql << ActivityBboxCondition(work, tablePrefix, table, bbox) << ActivityOrder(limit, newest) << ";";
 
 	try
 	{
@@ -342,6 +387,8 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 			DecodeEditActivityRow(cols, row, *activity);
 			out[rownum] = activity;
 		}
+		if(newest && limit > 0)
+			std::reverse(out.begin(), out.end());
 	}
 	catch (const pqxx::sql_error &e)
 	{
