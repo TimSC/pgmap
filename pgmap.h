@@ -145,6 +145,13 @@ public:
 		class OsmChange &out);
 	void Dump(bool order, bool nodes, bool ways, bool relations, 
 		std::shared_ptr<IDataStreamHandler> enc);
+	// Write the whole map to a file, as the dump tool does. The file name
+	// selects the format: .osm, .o5m, .pbf or .json, optionally followed by
+	// .gz. With editIds, the latest edit activity ID and atomic edit ID of
+	// this snapshot go in the file header, in the formats that have somewhere
+	// to hold them (all but .pbf). The file appears under its name only once
+	// it is complete. Throws std::invalid_argument for an unusable name.
+	void DumpToFile(const std::string &filename, bool editIds);
 
 	int64_t GetAllocatedId(const std::string &type);
 	int64_t PeekNextAllocatedId(const std::string &type);

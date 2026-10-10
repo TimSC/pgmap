@@ -11,6 +11,7 @@
 #include "dbfilters.h"
 #include "dbchangeset.h"
 #include "dbmeta.h"
+#include "osmfile.h"
 #include "dbcommon.h"
 #include "dboverpass.h"
 #include "util.h"
@@ -1849,6 +1850,17 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 		uid, username);
 
 	return true;
+}
+
+void PgTransaction::DumpToFile(const std::string &filename, bool editIds)
+{
+	OsmFormat format = OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
+	TagMap headerAttribs;
+	if(editIds && OsmFileWriter::HasHeaderAttribs(format))
+		headerAttribs = this->GetLatestEditIdAttribs(); // From the same snapshot as the dump
+	OsmFileWriter writer(filename, headerAttribs);
+	this->Dump(true, true, true, true, writer.Encoder());
+	writer.Close();
 }
 
 void PgTransaction::OverpassQuery(const std::string &objType,
