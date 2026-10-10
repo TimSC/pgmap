@@ -207,6 +207,21 @@ int PgExtractExport::Continue()
 static const size_t IMPORT_BATCH_OBJECTS = 1000;
 static const size_t IMPORT_BATCH_MEMBERS = 20000;
 
+// Pending rows, as SQL value lists, for the tables of one extract.
+struct ExtractRows
+{
+    // 0 nodes, 1 ways, 2 relations
+    std::array<std::vector<std::string>, 3> objects;
+    // 0 way_mems, then relation_mems_n, _w and _r
+    std::array<std::vector<std::string>, 4> members;
+
+    size_t NumObjects() const { return objects[0].size() + objects[1].size() + objects[2].size(); }
+    size_t NumMembers() const
+    {
+        return members[0].size() + members[1].size() + members[2].size() + members[3].size();
+    }
+};
+
 static void CheckExtractBbox(const vector<double> &bbox)
 {
     if(bbox.size() != 4) throw invalid_argument("Bbox must have four coordinates");
@@ -235,7 +250,7 @@ static bool ParseEditId(const string &text, int64_t &out)
 PgExtractImport::PgExtractImport(shared_ptr<pqxx::connection> connectionIn,
     shared_ptr<PgWork> workIn, const string &prefixIn, const string &name,
     const vector<double> &bboxIn, int64_t editActivityIdIn, int64_t atomicEditIdIn):
-    connection(connectionIn), work(workIn), prefix(prefixIn)
+    connection(connectionIn), work(workIn), prefix(prefixIn), rows(new ExtractRows())
 {
     if(!bboxIn.empty())
     {
@@ -290,11 +305,12 @@ void PgExtractImport::StoreBounds(const Bounds &bounds)
     haveBbox = true;
 }
 
+// ****** Rows of the extract tables, shared by importing and patching ******
+
 // Columns: extract_id, id, changeset, username, uid, timestamp, version, tags.
 // Metadata a file leaves out is stored as NULL, which reads back as absent.
-string PgExtractImport::CommonValues(const OsmObject &object)
+static string ExtractCommonValues(pqxx::transaction_base &w, int64_t extractId, const OsmObject &object)
 {
-    auto &w = Work();
     const MetaData &meta = object.metaData;
     string tags;
     EncodeTags(object.tags, tags);
@@ -306,38 +322,28 @@ string PgExtractImport::CommonValues(const OsmObject &object)
         to_string(meta.version) + "," + w.quote(tags) + "::jsonb";
 }
 
-void PgExtractImport::StoreNode(const OsmNode &node)
+static void AddExtractNode(pqxx::transaction_base &w, int64_t extractId, const OsmNode &node, ExtractRows &rows)
 {
-    if(finished) throw runtime_error("Extract import has already finished");
-    if(!node.metaData.visible) return; // An extract holds current objects only
     if(!std::isfinite(node.lon) || !std::isfinite(node.lat))
         throw runtime_error("Node " + to_string(node.objId) + " has no usable position");
-    objectRows[0].push_back("(" + CommonValues(node) + ",ST_SetSRID(ST_MakePoint(" +
+    rows.objects[0].push_back("(" + ExtractCommonValues(w, extractId, node) + ",ST_SetSRID(ST_MakePoint(" +
         ExactDouble(node.lon) + "," + ExactDouble(node.lat) + "),4326))");
-    numNodes++;
-    FlushIfLarge();
 }
 
-void PgExtractImport::StoreWay(const OsmWay &way)
+static void AddExtractWay(pqxx::transaction_base &w, int64_t extractId, const OsmWay &way, ExtractRows &rows)
 {
-    if(finished) throw runtime_error("Extract import has already finished");
-    if(!way.metaData.visible) return;
     string members;
     EncodeInt64Vec(way.refs, members);
-    objectRows[1].push_back("(" + CommonValues(way) + "," + Work().quote(members) + "::jsonb)");
+    rows.objects[1].push_back("(" + ExtractCommonValues(w, extractId, way) + "," + w.quote(members) + "::jsonb)");
     string owner = "(" + to_string(extractId) + "," + to_string(way.objId) + "," +
         to_string(way.metaData.version) + ",";
     for(size_t i = 0; i < way.refs.size(); i++)
-        memberRows[0].push_back(owner + to_string(i) + "," + to_string(way.refs[i]) + ")");
-    numWays++;
-    FlushIfLarge();
+        rows.members[0].push_back(owner + to_string(i) + "," + to_string(way.refs[i]) + ")");
 }
 
-void PgExtractImport::StoreRelation(const OsmRelation &relation)
+static void AddExtractRelation(pqxx::transaction_base &w, int64_t extractId, const OsmRelation &relation,
+    ExtractRows &rows)
 {
-    if(finished) throw runtime_error("Extract import has already finished");
-    if(!relation.metaData.visible) return;
-    auto &w = Work();
     vector<string> types, roles;
     vector<int64_t> refs;
     string owner = "(" + to_string(extractId) + "," + to_string(relation.objId) + "," +
@@ -350,51 +356,101 @@ void PgExtractImport::StoreRelation(const OsmRelation &relation)
         roles.push_back(member.role);
         // Tables follow the order node, way, relation
         size_t table = member.type == ObjectType::Node ? 1 : (member.type == ObjectType::Way ? 2 : 3);
-        memberRows[table].push_back(owner + to_string(i) + "," + to_string(member.ref) + ")");
+        rows.members[table].push_back(owner + to_string(i) + "," + to_string(member.ref) + ")");
     }
     string members, memberRoles;
     EncodeRelationMems(types, refs, members);
     EncodeStringVec(roles, memberRoles);
-    objectRows[2].push_back("(" + CommonValues(relation) + "," + w.quote(members) + "::jsonb," +
+    rows.objects[2].push_back("(" + ExtractCommonValues(w, extractId, relation) + "," + w.quote(members) + "::jsonb," +
         w.quote(memberRoles) + "::jsonb)");
+}
+
+// Writes the pending rows and empties them.
+static void InsertExtractRows(pqxx::connection &connection, pqxx::transaction_base &w,
+    const string &prefix, ExtractRows &rows)
+{
+    auto insert = [&](const string &table, const string &columns, vector<string> &pending)
+    {
+        // Bound each statement, however many rows are waiting
+        for(size_t start = 0; start < pending.size(); start += 5000)
+        {
+            string sql = "INSERT INTO " + connection.quote_name(prefix + table) + " (" + columns + ") VALUES ";
+            for(size_t i = start; i < pending.size() && i < start + 5000; i++)
+            {
+                if(i > start) sql += ",";
+                sql += pending[i];
+            }
+            w.exec(sql);
+        }
+        pending.clear();
+    };
+    // An object appearing twice breaks the primary key and fails the write,
+    // because there would be no telling which copy the extract should hold.
+    const string common = "extract_id,id,changeset,username,uid,timestamp,version,tags";
+    insert("extract_livenodes", common + ",geom", rows.objects[0]);
+    insert("extract_liveways", common + ",members", rows.objects[1]);
+    insert("extract_liverelations", common + ",members,memberroles", rows.objects[2]);
+    // Membership rows refer to their way or relation, so they follow it
+    const char *memberTables[] = {"extract_way_mems", "extract_relation_mems_n",
+        "extract_relation_mems_w", "extract_relation_mems_r"};
+    for(size_t i = 0; i < 4; i++)
+        insert(memberTables[i], "extract_id,id,version,index,member", rows.members[i]);
+}
+
+// Gives ways the bbox of whichever of their nodes the extract holds, as the
+// map's own ways have. Relation bboxes are left unset: working one out needs
+// members the extract may not hold, and nothing reads it from here. condition,
+// if not empty, limits this to some ways, written against the alias w.
+// Naming the extract in each lookup, rather than joining on it, keeps every
+// step on a primary key however stale the planner's statistics are after a
+// bulk insert.
+static void UpdateExtractWayBboxes(pqxx::connection &connection, pqxx::transaction_base &w,
+    const string &prefix, int64_t extractId, const string &condition = string())
+{
+    string id = to_string(extractId);
+    w.exec("UPDATE " + connection.quote_name(prefix + "extract_liveways") + " w SET bbox=("
+        "SELECT ST_Envelope(ST_Collect(n.geom)) FROM " +
+        connection.quote_name(prefix + "extract_way_mems") + " m JOIN " +
+        connection.quote_name(prefix + "extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member "
+        "WHERE m.extract_id=" + id + " AND m.id=w.id) WHERE w.extract_id=" + id +
+        (condition.empty() ? string() : " AND (" + condition + ")"));
+}
+
+void PgExtractImport::StoreNode(const OsmNode &node)
+{
+    if(finished) throw runtime_error("Extract import has already finished");
+    if(!node.metaData.visible) return; // An extract holds current objects only
+    AddExtractNode(Work(), extractId, node, *rows);
+    numNodes++;
+    FlushIfLarge();
+}
+
+void PgExtractImport::StoreWay(const OsmWay &way)
+{
+    if(finished) throw runtime_error("Extract import has already finished");
+    if(!way.metaData.visible) return;
+    AddExtractWay(Work(), extractId, way, *rows);
+    numWays++;
+    FlushIfLarge();
+}
+
+void PgExtractImport::StoreRelation(const OsmRelation &relation)
+{
+    if(finished) throw runtime_error("Extract import has already finished");
+    if(!relation.metaData.visible) return;
+    AddExtractRelation(Work(), extractId, relation, *rows);
     numRelations++;
     FlushIfLarge();
 }
 
 void PgExtractImport::FlushIfLarge()
 {
-    size_t objects = 0, members = 0;
-    for(const auto &rows : objectRows) objects += rows.size();
-    for(const auto &rows : memberRows) members += rows.size();
-    if(objects >= IMPORT_BATCH_OBJECTS || members >= IMPORT_BATCH_MEMBERS) Flush();
+    if(rows->NumObjects() >= IMPORT_BATCH_OBJECTS || rows->NumMembers() >= IMPORT_BATCH_MEMBERS) Flush();
 }
 
 void PgExtractImport::Flush()
 {
-    auto &w = Work();
-    auto insert = [&](const string &table, const string &columns, vector<string> &rows)
-    {
-        if(rows.empty()) return;
-        string sql = "INSERT INTO " + connection->quote_name(prefix + table) + " (" + columns + ") VALUES ";
-        for(size_t i = 0; i < rows.size(); i++)
-        {
-            if(i) sql += ",";
-            sql += rows[i];
-        }
-        rows.clear();
-        w.exec(sql);
-    };
-    // An object appearing twice breaks the primary key and fails the import,
-    // because there would be no telling which copy the extract should hold.
-    const string common = "extract_id,id,changeset,username,uid,timestamp,version,tags";
-    insert("extract_livenodes", common + ",geom", objectRows[0]);
-    insert("extract_liveways", common + ",members", objectRows[1]);
-    insert("extract_liverelations", common + ",members,memberroles", objectRows[2]);
-    // Membership rows refer to their way or relation, so they follow it
-    const char *memberTables[] = {"extract_way_mems", "extract_relation_mems_n",
-        "extract_relation_mems_w", "extract_relation_mems_r"};
-    for(size_t i = 0; i < 4; i++)
-        insert(memberTables[i], "extract_id,id,version,index,member", memberRows[i]);
+    InsertExtractRows(*connection, Work(), prefix, *rows);
 }
 
 void PgExtractImport::Finish()
@@ -417,18 +473,216 @@ void PgExtractImport::Finish()
     if(haveCheckpoint)
         sql += ",edit_activity_id=" + to_string(editActivityId) + ",atomic_edit_id=" + to_string(atomicEditId);
     w.exec(sql + " WHERE id=" + id);
-    // Ways get the bbox of whichever of their nodes the extract holds, as the
-    // map's own ways have. Relation bboxes are left unset: working one out
-    // needs members the extract may not hold, and nothing reads it from here.
-    // Naming the extract in each lookup, rather than joining on it, keeps
-    // every step on a primary key however stale the planner's statistics are
-    // after the bulk insert.
-    w.exec("UPDATE " + connection->quote_name(prefix + "extract_liveways") + " w SET bbox=("
-        "SELECT ST_Envelope(ST_Collect(n.geom)) FROM " +
-        connection->quote_name(prefix + "extract_way_mems") + " m JOIN " +
-        connection->quote_name(prefix + "extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member "
-        "WHERE m.extract_id=" + id + " AND m.id=w.id) WHERE w.extract_id=" + id);
+    UpdateExtractWayBboxes(*connection, w, prefix, extractId);
     finished = true;
+}
+
+// ****** Patching an extract from published edits ******
+
+// Objects waiting to be applied, the highest version of each. One that is not
+// visible stands for a deletion.
+struct ExtractPending
+{
+    std::map<int64_t, OsmNode> nodes;
+    std::map<int64_t, OsmWay> ways;
+    std::map<int64_t, OsmRelation> relations;
+};
+
+template<class T> static void KeepHighestVersion(std::map<int64_t, T> &pending, const T &object)
+{
+    auto it = pending.find(object.objId);
+    if(it == pending.end() || it->second.metaData.version <= object.metaData.version)
+        pending[object.objId] = object;
+}
+
+static string IdArraySql(const std::vector<int64_t> &ids)
+{
+    string sql = "ARRAY[";
+    for(size_t i = 0; i < ids.size(); i++)
+        sql += (i ? "," : "") + to_string(ids[i]);
+    return sql + "]::bigint[]";
+}
+
+static int ExtractTypeIndex(const string &type)
+{
+    if(type == "node") return 0;
+    if(type == "way") return 1;
+    if(type == "relation") return 2;
+    throw invalid_argument("Object type must be node, way or relation");
+}
+
+PgExtractPatch::PgExtractPatch(shared_ptr<pqxx::connection> connectionIn,
+    shared_ptr<PgWork> workIn, const string &prefixIn, int64_t extractIdIn):
+    connection(connectionIn), work(workIn), prefix(prefixIn), extractId(extractIdIn),
+    pending(new ExtractPending())
+{
+    auto rows = Work().exec("SELECT id FROM " + connection->quote_name(prefix + "extracts") +
+        " WHERE id=" + to_string(extractId));
+    if(rows.empty()) throw runtime_error("Extract not found");
+}
+
+pqxx::transaction_base &PgExtractPatch::Work()
+{
+    if(!work || !work->work) throw runtime_error("Transaction has been deleted");
+    return *work->work;
+}
+
+void PgExtractPatch::StoreNode(const OsmNode &node) { KeepHighestVersion(pending->nodes, node); }
+void PgExtractPatch::StoreWay(const OsmWay &way) { KeepHighestVersion(pending->ways, way); }
+void PgExtractPatch::StoreRelation(const OsmRelation &relation) { KeepHighestVersion(pending->relations, relation); }
+
+void PgExtractPatch::RemoveObject(const string &type, int64_t objId, int64_t version)
+{
+    int index = ExtractTypeIndex(type);
+    if(index == 0)
+    {
+        OsmNode gone; gone.objId = objId; gone.metaData.version = version; gone.metaData.visible = false;
+        KeepHighestVersion(pending->nodes, gone);
+    }
+    else if(index == 1)
+    {
+        OsmWay gone; gone.objId = objId; gone.metaData.version = version; gone.metaData.visible = false;
+        KeepHighestVersion(pending->ways, gone);
+    }
+    else
+    {
+        OsmRelation gone; gone.objId = objId; gone.metaData.version = version; gone.metaData.visible = false;
+        KeepHighestVersion(pending->relations, gone);
+    }
+}
+
+std::vector<int64_t> PgExtractPatch::GetArrivedIds(const string &type) const
+{
+    return arrived[ExtractTypeIndex(type)];
+}
+
+void PgExtractPatch::Apply()
+{
+    auto &w = Work();
+    string id = to_string(extractId);
+    auto table = [&](const string &suffix) { return connection->quote_name(prefix + suffix); };
+    const char *live[] = {"extract_livenodes", "extract_liveways", "extract_liverelations"};
+    ExtractRows rows;
+    std::vector<int64_t> replaced[3], candidates[3];
+
+    // An object sent changes the extract if the extract does not hold it, or
+    // holds it at the same or a lower version.
+    auto storedVersions = [&](int index, const std::vector<int64_t> &ids)
+    {
+        std::map<int64_t, int64_t> stored;
+        if(!ids.empty())
+            for(const auto &row : w.exec("SELECT id, version FROM " + table(live[index]) +
+                " WHERE extract_id=" + id + " AND id = ANY(" + IdArraySql(ids) + ")"))
+                stored[row[0].as<int64_t>()] = row[1].as<int64_t>();
+        return stored;
+    };
+
+    {
+        std::vector<int64_t> ids;
+        for(const auto &entry : pending->nodes) ids.push_back(entry.first);
+        auto stored = storedVersions(0, ids);
+        for(const auto &entry : pending->nodes)
+        {
+            auto held = stored.find(entry.first);
+            if(held != stored.end() && held->second > entry.second.metaData.version) continue;
+            if(held != stored.end()) replaced[0].push_back(entry.first);
+            if(!entry.second.metaData.visible) continue;
+            AddExtractNode(w, extractId, entry.second, rows);
+            if(held == stored.end()) candidates[0].push_back(entry.first);
+        }
+    }
+    {
+        std::vector<int64_t> ids;
+        for(const auto &entry : pending->ways) ids.push_back(entry.first);
+        auto stored = storedVersions(1, ids);
+        for(const auto &entry : pending->ways)
+        {
+            auto held = stored.find(entry.first);
+            if(held != stored.end() && held->second > entry.second.metaData.version) continue;
+            if(held != stored.end()) replaced[1].push_back(entry.first);
+            if(!entry.second.metaData.visible) continue;
+            AddExtractWay(w, extractId, entry.second, rows);
+            if(held == stored.end()) candidates[1].push_back(entry.first);
+        }
+    }
+    {
+        std::vector<int64_t> ids;
+        for(const auto &entry : pending->relations) ids.push_back(entry.first);
+        auto stored = storedVersions(2, ids);
+        for(const auto &entry : pending->relations)
+        {
+            auto held = stored.find(entry.first);
+            if(held != stored.end() && held->second > entry.second.metaData.version) continue;
+            if(held != stored.end()) replaced[2].push_back(entry.first);
+            if(!entry.second.metaData.visible) continue;
+            AddExtractRelation(w, extractId, entry.second, rows);
+            if(held == stored.end()) candidates[2].push_back(entry.first);
+        }
+    }
+
+    // Changed nodes and ways, for giving ways their boxes again below
+    std::vector<int64_t> changedNodes = replaced[0], changedWays = replaced[1];
+    changedNodes.insert(changedNodes.end(), candidates[0].begin(), candidates[0].end());
+    changedWays.insert(changedWays.end(), candidates[1].begin(), candidates[1].end());
+
+    // Membership rows go with their way or relation
+    for(int index = 2; index >= 0; index--)
+        if(!replaced[index].empty())
+            w.exec("DELETE FROM " + table(live[index]) + " WHERE extract_id=" + id +
+                " AND id = ANY(" + IdArraySql(replaced[index]) + ")");
+    InsertExtractRows(*connection, w, prefix, rows);
+    pending.reset(new ExtractPending());
+
+    // Keep only what the extract's rule selects, in the order the rule builds
+    // on itself: ways with a node in the rectangle, then nodes in it or used
+    // by a way that stayed, then relations with a node or way that stayed.
+    string bbox = "(SELECT bbox FROM " + table("extracts") + " WHERE id=" + id + ")";
+    w.exec("DELETE FROM " + table("extract_liveways") + " w WHERE w.extract_id=" + id +
+        " AND NOT EXISTS (SELECT 1 FROM " + table("extract_way_mems") + " m JOIN " +
+        table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
+        " WHERE m.extract_id=" + id + " AND m.id=w.id AND n.geom && " + bbox + ")");
+    w.exec("DELETE FROM " + table("extract_livenodes") + " n WHERE n.extract_id=" + id +
+        " AND NOT (n.geom && " + bbox + ") AND NOT EXISTS (SELECT 1 FROM " +
+        table("extract_way_mems") + " m WHERE m.extract_id=" + id + " AND m.member=n.id)");
+    w.exec("DELETE FROM " + table("extract_liverelations") + " r WHERE r.extract_id=" + id +
+        " AND NOT EXISTS (SELECT 1 FROM " + table("extract_relation_mems_n") + " m JOIN " +
+        table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
+        " WHERE m.extract_id=" + id + " AND m.id=r.id)"
+        " AND NOT EXISTS (SELECT 1 FROM " + table("extract_relation_mems_w") + " m JOIN " +
+        table("extract_liveways") + " y ON y.extract_id=" + id + " AND y.id=m.member"
+        " WHERE m.extract_id=" + id + " AND m.id=r.id)");
+
+    if(!changedNodes.empty() || !changedWays.empty())
+        UpdateExtractWayBboxes(*connection, w, prefix, extractId,
+            "w.id = ANY(" + IdArraySql(changedWays) + ") OR EXISTS (SELECT 1 FROM " +
+            table("extract_way_mems") + " c WHERE c.extract_id=" + id + " AND c.id=w.id AND c.member = ANY(" +
+            IdArraySql(changedNodes) + "))");
+
+    // What the caller may need to follow up
+    for(int index = 0; index < 3; index++)
+    {
+        arrived[index].clear();
+        if(candidates[index].empty()) continue;
+        for(const auto &row : w.exec("SELECT id FROM " + table(live[index]) + " WHERE extract_id=" + id +
+            " AND id = ANY(" + IdArraySql(candidates[index]) + ") ORDER BY id"))
+            arrived[index].push_back(row[0].as<int64_t>());
+    }
+    missingNodes.clear();
+    for(const auto &row : w.exec("SELECT DISTINCT m.member FROM " + table("extract_way_mems") +
+        " m WHERE m.extract_id=" + id + " AND NOT EXISTS (SELECT 1 FROM " + table("extract_livenodes") +
+        " n WHERE n.extract_id=" + id + " AND n.id=m.member) ORDER BY m.member"))
+        missingNodes.push_back(row[0].as<int64_t>());
+}
+
+void PgExtractPatch::SetCheckpoint(int64_t editActivityId, int64_t atomicEditId)
+{
+    if(editActivityId < 0 || atomicEditId < 0)
+        throw invalid_argument("Edit IDs must not be negative");
+    // An extract kept up this way follows the rule described above, whatever
+    // the mode of the map it was first saved or imported under.
+    Work().exec("UPDATE " + connection->quote_name(prefix + "extracts") + " SET edit_activity_id=" +
+        to_string(editActivityId) + ",atomic_edit_id=" + to_string(atomicEditId) +
+        ",performed_at=CURRENT_TIMESTAMP,use_bbox_in_query=false WHERE id=" + to_string(extractId));
 }
 
 #include "pgmap.h"

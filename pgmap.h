@@ -219,6 +219,10 @@ public:
 	// Remove a stored extract and its contents; returns its ID.
 	int64_t DeleteExtract(int64_t extractId, const std::string &name);
 
+	// Change what a stored extract holds from objects supplied by the caller,
+	// without reading this map: see PgExtractPatch. Commit when done.
+	std::shared_ptr<PgExtractPatch> StartPatchExtract(int64_t extractId);
+
 	// Set whether an extract is to be updated automatically, and the API to
 	// update it from: blank for this map's own, else an http or https URL.
 	// Returns the extract's ID. Select by positive ID, or by a unique name
@@ -247,13 +251,14 @@ public:
 	// The same IDs as attributes for the root element of an OSM XML document.
 	std::map<std::string, std::string> GetLatestEditIdAttribs();
 	// Inclusive row range; lastId/atomicEditId zero means no corresponding filter.
+	// Both give rows in ID order. limit, if positive, is the most to return.
 	void QueryEditActivityByIds(int64_t firstId, int64_t lastId, int64_t atomicEditId,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-		class PgMapError &errStr);
+		class PgMapError &errStr, int64_t limit = 0);
 	void QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 		int64_t untilTimestamp,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-		class PgMapError &errStr);
+		class PgMapError &errStr, int64_t limit = 0);
 
 	std::string GetMetaValue(const std::string &key, 
 		class PgMapError &errStr);

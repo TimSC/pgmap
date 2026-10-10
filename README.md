@@ -233,6 +233,24 @@ Row ranges can split atomic edits; use atomic-edit queries when a complete group
 is required. Timestamp queries remain supported but cannot be combined with ID
 filters. Rebuild pgmap bindings for the new QueryEditActivityByIds method.
 
+Edit activity (schema version 14)
+---------------------------------
+
+Each block of an upload is recorded as a row of `edit_activity`: the edited
+objects before and after, the ways and relations that hold them
+(`affectedparents`), and the unedited members around them (`related`), all as
+type, ID and version. `related_parents` holds, in the same form, the relations
+that have a related node as a member. The edit does not touch those relations,
+but a consumer keeping part of the map up to date from these records needs
+them: a related node can be new to it, brought in as part of a way, and then
+the relations holding that node belong there too. With them a record carries
+everything such a consumer needs, and it has no reason to query the map.
+
+`related_parents` was added to schema 14 after it was first in use. It is NULL
+in rows recorded before then, which means not recorded, not that there were
+none. On a map already at version 14, asking the admin tool for schema version
+14 again adds the column; until then edits are recorded without it.
+
 Extract storage (schema version 14)
 ----------------------------------
 
@@ -246,8 +264,9 @@ extracts by extract ID; each extract has one current state without an overlay.
   checkpoint denotes an extract whose initial snapshot is not established.
   `auto_update` (default false) says whether the extract is to be kept up to
   date automatically, and `update_url` (default blank) names the API to update
-  it from, blank meaning this map's own. Both only record what is wanted so
-  far: no tool acts on them yet. They were added to schema 14 after it was
+  it from, blank meaning this map's own. pgmap's own tools do not act on
+  them; pycrocosm's `updateextracts` command does, using `PgExtractPatch` to
+  apply edits published by another server. They were added to schema 14 after it was
   first in use; on a map already at version 14, asking the admin tool for
   schema version 14 again adds them.
 * `extract_livenodes`, `extract_liveways`, `extract_liverelations`: columns match

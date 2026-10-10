@@ -978,6 +978,16 @@ std::shared_ptr<PgExtractImport> PgTransaction::StartImportExtract(const string 
 		tableActivePrefix, name, bbox, editActivityId, atomicEditId));
 }
 
+std::shared_ptr<PgExtractPatch> PgTransaction::StartPatchExtract(int64_t extractId)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while changing an extract");
+	if(extractId <= 0)
+		throw invalid_argument("Select the extract by positive ID");
+	LockExtractTables("EXCLUSIVE");
+	return shared_ptr<PgExtractPatch>(new PgExtractPatch(dbconn, sharedWork, tableActivePrefix, extractId));
+}
+
 int64_t PgTransaction::SetExtractAutoUpdate(int64_t extractId, const string &name,
 	bool autoUpdate, const string &updateUrl)
 {
@@ -1751,7 +1761,7 @@ std::map<std::string, std::string> PgTransaction::GetLatestEditIdAttribs()
 
 void PgTransaction::QueryEditActivityByIds(int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-	class PgMapError &errStr)
+	class PgMapError &errStr, int64_t limit)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1760,13 +1770,13 @@ void PgTransaction::QueryEditActivityByIds(int64_t firstId, int64_t lastId,
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work) throw runtime_error("Transaction has been deleted");
 	DbQueryEditActivityByIds(*dbconn, work.get(), this->tableActivePrefix,
-		firstId, lastId, atomicEditId, editActivity, errStr.errStr);
+		firstId, lastId, atomicEditId, editActivity, errStr.errStr, limit);
 }
 
 void PgTransaction::QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &editActivity,
-	class PgMapError &errStr)
+	class PgMapError &errStr, int64_t limit)
 {
 	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
 		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
@@ -1780,7 +1790,7 @@ void PgTransaction::QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 		this->tableActivePrefix,
 		sinceTimestamp, untilTimestamp,
 		editActivity,
-		errStrNative);
+		errStrNative, limit);
 
 	errStr.errStr = errStrNative;
 }

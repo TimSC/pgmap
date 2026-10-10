@@ -240,6 +240,7 @@ namespace std {
 %include "pgcommon.h"
 %shared_ptr(PgExtractExport)
 %shared_ptr(PgExtractImport)
+%shared_ptr(PgExtractPatch)
 %ignore DbUpdateExtract;
 %ignore DbCompareExtract;
 %ignore DbListExtractIds;

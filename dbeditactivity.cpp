@@ -28,6 +28,7 @@ public:
 	int uidCol;
 
 	int existingCol, updatedCol, affectedParentsCol, relatedCol;
+	int relatedParentsCol; //-1 on a map whose table has not gained the column
 
 	EditActivityCols(pqxx::result &r);
 };
@@ -54,6 +55,14 @@ EditActivityCols::EditActivityCols(pqxx::result &r)
 	updatedCol = r.column_number("updated");
 	affectedParentsCol = r.column_number("affectedparents");
 	relatedCol = r.column_number("related");
+	try
+	{
+		relatedParentsCol = r.column_number("related_parents");
+	}
+	catch(const std::exception &)
+	{
+		relatedParentsCol = -1;
+	}
 }
 
 //*******************************************************
@@ -69,6 +78,7 @@ EditActivity::EditActivity()
 	changeset = 0;
 	timestamp = 0;
 	uid = 0;
+	relatedparentsRecorded = false;
 }
 
 EditActivity::~EditActivity()
@@ -108,6 +118,9 @@ EditActivity& EditActivity::operator=(const EditActivity &arg)
 	affectedparentsIdVer = arg.affectedparentsIdVer;
 	relatedType = arg.relatedType;
 	relatedIdVer = arg.relatedIdVer;
+	relatedparentsType = arg.relatedparentsType;
+	relatedparentsIdVer = arg.relatedparentsIdVer;
+	relatedparentsRecorded = arg.relatedparentsRecorded;
 
 	return *this;
 }
@@ -152,6 +165,17 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 	DecodeObjTypeIdVers(relatedJson,
 		out.relatedType,
 		out.relatedIdVer);
+
+	out.relatedparentsType.clear();
+	out.relatedparentsIdVer.clear();
+	out.relatedparentsRecorded = cols.relatedParentsCol >= 0 && !row[cols.relatedParentsCol].is_null();
+	if(out.relatedparentsRecorded)
+	{
+		string relatedParentsJson = row[cols.relatedParentsCol].as<string>();
+		DecodeObjTypeIdVers(relatedParentsJson,
+			out.relatedparentsType,
+			out.relatedparentsIdVer);
+	}
 }
 
 bool DbGetEditActivityById(pqxx::connection &c,
@@ -201,7 +225,8 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	int64_t sinceTimestamp,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
-	std::string &errStr)
+	std::string &errStr,
+	int64_t limit)
 {
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
@@ -211,6 +236,9 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	sql << " FROM " << table << " WHERE timestamp>="<<sinceTimestamp;
 	if (untilTimestamp > 0)
 		sql << " AND timestamp<"<<untilTimestamp;
+	sql << " ORDER BY id";
+	if (limit > 0)
+		sql << " LIMIT " << limit;
 	sql <<";" ;
 
 	try
@@ -244,7 +272,8 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	int64_t lastId,
 	int64_t atomicEditId,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
-	std::string &errStr)
+	std::string &errStr,
+	int64_t limit)
 {
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
@@ -254,7 +283,9 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	sql << " FROM " << table << " WHERE id >= " << firstId;
 	if(lastId > 0) sql << " AND id <= " << lastId;
 	if(atomicEditId > 0) sql << " AND atomic_edit_id = " << atomicEditId;
-	sql << " ORDER BY id;";
+	sql << " ORDER BY id";
+	if(limit > 0) sql << " LIMIT " << limit;
+	sql << ";";
 
 	try
 	{
@@ -337,6 +368,30 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		errStr = e.what();
 		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+
+	if(!activity.relatedparentsRecorded)
+		return true;
+	try
+	{
+		// The column was added to schema 14 after it was first in use. A map
+		// that has not gained it yet goes on recording edits without it.
+		string tableName = tablePrefix + "edit_activity";
+		pqxx::result has = work->exec("SELECT 1 FROM information_schema.columns WHERE table_schema = ANY(current_schemas(false))"
+			" AND table_name = " + work->quote(tableName) + " AND column_name = 'related_parents'");
+		if(has.empty())
+			return true;
+		string relatedParentsEnc;
+		EncodeObjTypeIdVers(activity.relatedparentsType, activity.relatedparentsIdVer, relatedParentsEnc);
+		// The row just inserted, in this session: the map is locked for writing
+		string table = c.quote_name(tableName);
+		work->exec("UPDATE " + table + " SET related_parents = " + work->quote(relatedParentsEnc) +
+			"::jsonb WHERE id = currval(pg_get_serial_sequence(" + work->quote(table) + ", 'id'))");
 	}
 	catch (const std::exception &e)
 	{

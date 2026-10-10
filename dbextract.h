@@ -56,16 +56,12 @@ class PgExtractImport : public IDataStreamHandler
     int64_t editActivityId = 0, atomicEditId = 0;
     std::string fileEditActivityId, fileAtomicEditId;
     int64_t numNodes = 0, numWays = 0, numRelations = 0;
-    // Pending rows, as SQL value lists: 0 nodes, 1 ways, 2 relations
-    std::array<std::vector<std::string>, 3> objectRows;
-    // 0 way_mems, then relation_mems_n, _w and _r
-    std::array<std::vector<std::string>, 4> memberRows;
+    std::shared_ptr<struct ExtractRows> rows; // Waiting to be written
 
     PgExtractImport(std::shared_ptr<pqxx::connection>, std::shared_ptr<class PgWork>,
         const std::string &prefix, const std::string &name, const std::vector<double> &bbox,
         int64_t editActivityId, int64_t atomicEditId);
     pqxx::transaction_base &Work();
-    std::string CommonValues(const class OsmObject &object);
     void Flush();
     void FlushIfLarge();
 public:
@@ -81,6 +77,52 @@ public:
     void StoreWay(const OsmWay &way) override;
     void StoreRelation(const OsmRelation &relation) override;
     void Finish() override;
+};
+
+// Changes what a stored extract holds without reading the map, for keeping an
+// extract in step with edits made on another server, whose map this one cannot
+// query. Send it objects as the other server published them, then call Apply.
+//
+// An object sent replaces the extract's copy unless that copy has a higher
+// version; one sent as deleted (not visible, or through RemoveObject) removes
+// it. Apply then discards whatever the extract's rule no longer selects. The
+// rule is the one a map query follows without stored bounding boxes: nodes in
+// the rectangle, ways with such a node and all their nodes, and relations with
+// one of those nodes or ways as a member. So context can be sent freely: a way
+// that turns out not to reach into the rectangle is simply dropped again.
+class PgExtractPatch : public IDataStreamHandler
+{
+    friend class PgTransaction;
+    std::shared_ptr<pqxx::connection> connection;
+    std::shared_ptr<class PgWork> work;
+    std::string prefix;
+    int64_t extractId = 0;
+    std::shared_ptr<struct ExtractPending> pending;
+    std::vector<int64_t> arrived[3], missingNodes;
+
+    PgExtractPatch(std::shared_ptr<pqxx::connection>, std::shared_ptr<class PgWork>,
+        const std::string &prefix, int64_t extractId);
+    pqxx::transaction_base &Work();
+public:
+    int64_t GetId() const { return extractId; }
+
+    void StoreNode(const OsmNode &node) override;
+    void StoreWay(const OsmWay &way) override;
+    void StoreRelation(const OsmRelation &relation) override;
+    // The object of this type ("node", "way" or "relation") was deleted, at this version.
+    void RemoveObject(const std::string &type, int64_t objId, int64_t version);
+
+    // Write everything sent since the last Apply, then discard what the
+    // extract's rule no longer selects.
+    void Apply();
+    // After Apply: objects of a type that the extract holds now and did not
+    // before. Whatever refers to them elsewhere may need sending too.
+    std::vector<int64_t> GetArrivedIds(const std::string &type) const;
+    // After Apply: nodes that ways in the extract use but it does not hold.
+    std::vector<int64_t> GetMissingNodeIds() const { return missingNodes; }
+
+    // Record the edits the extract is now current to, and the time.
+    void SetCheckpoint(int64_t editActivityId, int64_t atomicEditId);
 };
 
 // Caller holds main-map locks followed by EXCLUSIVE locks on all extract tables.

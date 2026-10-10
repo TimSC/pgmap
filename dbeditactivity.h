@@ -37,6 +37,15 @@ public:
 	std::vector<std::pair<int64_t, int64_t> > affectedparentsIdVer;
 	std::vector<std::string> relatedType;
 	std::vector<std::pair<int64_t, int64_t> > relatedIdVer;
+	// The relations that have one of the related nodes as a member, other than
+	// those already among the edited objects and affected parents. Something
+	// following these records needs them when a related node is new to it: the
+	// edit did not touch these relations, so nothing else here mentions them.
+	// relatedparentsRecorded is false for a row made before this was recorded,
+	// which is not the same as there being none.
+	std::vector<std::string> relatedparentsType;
+	std::vector<std::pair<int64_t, int64_t> > relatedparentsIdVer;
+	bool relatedparentsRecorded;
 
 	EditActivity();
 	virtual ~EditActivity();
@@ -70,7 +79,8 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	int64_t sinceTimestamp,
 	int64_t untilTimestamp,
 	std::vector<std::shared_ptr<class EditActivity> > &out,
-	std::string &errStr);
+	std::string &errStr,
+	int64_t limit = 0); //The rows come in ID order; limit, if positive, is the most to return
 
 // Latest edit activity row ID and atomic edit ID; zero when there is no activity.
 void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
@@ -79,6 +89,7 @@ void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
 void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &out,
-	std::string &errStr);
+	std::string &errStr,
+	int64_t limit = 0);
 
 #endif //_EDIT_ACTIVITY_H

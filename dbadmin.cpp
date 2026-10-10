@@ -317,6 +317,20 @@ bool DbDropExtractTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+// What schema 14 has gained since it was introduced. Every step leaves alone
+// whatever is already there, so it both finishes an upgrade to version 14 and
+// brings an older version 14 up to date.
+bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, string &errStr)
+{
+	// The relations holding an edit's related nodes: see EditActivity. Rows
+	// from before the column existed keep NULL there, meaning not recorded.
+	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
+		" ADD COLUMN IF NOT EXISTS related_parents JSONB;";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
+}
+
 // Legacy rows remain ungrouped: timestamps cannot recover upload boundaries.
 bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
@@ -339,7 +353,7 @@ bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE UNIQUE INDEX " + c.quote_name(tablePrefix + "activity_atomic_block") +
 		" ON " + table + " (atomic_edit_id, block_index);";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
-	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
+	return DbAmendSchema14(c, work, verbose, tablePrefix, errStr);
 }
 
 bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
@@ -347,7 +361,7 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	string sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
-		" DROP COLUMN atomic_edit_id, DROP COLUMN block_index, "
+		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN atomic_edit_id, DROP COLUMN block_index, "
 		"DROP COLUMN sync_before, DROP COLUMN bbox_before, DROP COLUMN sync_after, DROP COLUMN bbox_after;";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "DROP SEQUENCE " + c.quote_name(tablePrefix + "atomic_edit_id_seq") + ";";
@@ -540,7 +554,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		// Schema 14 has gained columns since it was introduced. Every step of
 		// creating its extract tables leaves alone whatever is already there,
 		// so asking for version 14 again brings an older version 14 up to date.
-		if(!DbCreateExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
+		if(!DbAmendSchema14(c, work, verbose, tablePrefix, errStr)) return false;
 	}
 
 	//Downgrading
