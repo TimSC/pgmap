@@ -67,22 +67,17 @@ private:
 	std::shared_ptr<pqxx::connection> dbconn;
 	bool mapQueryActive;
 	int mapQueryPhase;
-	std::shared_ptr<class DataStreamRetainIds> retainNodeIds;
 	std::shared_ptr<IDataStreamHandler> mapQueryEnc;
 	std::vector<double> mapQueryBbox;
 	std::string mapQueryWkt;
 	std::shared_ptr<class PgWork> sharedWork;
-	std::set<int64_t> extraNodes;
-	std::shared_ptr<class DataStreamRetainIds> retainWayIds;
-	std::shared_ptr<class DataStreamRetainMemIds> retainWayMemIds;
-	std::shared_ptr<class DataStreamRetainIds> retainRelationIds;
 	std::shared_ptr<pqxx::icursorstream> cursor;
-	std::set<int64_t>::const_iterator setIterator;
-	IDataStreamHandler nullEncoder;
+	std::string extraNodesSql, relationsSql;
 	class DbUsernameLookup &dbUsernameLookup;
 	bool useBboxInQuery;
 
 	int StartCommon(const std::vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
+	void SelectObjects();
 
 public:
 	PgMapQuery(const std::string &tableStaticPrefixIn, 

@@ -92,6 +92,11 @@ std::string DbUsernameLookup::Find(int uid)
 		}
 	}
 
+	// Remember that there is no name to be had, or every object of a user who
+	// is in neither table costs these two queries again. The caller then keeps
+	// the name stored with the object. This lookup lasts for one transaction.
+	this->cache[uid] = "";
+	if (this->cache.size()>DB_USERNAME_CACHE_MAX) cache.clear();
 	return "";
 }
 
