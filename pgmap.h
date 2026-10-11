@@ -99,11 +99,14 @@ public:
 	void Reset();
 };
 
+class EditActivityRecorder;
+
 class PgTransaction : public PgCommon
 {
 private:
 	int64_t atomicEditId = 0;
 	int64_t activityBlockIndex = 0;
+	std::shared_ptr<class EditActivityRecorder> activityRecorder;
 	void LockExtractTables(const std::string &accessMode);
 
 
@@ -137,6 +140,15 @@ public:
 		const std::set<int64_t> &objectIds, int verbose, 
 		bool saveToStaticTables,
 		class PgMapError &errStr);
+	// Recording a block of an upload as edit activity. Call the first before
+	// the block is stored, which also gives the ways and relations holding
+	// its objects, and the second once it is stored and the boxes of its ways
+	// and relations and of those parents are up to date. The rules for what
+	// is recorded are with EditActivityRecorder.
+	void EditActivityBeforeStore(const std::string &action, std::shared_ptr<class OsmData> block,
+		std::shared_ptr<class OsmData> affectedParentsOut);
+	bool EditActivityAfterStore(const std::string &action, std::shared_ptr<class OsmData> block,
+		int64_t changeset, int64_t uid, int64_t timestamp, class PgMapError &errStr);
 	bool InsertEditActivity(const class EditActivity &activity,
 		class PgMapError &errStr);
 

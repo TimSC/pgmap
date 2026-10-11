@@ -343,7 +343,9 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 		// lists of existing objects and these boxes say what they were for.
 		// The checks that tied them together go with them.
 		" DROP COLUMN IF EXISTS sync_before, DROP COLUMN IF EXISTS bbox_before,"
-		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after;";
+		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after,"
+		// The table's original box of a whole edit, which nothing ever filled in
+		" DROP COLUMN IF EXISTS bbox;";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	// Finding the records of a changeset, as its change counts do, without
 	// reading the whole table
@@ -358,9 +360,6 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 			" ON " + c.quote_name(tablePrefix + "edit_activity") + " USING GIST (" + column + ");";
 		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	}
-	// An index schema 14 briefly had on the bbox column, which is not searched
-	sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_gix_bbox") + ";";
-	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
@@ -387,9 +386,7 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	string sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_changeset") + ";";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
-	// The box indices go with their columns, below. This one may remain from an earlier build.
-	sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_gix_bbox") + ";";
-	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	// The box indices go with their columns, below
 	sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
 		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN IF EXISTS existing_bbox,"
 		" DROP COLUMN IF EXISTS updated_bbox, DROP COLUMN IF EXISTS affectedparents_before_bbox,"
@@ -397,7 +394,9 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 		" DROP COLUMN IF EXISTS relation_reach_bbox,"
 		" DROP COLUMN atomic_edit_id, DROP COLUMN block_index,"
 		" DROP COLUMN IF EXISTS sync_before, DROP COLUMN IF EXISTS bbox_before,"
-		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after;";
+		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after,"
+		// As the table had it before version 14
+		" ADD COLUMN IF NOT EXISTS bbox GEOMETRY(Geometry, 4326);";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "DROP SEQUENCE " + c.quote_name(tablePrefix + "atomic_edit_id_seq") + ";";
 	return DbExec(work, sql, errStr, nullptr, verbose);

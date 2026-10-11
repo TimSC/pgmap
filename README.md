@@ -281,10 +281,12 @@ modifies or deletes a relation, `relation_reach_bbox` is set to a polygon of
 the extent of the ways that hold the relation's member nodes, and the filter
 tests that as well. It is NULL for every other edit, which here means nowhere
 more, not unknown. It and the four collections each have a GiST index. The
-older `bbox` column of the table is not used.
+`bbox` column the table had before version 14, which nothing filled in, is
+dropped by the schema step.
 
 Rows are written by the web API's upload and by the admin tool's "Apply
-diffs". Applying diffs follows the same rules, with these differences: each
+diffs", both through `EditActivityRecorder` (dbeditactivity.h), where the
+rules for what a row holds are set out. Applying diffs differs in these ways: each
 diff file is one atomic edit, with one row for each of its action blocks; a
 row takes its changeset and user from the first object of its block and its
 time from the latest; and nothing is checked, so a diff that deletes an object
@@ -296,7 +298,8 @@ does not write rows.
 `related_parents` and the bounding box columns were added to schema 14 after
 it was first in use. They are NULL in rows recorded before then, which means
 not recorded. On a map already at version 14, asking the admin tool for schema
-version 14 again adds the columns; until then edits are recorded without them.
+version 14 again adds the columns. That has to be done: until it is, recording
+an edit and reading the records fail, with an error saying so.
 
 Extract storage (schema version 14)
 ----------------------------------

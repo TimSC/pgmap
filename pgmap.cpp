@@ -1055,6 +1055,37 @@ void PgTransaction::CompareAllExtracts(vector<ExtractComparison> &out)
 	}
 }
 
+void PgTransaction::EditActivityBeforeStore(const std::string &action, std::shared_ptr<class OsmData> block,
+	std::shared_ptr<class OsmData> affectedParentsOut)
+{
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	if(!activityRecorder)
+		activityRecorder.reset(new class EditActivityRecorder(*dbconn, work.get(), this->tableActivePrefix, this));
+	if(!activityRecorder->Enabled())
+		throw runtime_error("Edit activity needs map schema version 14");
+	activityRecorder->BeforeStore(action, *block);
+	if(affectedParentsOut)
+		*affectedParentsOut = activityRecorder->AffectedParents();
+}
+
+bool PgTransaction::EditActivityAfterStore(const std::string &action, std::shared_ptr<class OsmData> block,
+	int64_t changeset, int64_t uid, int64_t timestamp, class PgMapError &errStr)
+{
+	if(!activityRecorder)
+		throw runtime_error("EditActivityBeforeStore has not been called");
+	class EditActivity activity;
+	activityRecorder->Build(action, *block, activity);
+	// An upload is one changeset by one user at one moment
+	activity.changeset = changeset;
+	activity.uid = uid;
+	activity.timestamp = timestamp;
+	return this->InsertEditActivity(activity, errStr);
+}
+
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 		class PgMapError &errStr)
 {

@@ -21,7 +21,6 @@ public:
 	int ways;
 	int relations;
 	std::string action;
-	std::vector<double> bbox;
 	int64_t changeset;
 	int64_t timestamp;
 	int64_t uid;
@@ -117,17 +116,98 @@ void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::vector<double> &bbox = std::vector<double>(),
 	bool newest = false);
 
-// Records the edit activity of changes that are applied to the map without
-// going through the web API's upload, such as replication diffs. It follows
-// the rules of upload_block in pycrocosm's changeset/views.py, where they are
-// written out, and the two have to be kept in step: what each list of a
-// record holds, the boxes that go with the lists, and relation_reach_bbox.
+// Builds the edit activity record of a block of changes: one action (create,
+// modify or delete) applied to a set of objects. It is used both by the web
+// API's upload (through PgTransaction) and by the admin tool when it applies
+// diffs, so that everything that changes the map is recorded by one set of
+// rules. For each block, call BeforeStore while the map is as it was, store
+// the block and bring the boxes of its ways and relations and of
+// AffectedParents() up to date, then call Build. The map must stay
+// exclusively locked from the first block until commit.
 //
-// One recorder is one atomic edit: the blocks it records share an atomic edit
-// ID and are numbered in order. For each block, call BeforeStore while the
-// map is as it was, store the block and bring the boxes of its ways and
-// relations and of AffectedParents() up to date, then call AfterStore. The
-// map must stay exclusively locked from the first block until commit.
+// Every list of a record holds (type, ID, version) references, nodes first,
+// then ways, then relations. The rules for what goes in each list are:
+//
+// existing: the objects of the block as the map had them before the edit, so
+//   with the version the edit replaces.
+//   - create: empty.
+//   - modify, delete: every object of the block that the map has.
+//
+// updated: the objects the block stored, with the version the edit gave them.
+//   - create: the new objects, under the IDs they were given.
+//   - modify: the new version of each object.
+//   - delete: the deleted version of each object (not visible).
+//
+// affectedparents: ways and relations the block does not edit, but which hold
+//   something it does. Their version is unchanged, though their extent can
+//   change. Found by GetAffectedParents2 before the block is stored:
+//   - create: empty. Nothing can hold an object that did not exist.
+//   - modify, delete:
+//     1. ways having a node of the block,
+//     2. relations having as a member a node of the block, a way of the block
+//        or a way from step 1,
+//     3. relations holding a relation of the block or one already found,
+//        repeated upwards for at most 10 levels.
+//   - An object in the block is never listed, as it is in updated.
+//
+// related: unedited objects below the edited ones, which are needed to make
+//   sense of them, at their current version.
+//   - create: every existing object the block refers to: the nodes of its
+//     ways and the node, way and relation members of its relations.
+//   - modify: nodes only: those of the block's ways (as now stored) and those
+//     of the affected parent ways. The members of a modified relation are not
+//     included.
+//   - delete: empty.
+//   - Anything in the block or in affectedparents is left out.
+//
+// relatedparents: relations having a related node as a member, leaving out
+//   any in the block or in affectedparents. Ways holding a related node, and
+//   relations holding a related way or relation, are not followed.
+//
+// Four collections say where the objects of existing, updated and
+// affectedparents (before and after) are: see the fields of EditActivity.
+//
+// relation_reach_bbox says where an edit to a relation matters beyond the
+// relation's own box. None of the lists above holds a way that merely shares
+// a member node with an edited relation, and such a way can be all that
+// connects the edit to an area.
+//
+//   Why it is needed. Something keeping a copy of one area of the map (a
+//   stored extract) asks only for the records that reach into its area. Its
+//   copy follows the rule of a map query:
+//     1. the nodes inside the area,
+//     2. the ways having one of those nodes, with all of their nodes, inside
+//        the area or not,
+//     3. the relations having any of those nodes or ways as a member.
+//   By rule 3 a relation can belong to the copy through a node that is only
+//   there by rule 2, and then nothing about the relation is near the area.
+//
+//   An example:
+//     - node N is inside the area and node F is far outside it,
+//     - way W runs from N to F,
+//     - relation R has F as its only member. W is not a member of R.
+//   The copy has N, so W, so F, so R. Now R is modified or deleted. The
+//   record says where R is (existing_bbox and updated_bbox: the point F) and
+//   where what holds R is (the affected parents: nothing does). None of that
+//   reaches the area, so the record would be left out and the copy would keep
+//   the old R. What connects the edit to the area is W, which the edit does
+//   not touch and which is in none of the record's lists: W is neither R, nor
+//   above R, nor below it. It shares a member of R.
+//
+//   How it is populated. For every relation of the block, take its node
+//   members that already exist. Find every way holding any of those nodes,
+//   and take the box of each: the stored one, or one worked out from the
+//   way's nodes. Way and relation members are not followed, as a member way's
+//   extent is already part of the relation's own box, and a copy does not
+//   follow relations that are members of relations. This is done twice:
+//   before the block is stored, with the relations as the map had them (their
+//   old members), and afterwards, unless they were deleted, with the
+//   relations as stored (their new members). relation_reach_bbox is the one
+//   rectangle around all the boxes from both. It is left unset when there are
+//   none, as for any edit without relations, which means there is nowhere
+//   more, not that it is unknown. Being a single rectangle it can take in
+//   more than the ways themselves, so a record is sometimes sent without
+//   need, never missed.
 class EditActivityRecorder
 {
 public:
@@ -140,6 +220,12 @@ public:
 	void BeforeStore(const std::string &action, const class OsmData &block);
 	// The ways and relations holding the block's objects, found by BeforeStore
 	const class OsmData &AffectedParents() const {return *parents;}
+	// Fills in the record of the block that has now been stored. Its
+	// changeset and user are those of the block's first object and its time
+	// the latest of the objects'. The atomic edit is left to whoever inserts it.
+	void Build(const std::string &action, const class OsmData &block, class EditActivity &activity);
+	// Build, then insert as the next block of this recorder's own atomic
+	// edit: one recorder used this way is one atomic edit.
 	bool AfterStore(const std::string &action, const class OsmData &block, std::string &errStr);
 
 private:
