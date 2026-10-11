@@ -18,11 +18,6 @@ public:
 	int ways;
 	int relations;
 	std::string action;
-	// Where the edit matters beyond the boxes below, as four values (min lon,
-	// min lat, max lon, max lat), or empty when there is nowhere. It covers
-	// the ways that share a member node with a relation being edited: an
-	// extract holding such a way holds the relation too, wherever the
-	// relation itself is. Searches by area test it along with the boxes.
 	std::vector<double> bbox;
 	int64_t changeset;
 	int64_t timestamp;
@@ -54,6 +49,12 @@ public:
 	std::string updatedBbox; // of the updated objects, after the edit
 	std::string affectedparentsBeforeBbox; // of the affected parents, before the edit
 	std::string affectedparentsAfterBbox; // and after it: a parent's box moves with its members
+	// Where the edit matters beyond those, as the WKT of a polygon, or empty
+	// when there is nowhere more. It covers the ways that share a member node
+	// with a relation being edited: an extract holding such a way holds the
+	// relation too, wherever the relation itself is. Searches by area test
+	// it along with the collections above.
+	std::string relationReachBbox;
 	std::vector<std::string> relatedparentsType;
 	std::vector<std::pair<int64_t, int64_t> > relatedparentsIdVer;
 	bool relatedparentsRecorded;
@@ -94,8 +95,8 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	int64_t limit = 0, //The rows come in ID order; limit, if positive, is the most to return
 	//bbox, if it has four values (min lon, min lat, max lon, max lat), keeps
 	//the rows where the existing objects, the updated objects or the affected
-	//parents before or after the edit reach into it, those whose own bbox
-	//does, and those where one of the four collections was not recorded,
+	//parents before or after the edit reach into it, those whose relation
+	//reach does, and those where one of the four collections was not recorded,
 	//which could concern anywhere. With
 	//newest, a limit keeps the highest IDs, not the lowest; still in ID order.
 	const std::vector<double> &bbox = std::vector<double>(),

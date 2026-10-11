@@ -277,10 +277,11 @@ One case is not covered by where the objects are. A copy of an area has a way
 when one of the way's nodes is in the area, has all of that way's nodes, and
 has the relations holding any of those nodes. A relation can therefore belong
 to an area that neither it nor its members touch. When an edit creates,
-modifies or deletes a relation, the row's `bbox` column is set to the extent
-of the ways that hold the relation's member nodes, and the filter tests that
-as well. It is NULL for every other edit. `bbox` and the four collections each
-have a GiST index.
+modifies or deletes a relation, `relation_reach_bbox` is set to a polygon of
+the extent of the ways that hold the relation's member nodes, and the filter
+tests that as well. It is NULL for every other edit, which here means nowhere
+more, not unknown. It and the four collections each have a GiST index. The
+older `bbox` column of the table is not used.
 
 `related_parents` and the bounding box columns were added to schema 14 after
 it was first in use. They are NULL in rows recorded before then, which means

@@ -335,6 +335,9 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 		" ADD COLUMN IF NOT EXISTS updated_bbox" + box + ","
 		" ADD COLUMN IF NOT EXISTS affectedparents_before_bbox" + box + ","
 		" ADD COLUMN IF NOT EXISTS affectedparents_after_bbox" + box + ","
+		// Where an edited relation matters beyond its own box: the extent of
+		// the ways sharing its member nodes. NULL when there is nowhere more.
+		" ADD COLUMN IF NOT EXISTS relation_reach_bbox GEOMETRY(Polygon, 4326),"
 		// Four columns that schema 14 began with and nothing came to use: the
 		// lists of existing objects and these boxes say what they were for.
 		// The checks that tied them together go with them.
@@ -347,13 +350,16 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 		" ON " + c.quote_name(tablePrefix + "edit_activity") + " (changeset);";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	// Finding the records that concern an area, which tests each of these
-	for(const char *column : {"bbox", "existing_bbox", "updated_bbox",
-		"affectedparents_before_bbox", "affectedparents_after_bbox"})
+	for(const char *column : {"existing_bbox", "updated_bbox",
+		"affectedparents_before_bbox", "affectedparents_after_bbox", "relation_reach_bbox"})
 	{
 		sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_gix_" + column) +
 			" ON " + c.quote_name(tablePrefix + "edit_activity") + " USING GIST (" + column + ");";
 		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	}
+	// An index schema 14 briefly had on the bbox column, which is not searched
+	sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_gix_bbox") + ";";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
@@ -380,13 +386,14 @@ bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
 	if(!DbDropExtractTables(c, work, verbose, tablePrefix, errStr)) return false;
 	string sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_changeset") + ";";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
-	// The other box indices go with their columns, below
+	// The box indices go with their columns, below. This one may remain from an earlier build.
 	sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + "activity_gix_bbox") + ";";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	sql = "ALTER TABLE " + c.quote_name(tablePrefix + "edit_activity") +
 		" DROP COLUMN IF EXISTS related_parents, DROP COLUMN IF EXISTS existing_bbox,"
 		" DROP COLUMN IF EXISTS updated_bbox, DROP COLUMN IF EXISTS affectedparents_before_bbox,"
 		" DROP COLUMN IF EXISTS affectedparents_after_bbox,"
+		" DROP COLUMN IF EXISTS relation_reach_bbox,"
 		" DROP COLUMN atomic_edit_id, DROP COLUMN block_index,"
 		" DROP COLUMN IF EXISTS sync_before, DROP COLUMN IF EXISTS bbox_before,"
 		" DROP COLUMN IF EXISTS sync_after, DROP COLUMN IF EXISTS bbox_after;";

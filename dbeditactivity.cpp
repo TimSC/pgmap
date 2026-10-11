@@ -14,13 +14,15 @@ using namespace std;
 
 // The geometry columns holding the boxes that go with the lists of objects,
 // all added to schema 14 after it was first in use, so a map may lack them.
-static const char *ACTIVITY_BBOX_COLUMNS[4] = {"existing_bbox", "updated_bbox",
-	"affectedparents_before_bbox", "affectedparents_after_bbox"};
+// The first four are the collections; the last is a single polygon.
+static const size_t ACTIVITY_BBOX_COUNT = 5, ACTIVITY_COLLECTION_COUNT = 4;
+static const char *ACTIVITY_BBOX_COLUMNS[ACTIVITY_BBOX_COUNT] = {"existing_bbox", "updated_bbox",
+	"affectedparents_before_bbox", "affectedparents_after_bbox", "relation_reach_bbox"};
 
 static std::string *ActivityBboxField(class EditActivity &activity, size_t index)
 {
-	std::string *fields[4] = {&activity.existingBbox, &activity.updatedBbox,
-		&activity.affectedparentsBeforeBbox, &activity.affectedparentsAfterBbox};
+	std::string *fields[ACTIVITY_BBOX_COUNT] = {&activity.existingBbox, &activity.updatedBbox,
+		&activity.affectedparentsBeforeBbox, &activity.affectedparentsAfterBbox, &activity.relationReachBbox};
 	return fields[index];
 }
 
@@ -42,7 +44,7 @@ public:
 	int existingCol, updatedCol, affectedParentsCol, relatedCol;
 	//-1 on a map whose table has not gained the column
 	int relatedParentsCol;
-	int bboxCols[4]; //In the order of ACTIVITY_BBOX_COLUMNS
+	int bboxCols[ACTIVITY_BBOX_COUNT]; //In the order of ACTIVITY_BBOX_COLUMNS
 
 	EditActivityCols(pqxx::result &r);
 };
@@ -73,7 +75,7 @@ EditActivityCols::EditActivityCols(pqxx::result &r)
 	{
 		relatedParentsCol = -1;
 	}
-	for(size_t i = 0; i < 4; i++)
+	for(size_t i = 0; i < ACTIVITY_BBOX_COUNT; i++)
 	{
 		try
 		{
@@ -139,6 +141,7 @@ EditActivity& EditActivity::operator=(const EditActivity &arg)
 	updatedBbox = arg.updatedBbox;
 	affectedparentsBeforeBbox = arg.affectedparentsBeforeBbox;
 	affectedparentsAfterBbox = arg.affectedparentsAfterBbox;
+	relationReachBbox = arg.relationReachBbox;
 	relatedparentsType = arg.relatedparentsType;
 	relatedparentsIdVer = arg.relatedparentsIdVer;
 	relatedparentsRecorded = arg.relatedparentsRecorded;
@@ -182,7 +185,7 @@ void DecodeEditActivityRow(const class EditActivityCols &cols,
 		out.relatedType,
 		out.relatedIdVer);
 
-	for(size_t i = 0; i < 4; i++)
+	for(size_t i = 0; i < ACTIVITY_BBOX_COUNT; i++)
 	{
 		std::string *field = ActivityBboxField(out, i);
 		field->clear();
@@ -266,7 +269,7 @@ bool DbGetEditActivityById(pqxx::connection &c,
 // objects it had before the edit, those it has after, or the affected parents
 // on either side of it reach into the area. Old and new both count: an object
 // can leave an area as well as enter it, and a parent's extent changes with
-// its members while its version does not. The row's bbox column adds where an
+// its members while its version does not. relation_reach_bbox adds where an
 // edited relation matters beyond its own box. A row where one of these was not
 // recorded could concern anywhere, and is kept. && compares the area with the
 // extent of a whole collection, so a row may be kept without need, never lost.
@@ -285,13 +288,14 @@ static std::string ActivityBboxCondition(pqxx::transaction_base *work, const std
 	area << "ST_MakeEnvelope(" << bbox[0] << "," << bbox[1] << "," << bbox[2] << "," << bbox[3] << ",4326)";
 	stringstream sql;
 	sql << " AND (";
-	for(size_t i=0; i<4; i++)
+	for(size_t i=0; i<ACTIVITY_COLLECTION_COUNT; i++)
 	{
 		string column = table + "." + ACTIVITY_BBOX_COLUMNS[i];
 		sql << (i ? " OR " : "") << column << " IS NULL OR " << column << " && " << area.str();
 	}
-	// Where a relation of the edit matters through ways sharing its member nodes
-	sql << " OR " << table << ".bbox && " << area.str() << ")";
+	// Where a relation of the edit matters through ways sharing its member
+	// nodes. Unset means nowhere more, not unknown.
+	sql << " OR " << table << ".relation_reach_bbox && " << area.str() << ")";
 	return sql.str();
 }
 
@@ -467,7 +471,7 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 	// What remains goes in columns added to schema 14 after it was first in use
 	class EditActivity recorded(activity);
 	bool anyBbox = false;
-	for(size_t i = 0; i < 4; i++)
+	for(size_t i = 0; i < ACTIVITY_BBOX_COUNT; i++)
 		anyBbox = anyBbox || !ActivityBboxField(recorded, i)->empty();
 	if(!activity.relatedparentsRecorded && !anyBbox)
 		return true;
@@ -485,7 +489,7 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 			EncodeObjTypeIdVers(activity.relatedparentsType, activity.relatedparentsIdVer, relatedParentsEnc);
 			values.push_back("related_parents = " + work->quote(relatedParentsEnc) + "::jsonb");
 		}
-		for(size_t i = 0; i < 4; i++)
+		for(size_t i = 0; i < ACTIVITY_BBOX_COUNT; i++)
 		{
 			const std::string &wkt = *ActivityBboxField(recorded, i);
 			if(!wkt.empty() && hasColumn(ACTIVITY_BBOX_COLUMNS[i]))
