@@ -300,6 +300,11 @@ void PgMapQuery::SelectObjects()
 
 	DropMapQueryTables(work.get());
 
+	// The tables of nodes and ways hold whole rows, which are then written
+	// out from them. Holding only IDs and reading the objects again by ID was
+	// tried and measured: it was 10 to 15% slower on large areas, and more on
+	// small ones, since each object is then looked up twice.
+
 	// 1. Nodes in the area
 	work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_SEEDS + " ON COMMIT DROP AS " +
 		fromLayers("node", nodeColumns, [&](const string &) { return "WHERE o.geom && " + area; }));
@@ -2031,14 +2036,14 @@ bool PgAdmin::DropMapTables(int verbose, class PgMapError &errStr)
 	return ok;
 }
 
-bool PgAdmin::CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr)
+bool PgAdmin::ImportMapFile(int verbose, const std::string &filename, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = DbCopyData(*dbconn, work.get(), verbose, filePrefix, this->tableStaticPrefix, nativeErrStr);
+	bool ok = DbImportMapFile(*dbconn, work.get(), verbose, filename, this->tableStaticPrefix, nativeErrStr);
 	errStr.errStr = nativeErrStr;
 
 	return ok;

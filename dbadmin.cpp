@@ -14,6 +14,8 @@
 #include <set>
 #include <boost/filesystem.hpp>
 #include <fstream>
+#include <optional>
+#include "dbjson.h"
 using namespace std;
 using namespace boost::filesystem;
 
@@ -640,43 +642,224 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
-bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 
-	int verbose, 
-	const string &filePrefix,
-	const string &tablePrefix, 
+// ************* Importing a map file straight into the tables *************
+
+#if PQXX_VERSION_MAJOR >= 7
+
+// Receives the objects of a map file and writes them to one set of map
+// tables with COPY, which is the fast way into PostgreSQL. The data goes
+// through the connection, so no files are written first and the database
+// user need not be a superuser. The tables must have been created and
+// should be empty.
+//
+// A connection carries one COPY at a time, while each object has rows for
+// several tables, so rows are collected and written out a table at a time.
+class MapTableImport : public IDataStreamHandler
+{
+public:
+	MapTableImport(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, int verbose):
+		c(c), work(work), tablePrefix(tablePrefix), verbose(verbose), buffered(0), total(0)
+	{
+		for(int i=0; i<3; i++) lastId[i] = 0;
+	}
+
+	void StoreNode(const OsmNode &node) override
+	{
+		if(node.lat < -90.0 || node.lat > 90.0 || node.lon < -180.0 || node.lon > 180.0)
+			cerr << "Warning: node " << node.objId << " has invalid lat/lon: " << node.lat << "," << node.lon << endl;
+		ObjectRow row;
+		Common(node, 0, row);
+		stringstream ss;
+		ss.precision(9);
+		ss << "SRID=4326;POINT(" << fixed << node.lon << " " << node.lat << ")";
+		row.extra = ss.str();
+		Add(node, 0, row);
+	}
+
+	void StoreWay(const OsmWay &way) override
+	{
+		ObjectRow row;
+		Common(way, 1, row);
+		EncodeInt64Vec(way.refs, row.extra);
+		for(size_t i=0; i<way.refs.size(); i++)
+			members[0].push_back({way.objId, (int64_t)way.metaData.version, (int64_t)i, way.refs[i]});
+		buffered += way.refs.size();
+		Add(way, 1, row);
+	}
+
+	void StoreRelation(const OsmRelation &relation) override
+	{
+		ObjectRow row;
+		Common(relation, 2, row);
+		std::vector<std::string> refTypeStrs, refRoles;
+		std::vector<int64_t> refIds;
+		for(size_t i=0; i<relation.members.size(); i++)
+		{
+			const RelationMember &member = relation.members[i];
+			refTypeStrs.push_back(ObjectTypeName(member.type));
+			refIds.push_back(member.ref);
+			refRoles.push_back(member.role);
+			members[1 + (int)member.type].push_back({relation.objId, (int64_t)relation.metaData.version, (int64_t)i, member.ref});
+		}
+		buffered += relation.members.size();
+		EncodeRelationMems(refTypeStrs, refIds, row.extra);
+		EncodeStringVec(refRoles, row.roles);
+		Add(relation, 2, row);
+	}
+
+	void Finish() override
+	{
+		Flush();
+	}
+
+	uint64_t Total() const {return total;}
+
+private:
+	struct ObjectRow
+	{
+		int64_t objId, version;
+		std::optional<int64_t> changeset, uid, timestamp;
+		std::optional<string> username;
+		bool visible;
+		string tags, extra, roles; // extra: geometry for a node, members otherwise
+	};
+	struct MemberRow
+	{
+		int64_t objId, version, index, member;
+	};
+
+	pqxx::connection &c;
+	pqxx::transaction_base *work;
+	string tablePrefix;
+	int verbose;
+	size_t buffered;
+	uint64_t total;
+	int64_t lastId[3];
+	// By type (node, way, relation): rows for the live and history tables, and IDs
+	std::vector<ObjectRow> live[3], old[3];
+	std::vector<int64_t> ids[3];
+	// way_mems, then relation_mems_n, _w and _r
+	std::vector<MemberRow> members[4];
+
+	// Something left out of a file is stored as NULL
+	void Common(const OsmObject &obj, int type, ObjectRow &row)
+	{
+		const MetaData &m = obj.metaData;
+		row.objId = obj.objId;
+		row.version = m.version;
+		if(m.changeset != 0) row.changeset = m.changeset;
+		if(m.uid != 0) row.uid = m.uid;
+		if(m.timestamp != 0) row.timestamp = m.timestamp;
+		if(!m.username.empty()) row.username = m.username;
+		row.visible = m.visible;
+		EncodeTags(obj.tags, row.tags);
+	}
+
+	void Add(const OsmObject &obj, int type, const ObjectRow &row)
+	{
+		// The current, visible version of an object is live; the rest is history
+		if(obj.metaData.current && obj.metaData.visible)
+			live[type].push_back(row);
+		else
+			old[type].push_back(row);
+		// One entry for each object, however many of its versions the file holds
+		if(obj.objId != lastId[type] || ids[type].empty())
+		{
+			ids[type].push_back(obj.objId);
+			lastId[type] = obj.objId;
+		}
+		buffered += 2;
+		total ++;
+		if(verbose >= 1 && total % 1000000 == 0)
+			cout << total << " objects" << endl;
+		if(buffered >= 100000)
+			Flush();
+	}
+
+	void Flush()
+	{
+		static const char *typeNames[3] = {"node", "way", "relation"};
+		static const char *memberTables[4] = {"way_mems", "relation_mems_n", "relation_mems_w", "relation_mems_r"};
+		for(int type=0; type<3; type++)
+		{
+			string extraColumns = type == 0 ? ",geom" : (type == 1 ? ",members" : ",members,memberroles");
+			for(int history=0; history<2; history++)
+			{
+				std::vector<ObjectRow> &rows = history ? old[type] : live[type];
+				if(rows.empty()) continue;
+				string table = c.quote_name(tablePrefix + (history ? "old" : "live") + typeNames[type] + "s");
+				string columns = string("id,changeset,username,uid,timestamp,version,tags") +
+					(history ? ",visible" : "") + extraColumns;
+				pqxx::stream_to stream = pqxx::stream_to::raw_table(*work, table, columns);
+				for(const ObjectRow &row : rows)
+				{
+					// The columns that differ between the tables come last
+					if(type == 2 && history)
+						stream.write_values(row.objId, row.changeset, row.username, row.uid, row.timestamp,
+							row.version, row.tags, row.visible, row.extra, row.roles);
+					else if(type == 2)
+						stream.write_values(row.objId, row.changeset, row.username, row.uid, row.timestamp,
+							row.version, row.tags, row.extra, row.roles);
+					else if(history)
+						stream.write_values(row.objId, row.changeset, row.username, row.uid, row.timestamp,
+							row.version, row.tags, row.visible, row.extra);
+					else
+						stream.write_values(row.objId, row.changeset, row.username, row.uid, row.timestamp,
+							row.version, row.tags, row.extra);
+				}
+				stream.complete();
+				rows.clear();
+			}
+			if(!ids[type].empty())
+			{
+				pqxx::stream_to stream = pqxx::stream_to::raw_table(*work,
+					c.quote_name(tablePrefix + typeNames[type] + "ids"), "id");
+				for(int64_t objId : ids[type])
+					stream.write_values(objId);
+				stream.complete();
+				ids[type].clear();
+			}
+		}
+		for(int table=0; table<4; table++)
+		{
+			if(members[table].empty()) continue;
+			pqxx::stream_to stream = pqxx::stream_to::raw_table(*work,
+				c.quote_name(tablePrefix + memberTables[table]), "id,version,index,member");
+			for(const MemberRow &row : members[table])
+				stream.write_values(row.objId, row.version, row.index, row.member);
+			stream.complete();
+			members[table].clear();
+		}
+		buffered = 0;
+	}
+};
+
+#endif //PQXX_VERSION_MAJOR >= 7
+
+bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &filename, const std::string &tablePrefix,
 	std::string &errStr)
 {
-	string sql = "COPY "+c.quote_name(tablePrefix+"oldnodes")+" FROM PROGRAM 'zcat "+filePrefix+"oldnodes.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
-	sql = "COPY "+c.quote_name(tablePrefix+"oldways")+" FROM PROGRAM 'zcat "+filePrefix+"oldways.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"oldrelations")+" FROM PROGRAM 'zcat "+filePrefix+"oldrelations.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
-	sql = "COPY "+c.quote_name(tablePrefix+"livenodes")+" FROM PROGRAM 'zcat "+filePrefix+"livenodes.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"liveways")+" FROM PROGRAM 'zcat "+filePrefix+"liveways.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"liverelations")+" FROM PROGRAM 'zcat "+filePrefix+"liverelations.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
-	sql = "COPY "+c.quote_name(tablePrefix+"nodeids")+" FROM PROGRAM 'zcat "+filePrefix+"nodeids.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"wayids")+" FROM PROGRAM 'zcat "+filePrefix+"wayids.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"relationids")+" FROM PROGRAM 'zcat "+filePrefix+"relationids.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-
-	sql = "COPY "+c.quote_name(tablePrefix+"way_mems")+" FROM PROGRAM 'zcat "+filePrefix+"waymems.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"relation_mems_n")+" FROM PROGRAM 'zcat "+filePrefix+"relationmems-n.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"relation_mems_w")+" FROM PROGRAM 'zcat "+filePrefix+"relationmems-w.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
-	sql = "COPY "+c.quote_name(tablePrefix+"relation_mems_r")+" FROM PROGRAM 'zcat "+filePrefix+"relationmems-r.csv.gz' WITH (FORMAT 'csv', DELIMITER ',', NULL 'NULL');";
-	ok = DbExec(work, sql, errStr, nullptr, verbose); 
-	return ok;	
+#if PQXX_VERSION_MAJOR >= 7
+	try
+	{
+		std::shared_ptr<MapTableImport> import(new MapTableImport(c, work, tablePrefix, verbose));
+		LoadOsmFromFile(filename, import);
+		// A decoder finishes its output itself; doing so again writes nothing
+		import->Finish();
+		if(verbose >= 1)
+			cout << import->Total() << " objects imported" << endl;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+#else
+	errStr = "Importing a map file needs libpqxx 7 or later";
+	return false;
+#endif
 }
 
 bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 

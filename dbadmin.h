@@ -20,12 +20,11 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	int targetVer, bool latest, std::string &errStr);
 
-bool DbCopyData(pqxx::connection &c, pqxx::transaction_base *work, 
-	int verbose, 
-	const std::string &filePrefix,
-	const std::string &tablePrefix, 
+// Reads a map file (.osm, .o5m, .pbf or .json, optionally .gz) straight into
+// the map tables of tablePrefix, which should be empty.
+bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &filename, const std::string &tablePrefix,
 	std::string &errStr);
-
 bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tablePrefix, 

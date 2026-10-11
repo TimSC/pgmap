@@ -342,7 +342,10 @@ public:
 
 	bool CreateMapTables(int verbose, int targetVer, bool latest, class PgMapError &errStr);
 	bool DropMapTables(int verbose, class PgMapError &errStr);
-	bool CopyMapData(int verbose, const std::string &filePrefix, class PgMapError &errStr);
+	// Reads a map file straight into the static map tables, which should be
+	// empty. The file name selects the format: .osm, .o5m, .pbf or .json,
+	// optionally followed by .gz.
+	bool ImportMapFile(int verbose, const std::string &filename, class PgMapError &errStr);
 	bool CreateMapIndices(int verbose, class PgMapError &errStr);
 	bool ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);

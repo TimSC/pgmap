@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 
 		cout << "1. Drop tables" << endl;
 		cout << "2. Create tables" << endl;
-		cout << "3. Copy map data" << endl;
+		cout << "3. Import map data (from the file named by dump_path)" << endl;
 		cout << "4. Create indicies" << endl;
 		cout << "5. Apply diffs" << endl;
 		cout << "6. Refresh max IDs" << endl;
@@ -77,7 +77,6 @@ int main(int argc, char **argv)
 
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
 			bool ok = admin->DropMapTables(verbose, errStr);
-			//bool ok = admin->CopyMapData("/home/tim/dev/osm2pgcopy/portsmouth-", errStr);
 			//bool ok = admin->CreateMapIndices(errStr);
 
 			if(ok)
@@ -102,8 +101,9 @@ int main(int argc, char **argv)
 
 		if(inputStr == "3")
 		{
+			cout << "Importing " << config["dump_path"] << endl;
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
-			bool ok = admin->CopyMapData(verbose, config["csv_absolute_path"], errStr);
+			bool ok = admin->ImportMapFile(verbose, config["dump_path"], errStr);
 
 			if(ok)
 				cout << "All done!" << endl;

@@ -115,15 +115,13 @@ Download a regional or planet map dump, for example this one: https://archive.or
 
 The file format is chosen by the file name, which must end in .osm, .o5m, .pbf or .json, optionally followed by .gz (for example .o5m.gz).
 
-Set the dump_path variable in pgmap's config.cfg to the actual path of the data to import. Set the csv_absolute_path variable in config.cfg to a folder for temporary files (it is possible to use the pgmap source folder). To convert the data to csv format: 
-
-    ./osm2csv
-
-(CSV format files are used because they can be imported much faster than using conventional SQL.) Use the admin tool to create the tables, copy the csv files into the database, then create the indices.
+Set the dump_path variable in pgmap's config.cfg to the actual path of the data to import. Then use the admin tool to create the tables, import the file, and create the indices:
 
     ./admin
 
-You should do at least "Create tables", "Copy data" (skip if you want an empty database), "Create indicies", "Refresh max IDs", "Refresh max changeset IDs and UIDs" in order. Create indicies can take DAYS for a planet dump. Hopefully no errors occur. If you finish these steps, congratulations, you have successfully imported your map data! It might be prudent to remove superuser access for your database user, since it is no longer needed:
+"Import map data" reads the file named by dump_path straight into the tables, using PostgreSQL's COPY, which is much faster than conventional SQL. It needs libpqxx 7 or later.
+
+You should do at least "Create tables", "Import map data" (skip if you want an empty database), "Create indicies", "Refresh max IDs", "Refresh max changeset IDs and UIDs" in order. Create indicies can take DAYS for a planet dump. Hopefully no errors occur. If you finish these steps, congratulations, you have successfully imported your map data! It might be prudent to remove superuser access for your database user, since it is no longer needed:
 
     sudo su postgres
 
