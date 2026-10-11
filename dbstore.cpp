@@ -6,6 +6,7 @@
 #include "dbquery.h"
 #include "dbprepared.h"
 #include "util.h"
+#include <set>
 using namespace std;
 
 #if PQXX_VERSION_MAJOR >= 6
@@ -15,6 +16,321 @@ using namespace std;
 #define pqxxfield pqxx::result::field
 #define pqxxrow pqxx::result::tuple
 #endif
+
+// The most objects written by one group of statements
+static const size_t STORE_BATCH_OBJECTS = 500;
+// The most rows in one INSERT of member rows
+static const size_t STORE_BATCH_MEMBERS = 5000;
+
+static string IdArrayLiteral(const std::vector<int64_t> &ids)
+{
+	stringstream ss;
+	ss << "'{";
+	for(size_t i=0; i<ids.size(); i++)
+		ss << (i ? "," : "") << ids[i];
+	ss << "}'::bigint[]";
+	return ss.str();
+}
+
+// What is to be done with one object, decided from what the tables hold
+struct StoreDecision
+{
+	const class OsmObject *obj;
+	int64_t objId; // As stored: a new object has been given its ID
+	bool copyLiveToOld, deleteLive, insertLive, updateLive, insertOld;
+	bool memberRows; // Whether its member rows are still to be written
+	string tagsJson, refsJson, rolesJson, wkt;
+};
+
+static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix,
+	const std::string &typeStr,
+	const std::vector<const class OsmObject *> &objPtrs, size_t first, size_t last,
+	std::map<int64_t, int64_t> &createdIds,
+	int64_t &nextObjId,
+	const string &ocdn,
+	std::string &errStr,
+	int verbose)
+{
+	/*
+	 * Stores objPtrs[first..last), which must not name the same existing
+	 * object twice. What happens to each object depends on the version the
+	 * live table has of it (if any) and the highest version the history
+	 * table has (if any):
+	 *   - the live row goes if this is a deletion at least as new as it,
+	 *   - the live row is first copied to history if this is newer than it,
+	 *   - a visible object at least as new as both becomes the live row,
+	 *     inserted or updated in place, and anything else goes to history.
+	 * Member rows are added for a way or relation unless it is a live row
+	 * rewritten at the version it already has.
+	 *
+	 * The tables are asked about all the objects at once, and each kind of
+	 * change is then made by one statement for all the objects it applies
+	 * to, where it used to be several statements for every object.
+	 */
+	const bool isNode = typeStr == "node", isWay = typeStr == "way", isRelation = typeStr == "relation";
+	const string liveTable = c.quote_name(tablePrefix + "live" + typeStr + "s");
+	const string oldTable = c.quote_name(tablePrefix + "old" + typeStr + "s");
+	const string idsTable = c.quote_name(tablePrefix + typeStr + "ids");
+	const string extraColumns = isNode ? ", geom" : (isWay ? ", members" : ", members, memberroles");
+
+	auto run = [&](const string &sql) {
+		if(verbose >= 1)
+			cout << sql << endl;
+		work->exec(sql);
+	};
+
+	try
+	{
+		//Versions already in the live and history tables
+		std::vector<int64_t> existingIds;
+		for(size_t i=first; i<last; i++)
+			if(objPtrs[i]->objId > 0)
+				existingIds.push_back(objPtrs[i]->objId);
+		std::map<int64_t, int64_t> liveVersions, oldVersions;
+		if(!existingIds.empty())
+		{
+			string idArray = IdArrayLiteral(existingIds);
+			pqxx::result r = work->exec("SELECT id, version FROM " + liveTable + " WHERE id = ANY(" + idArray + ");");
+			for(pqxx::result::const_iterator row = r.begin(); row != r.end(); ++row)
+				liveVersions[row[0].as<int64_t>()] = row[1].as<int64_t>();
+			r = work->exec("SELECT id, MAX(version) FROM " + oldTable + " WHERE id = ANY(" + idArray + ") GROUP BY id;");
+			for(pqxx::result::const_iterator row = r.begin(); row != r.end(); ++row)
+				if(!row[1].is_null())
+					oldVersions[row[0].as<int64_t>()] = row[1].as<int64_t>();
+		}
+
+		//Decide what happens to each object
+		std::vector<StoreDecision> decisions;
+		for(size_t i=first; i<last; i++)
+		{
+			const class OsmObject *osmObject = objPtrs[i];
+			const class OsmNode *nodeObject = dynamic_cast<const class OsmNode *>(osmObject);
+			const class OsmWay *wayObject = dynamic_cast<const class OsmWay *>(osmObject);
+			const class OsmRelation *relationObject = dynamic_cast<const class OsmRelation *>(osmObject);
+			if(isNode && nodeObject == nullptr)
+				throw invalid_argument("Object type not node as expected");
+			else if(isWay && wayObject == nullptr)
+				throw invalid_argument("Object type not way as expected");
+			else if(isRelation && relationObject == nullptr)
+				throw invalid_argument("Object type not relation as expected");
+
+			StoreDecision d;
+			d.obj = osmObject;
+			d.objId = osmObject->objId;
+			int64_t version = osmObject->metaData.version;
+			bool visible = osmObject->metaData.visible;
+
+			auto liveIt = liveVersions.find(d.objId);
+			bool foundExisting = d.objId > 0 && liveIt != liveVersions.end();
+			int64_t currentVersion = foundExisting ? liveIt->second : -1;
+			auto oldIt = oldVersions.find(d.objId);
+			bool foundOld = d.objId > 0 && oldIt != oldVersions.end();
+			int64_t oldVersion = foundOld ? oldIt->second : -1;
+
+			d.deleteLive = foundExisting && version >= currentVersion && !visible;
+			d.copyLiveToOld = foundExisting && version > currentVersion;
+			bool latest = visible && (!foundExisting || version >= currentVersion) && (!foundOld || version >= oldVersion);
+			d.insertLive = latest && !foundExisting;
+			d.updateLive = latest && foundExisting;
+			d.insertOld = !latest;
+			// A live row rewritten at the version it already has, as happens to
+			// the ways and relations holding an edited object, has its member
+			// rows already. Adding them again would leave every member listed
+			// once more each time.
+			d.memberRows = !(d.updateLive && version == currentVersion);
+
+			if(d.objId <= 0)
+			{
+				if(version != 1)
+				{
+					errStr = "Cannot assign a new " + typeStr + " to any version but one.";
+					return false;
+				}
+
+				//Assign a new ID
+				d.objId = nextObjId;
+				createdIds[osmObject->objId] = nextObjId;
+				nextObjId ++;
+			}
+
+			//Convert tags, spatial and member data to appropriate formats
+			EncodeTags(osmObject->tags, d.tagsJson);
+			if(nodeObject != nullptr)
+			{
+				stringstream wkt;
+				wkt.precision(9);
+				wkt << "POINT(" << nodeObject->lon <<" "<< nodeObject->lat << ")";
+				d.wkt = wkt.str();
+			}
+			else if(wayObject != nullptr)
+				EncodeInt64Vec(wayObject->refs, d.refsJson);
+			else
+			{
+				std::vector<std::string> refTypeStrs, refRoles;
+				std::vector<int64_t> refIds;
+				for(const RelationMember &member : relationObject->members)
+				{
+					refTypeStrs.push_back(ObjectTypeName(member.type));
+					refIds.push_back(member.ref);
+					refRoles.push_back(member.role);
+				}
+				EncodeRelationMems(refTypeStrs, refIds, d.refsJson);
+				EncodeStringVec(refRoles, d.rolesJson);
+			}
+			decisions.push_back(d);
+		}
+
+		//The values of an object's own columns, after its ID
+		auto metaValues = [&](const StoreDecision &d) {
+			const class MetaData &m = d.obj->metaData;
+			stringstream ss;
+			ss << m.changeset << "," << work->quote(m.username) << "," << m.uid << "," << m.timestamp << ","
+				<< m.version << "," << work->quote(d.tagsJson);
+			return ss.str();
+		};
+		auto extraValues = [&](const StoreDecision &d) {
+			if(isNode) return ",ST_GeometryFromText(" + work->quote(d.wkt) + ", 4326)";
+			if(isWay) return "," + work->quote(d.refsJson);
+			return "," + work->quote(d.refsJson) + "," + work->quote(d.rolesJson);
+		};
+
+		//Copy rows about to be superseded from the live to the history table.
+		//This comes first: it needs the rows as they are.
+		std::vector<int64_t> ids;
+		for(const StoreDecision &d : decisions)
+			if(d.copyLiveToOld) ids.push_back(d.objId);
+		if(!ids.empty())
+			run("INSERT INTO " + oldTable + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible" +
+				extraColumns + ") SELECT id, changeset, changeset_index, username, uid, timestamp, version, tags, true" +
+				extraColumns + " FROM " + liveTable + " WHERE id = ANY(" + IdArrayLiteral(ids) + ") " + ocdn + ";");
+
+		//Delete from the live table
+		ids.clear();
+		for(const StoreDecision &d : decisions)
+			if(d.deleteLive) ids.push_back(d.objId);
+		if(!ids.empty())
+			run("DELETE FROM " + liveTable + " WHERE id = ANY(" + IdArrayLiteral(ids) + ");");
+
+		//Insert into the live table
+		stringstream sql;
+		size_t rows = 0;
+		for(const StoreDecision &d : decisions)
+		{
+			if(!d.insertLive) continue;
+			sql << (rows ? "," : "") << "(" << d.objId << "," << metaValues(d) << extraValues(d) << ")";
+			rows ++;
+		}
+		if(rows > 0)
+			run("INSERT INTO " + liveTable + " (id, changeset, username, uid, timestamp, version, tags" +
+				extraColumns + ") VALUES " + sql.str() + ";");
+
+		//Update rows of the live table in place. One statement for each row,
+		//sent together.
+		sql.str("");
+		rows = 0;
+		for(const StoreDecision &d : decisions)
+		{
+			if(!d.updateLive) continue;
+			const class MetaData &m = d.obj->metaData;
+			sql << "UPDATE " << liveTable << " SET changeset=" << m.changeset << ", username=" << work->quote(m.username)
+				<< ", uid=" << m.uid << ", timestamp=" << m.timestamp << ", version=" << m.version
+				<< ", tags=" << work->quote(d.tagsJson);
+			if(isNode)
+				sql << ", geom=ST_GeometryFromText(" << work->quote(d.wkt) << ", 4326)";
+			else if(isWay)
+				sql << ", members=" << work->quote(d.refsJson);
+			else
+				sql << ", members=" << work->quote(d.refsJson) << ", memberroles=" << work->quote(d.rolesJson);
+			sql << " WHERE id = " << d.objId << ";";
+			rows ++;
+		}
+		if(rows > 0)
+			run(sql.str());
+
+		//Insert into the history table
+		sql.str("");
+		rows = 0;
+		for(const StoreDecision &d : decisions)
+		{
+			if(!d.insertOld) continue;
+			sql << (rows ? "," : "") << "(" << d.objId << "," << metaValues(d) << ","
+				<< (d.obj->metaData.visible ? "true" : "false") << extraValues(d) << ")";
+			rows ++;
+		}
+		if(rows > 0)
+			run("INSERT INTO " + oldTable + " (id, changeset, username, uid, timestamp, version, tags, visible" +
+				extraColumns + ") VALUES " + sql.str() + " " + ocdn + ";");
+
+		//Update existing id lists (nodeids, wayids, relationids)
+		ids.clear();
+		for(const StoreDecision &d : decisions)
+			if(d.insertLive || d.insertOld) ids.push_back(d.objId);
+		if(!ids.empty())
+			run("INSERT INTO " + idsTable + " (id) SELECT DISTINCT v FROM unnest(" + IdArrayLiteral(ids) +
+				") v WHERE NOT EXISTS (SELECT 1 FROM " + idsTable + " x WHERE x.id = v);");
+
+		//Update member tables
+		if(isWay || isRelation)
+		{
+			const char *suffixes[3] = {"way_mems", "", ""};
+			if(isRelation)
+			{
+				suffixes[0] = "relation_mems_n";
+				suffixes[1] = "relation_mems_w";
+				suffixes[2] = "relation_mems_r";
+			}
+			stringstream memberSql[3];
+			size_t memberRows[3] = {0, 0, 0};
+			auto flush = [&](int table) {
+				if(memberRows[table] == 0) return;
+				run("INSERT INTO " + c.quote_name(tablePrefix + suffixes[table]) +
+					" (id, version, index, member) VALUES " + memberSql[table].str() + ";");
+				memberSql[table].str("");
+				memberRows[table] = 0;
+			};
+			auto add = [&](int table, int64_t objId, int64_t version, size_t index, int64_t member) {
+				memberSql[table] << (memberRows[table] ? "," : "") << "(" << objId << "," << version << ","
+					<< index << "," << member << ")";
+				memberRows[table] ++;
+				if(memberRows[table] >= STORE_BATCH_MEMBERS) flush(table);
+			};
+			for(const StoreDecision &d : decisions)
+			{
+				if(!d.memberRows) continue;
+				if(isWay)
+				{
+					const class OsmWay *way = dynamic_cast<const class OsmWay *>(d.obj);
+					for(size_t j=0; j<way->refs.size(); j++)
+						add(0, d.objId, way->metaData.version, j, way->refs[j]);
+				}
+				else
+				{
+					const class OsmRelation *relation = dynamic_cast<const class OsmRelation *>(d.obj);
+					for(size_t j=0; j<relation->members.size(); j++)
+					{
+						const RelationMember &member = relation->members[j];
+						add((int)member.type, d.objId, relation->metaData.version, j, member.ref);
+					}
+				}
+			}
+			for(int table=0; table<3; table++)
+				flush(table);
+		}
+	}
+	catch (const pqxx::sql_error &e)
+	{
+		stringstream ss2;
+		ss2 << e.what() << ":" << e.query();
+		errStr = ss2.str();
+		return false;
+	}
+	catch (const std::exception &e)
+	{
+		errStr = e.what();
+		return false;
+	}
+	return true;
+}
 
 bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &typeStr,
@@ -29,741 +345,30 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 
 	int majorVer=0, minorVer=0;
 	DbGetVersion(c, work, majorVer, minorVer);
-	bool ocdnSupported = true;
 	string ocdn = " ON CONFLICT DO NOTHING";
 	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-	{
 		ocdn = "";
-		ocdnSupported = false;
-	}
 
-	for(size_t i=0; i<objPtrs.size(); i++)
+	//The objects are stored a batch at a time. A batch ends early at an
+	//object the batch already has, so that the later one finds what the
+	//earlier one stored, as when a diff holds several versions of an object.
+	size_t first = 0;
+	while(first < objPtrs.size())
 	{
-		const class OsmObject *osmObject = objPtrs[i];
-		const class OsmNode *nodeObject = dynamic_cast<const class OsmNode *>(osmObject);
-		const class OsmWay *wayObject = dynamic_cast<const class OsmWay *>(osmObject);
-		const class OsmRelation *relationObject = dynamic_cast<const class OsmRelation *>(osmObject);
-		if(typeStr == "node" && nodeObject == nullptr)
-			throw invalid_argument("Object type not node as expected");
-		else if(typeStr == "way" && wayObject == nullptr)
-			throw invalid_argument("Object type not way as expected");
-		else if(typeStr == "relation" && relationObject == nullptr)
-			throw invalid_argument("Object type not relation as expected");
-		int64_t objId = osmObject->objId;
-		int64_t version = osmObject->metaData.version;
-
-		//Convert spatial and member data to appropriate formats
-		stringstream wkt;
-		string refsJson;
-		string rolesJson;
-		if(nodeObject != nullptr)
+		std::set<int64_t> seen;
+		size_t last = first;
+		while(last < objPtrs.size() && last - first < STORE_BATCH_OBJECTS)
 		{
-			wkt.precision(9);
-			wkt << "POINT(" << nodeObject->lon <<" "<< nodeObject->lat << ")";
+			int64_t objId = objPtrs[last]->objId;
+			if(objId > 0 && !seen.insert(objId).second)
+				break;
+			last ++;
 		}
-		else if(wayObject != nullptr)
-		{
-			EncodeInt64Vec(wayObject->refs, refsJson);
-		}
-		else if(relationObject != nullptr)
-		{
-			std::vector<std::string> refTypeStrs, refRoles;
-			std::vector<int64_t> refIds;
-			for(const RelationMember &member : relationObject->members)
-			{
-				refTypeStrs.push_back(ObjectTypeName(member.type));
-				refIds.push_back(member.ref);
-				refRoles.push_back(member.role);
-			}
-
-			EncodeRelationMems(refTypeStrs, refIds, refsJson);
-			EncodeStringVec(refRoles, rolesJson);
-		}
-
-		//Get existing object object in live table (if any)
-		string checkExistingLiveSql = "SELECT * FROM "+ c.quote_name(tablePrefix + "live"+typeStr+"s")+" WHERE (id=$1);";
-		pqxx::result r;
-		try
-		{
-			if(verbose >= 1)
-				cout << checkExistingLiveSql << " " << objId << endl;
-			prepare_deduplicated(c, tablePrefix+"checkobjexists"+typeStr, checkExistingLiveSql);
-
-#if PQXX_VERSION_MAJOR >= 7
-			r = work->exec_prepared(tablePrefix+"checkobjexists"+typeStr, objId);
-#else
-			r = work->prepared(tablePrefix+"checkobjexists"+typeStr)(objId).exec();
-#endif
-		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = e.what();
+		if(!StoreObjectBatch(c, work, tablePrefix, typeStr, objPtrs, first, last,
+			createdNodeIds, nextObjId, ocdn, errStr, verbose))
 			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-
-		bool foundExisting = r.size() > 0;
-		int64_t currentVersion = -1;
-		if(foundExisting)
-		{
-			const pqxxrow row = r[0];
-			currentVersion = row["version"].as<int64_t>();
-		}
-
-		//Get existing object version in old table (if any)
-		string checkExistingOldSql = "SELECT MAX(version) FROM "+ c.quote_name(tablePrefix + "old"+typeStr+"s") + " WHERE (id=$1);";
-		pqxx::result r2;
-		try
-		{
-			if(verbose >= 1)
-				cout << checkExistingOldSql << " " << objId << endl;
-			prepare_deduplicated(c, tablePrefix+"checkoldobjexists"+typeStr, checkExistingOldSql);
-
-#if PQXX_VERSION_MAJOR >= 7
-			r2 = work->exec_prepared(tablePrefix+"checkoldobjexists"+typeStr, objId);
-#else
-			r2 = work->prepared(tablePrefix+"checkoldobjexists"+typeStr)(objId).exec();
-#endif
-		}
-		catch (const pqxx::sql_error &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-		catch (const std::exception &e)
-		{
-			errStr = e.what();
-			return false;
-		}
-
-		bool foundOld = false;
-		int64_t oldVersion = -1;
-		const pqxxrow row = r2[0];
-		const pqxxfield field = row[0];
-		if(!field.is_null())
-		{
-			oldVersion = field.as<int64_t>();
-			foundOld = true;
-		}
-
-		//Check if we need to delete object from live table
-		if(foundExisting && version >= currentVersion && !osmObject->metaData.visible)
-		{
-			string deletedLiveSql = "DELETE FROM "+ c.quote_name(tablePrefix
-				+ "live"+ typeStr +"s") + " WHERE (id=$1);";
-			try
-			{
-				if(verbose >= 1)
-					cout << deletedLiveSql << " " << objId << endl;
-				prepare_deduplicated(c, tablePrefix+"deletelive"+typeStr, deletedLiveSql);
-
-#if PQXX_VERSION_MAJOR >= 7
-				work->exec_prepared(tablePrefix+"deletelive"+typeStr, objId);
-#else
-				work->prepared(tablePrefix+"deletelive"+typeStr)(objId).exec();
-#endif
-			}
-			catch (const pqxx::sql_error &e)
-			{
-				errStr = e.what();
-				return false;
-			}
-			catch (const std::exception &e)
-			{
-				errStr = e.what();
-				return false;
-			}
-		}
-
-		//Check if we need to copy row from live to history table
-		if(foundExisting && version > currentVersion)
-		{
-			const pqxxrow row = r[0];
-
-			//Insert into live table
-			stringstream ss;
-			ss << "INSERT INTO "<< c.quote_name(tablePrefix+"old"+typeStr+"s") + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible";
-			if(nodeObject != nullptr)
-				ss << ", geom";
-			else if(wayObject != nullptr)
-				ss << ", members";
-			else if(relationObject != nullptr)
-				ss << ", members, memberroles";
-			ss << ") VALUES ";
-			ss << "($1,$2,$3,$4,$5,$6,$7,$8,$9";
-			if(nodeObject != nullptr || wayObject != nullptr)
-				ss << ",$10";
-			else if (relationObject != nullptr)
-				ss << ",$10,$11";
-			ss << ") " << ocdn << ";";
-
-			try
-			{
-				if(nodeObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					prepare_deduplicated(c, tablePrefix+"copyoldnode", ss.str());
-
-#if PQXX_VERSION_MAJOR >= 7
-					pqxx::params params;
-					BindVal<int64_t>(params, row["id"]);
-					BindVal<int64_t>(params, row["changeset"]);
-					BindVal<int64_t>(params, row["changeset_index"]);
-					BindVal<string>(params, row["username"]);
-					BindVal<int64_t>(params, row["uid"]);
-					BindVal<int64_t>(params, row["timestamp"]);
-					BindVal<int64_t>(params, row["version"]);
-					BindVal<string>(params, row["tags"]);
-					params.append(true);
-					BindVal<string>(params, row["geom"]);
-
-					work->exec_prepared(tablePrefix+"copyoldnode", params);
-#else
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldnode");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["geom"]);
-
-					invoc.exec();
-#endif
-				}
-				else if(wayObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					prepare_deduplicated(c, tablePrefix+"copyoldway", ss.str());
-
-#if PQXX_VERSION_MAJOR >= 7
-					pqxx::params params;
-					BindVal<int64_t>(params, row["id"]);
-					BindVal<int64_t>(params, row["changeset"]);
-					BindVal<int64_t>(params, row["changeset_index"]);
-					BindVal<string>(params, row["username"]);
-					BindVal<int64_t>(params, row["uid"]);
-					BindVal<int64_t>(params, row["timestamp"]);
-					BindVal<int64_t>(params, row["version"]);
-					BindVal<string>(params, row["tags"]);
-					params.append(true);
-					BindVal<string>(params, row["members"]);
-
-					work->exec_prepared(tablePrefix+"copyoldway", params);
-#else
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldway");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["members"]);
-
-					invoc.exec();
-#endif
-				}
-				else if(relationObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					prepare_deduplicated(c, tablePrefix+"copyoldrelation", ss.str());
-	
-#if PQXX_VERSION_MAJOR >= 7
-					pqxx::params params;
-					BindVal<int64_t>(params, row["id"]);
-					BindVal<int64_t>(params, row["changeset"]);
-					BindVal<int64_t>(params, row["changeset_index"]);
-					BindVal<string>(params, row["username"]);
-					BindVal<int64_t>(params, row["uid"]);
-					BindVal<int64_t>(params, row["timestamp"]);
-					BindVal<int64_t>(params, row["version"]);
-					BindVal<string>(params, row["tags"]);
-					params.append(true);
-					BindVal<string>(params, row["members"]);
-					BindVal<string>(params, row["memberroles"]);
-
-					work->exec_prepared(tablePrefix+"copyoldrelation", params);
-#else
-					pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"copyoldrelation");
-					BindVal<int64_t>(invoc, row["id"]);
-					BindVal<int64_t>(invoc, row["changeset"]);
-					BindVal<int64_t>(invoc, row["changeset_index"]);
-					BindVal<string>(invoc, row["username"]);
-					BindVal<int64_t>(invoc, row["uid"]);
-					BindVal<int64_t>(invoc, row["timestamp"]);
-					BindVal<int64_t>(invoc, row["version"]);
-					BindVal<string>(invoc, row["tags"]);
-					invoc(true);
-					BindVal<string>(invoc, row["members"]);
-					BindVal<string>(invoc, row["memberroles"]);
-
-					invoc.exec();
-#endif
-				}
-			}
-			catch (const pqxx::sql_error &e)
-			{
-				stringstream ss2;
-				ss2 << e.what() << ":" << e.query() << ":" << ss.str();
-				errStr = ss2.str();
-				return false;
-			}
-			catch (const std::exception &e)
-			{
-				stringstream ss2;
-				ss2 << e.what() << ";" << ss.str() << endl;
-				errStr = ss2.str();
-				return false;
-			}
-		}
-
-		//Check if this is the latest version and visible
-		if(osmObject->metaData.visible && (!foundExisting || version >= currentVersion) && (!foundOld || version >= oldVersion))
-		{
-			if(!foundExisting)
-			{
-				//Insert into live table
-				stringstream ss;
-				ss << "INSERT INTO "<< c.quote_name(tablePrefix+"live"+typeStr+"s") << " (id, changeset, username, uid, timestamp, version, tags";
-				if(nodeObject != nullptr)
-					ss << ", geom";
-				else if(wayObject != nullptr)
-					ss << ", members";
-				else if(relationObject != nullptr)
-					ss << ", members, memberroles";
-
-				ss << ") VALUES ";
-
-				string tagsJson;
-				EncodeTags(osmObject->tags, tagsJson);
-
-				if(objId <= 0)
-				{
-					if(osmObject->metaData.version != 1)
-					{
-						errStr = "Cannot assign a new node to any version but one.";
-						return false;
-					}
-
-					//Assign a new ID
-					objId = nextObjId;
-					createdNodeIds[osmObject->objId] = nextObjId;
-					nextObjId ++;
-				}
-
-				ss << "($1,$2,$3,$4,$5,$6,$7";
-				if(nodeObject != nullptr)
-					ss << ",ST_GeometryFromText($8, 4326)";
-				else if(wayObject != nullptr)
-					ss << ",$8";
-				else if (relationObject != nullptr)
-					ss << ",$8,$9";
-				ss << ");";
-
-				try
-				{
-					if(nodeObject != nullptr)
-					{
-						if(verbose >= 1)
-							cout << ss.str() << endl;
-						prepare_deduplicated(c, tablePrefix+"insertnode", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"insertnode", objId, osmObject->metaData.changeset,osmObject->metaData.username,\
-							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, wkt.str());
-#else
-						work->prepared(tablePrefix+"insertnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(wkt.str()).exec();
-#endif
-					}
-					else if(wayObject != nullptr)
-					{
-						if(verbose >= 1)
-							cout << ss.str() << endl;
-						prepare_deduplicated(c, tablePrefix+"insertway", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"insertway", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
-							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, refsJson);
-#else
-						work->prepared(tablePrefix+"insertway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(refsJson).exec();
-#endif
-					}
-					else if(relationObject != nullptr)
-					{
-						if(verbose >= 1)
-							cout << ss.str() << endl;
-						prepare_deduplicated(c, tablePrefix+"insertrelation", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"insertrelation", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
-							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
-							tagsJson, refsJson, rolesJson);
-#else
-						work->prepared(tablePrefix+"insertrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-							(tagsJson)(refsJson)(rolesJson).exec();
-#endif
-					}
-				}
-				catch (const pqxx::sql_error &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-				catch (const std::exception &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-
-				//Update existing id lists (nodeids, wayids, relationids)
-				stringstream ssi;
-				ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") << " (id) VALUES ($1) "<<ocdn<<";";
-				if(verbose >= 1)
-					cout << ssi.str() << endl;
-				prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"ids", ssi.str());
-
-				if(ocdnSupported)
-				{
-#if PQXX_VERSION_MAJOR >= 7
-					work->exec_prepared(tablePrefix+"insert"+typeStr+"ids", objId);
-#else
-					work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
-#endif
-				}
-				else
-				{
-					//For support of older postgreSQL
-					//Check if id already exists in table
-					stringstream ssi2;
-					ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
-					prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"idexists", ssi2.str());
-#if PQXX_VERSION_MAJOR >= 7
-					pqxx::result r = work->exec_prepared(tablePrefix+"insert"+typeStr+"idexists", objId);
-#else
-					pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists")(objId).exec();
-#endif
-					
-					if(r.size() == 0)
-						throw runtime_error("No data returned from db unexpectedly");
-					const pqxxrow row = r[0];
-					int64_t count = row[0].as<int64_t>();
-
-					//Insert id value if not already in table
-					if(count == 0)
-					{
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"insert"+typeStr+"ids", objId);
-#else
-						work->prepared(tablePrefix+"insert"+typeStr+"ids")(objId).exec();
-#endif
-					}
-				}
-			}
-			else
-			{
-				//Update row in place
-				stringstream ss;
-				ss << "UPDATE "<< c.quote_name(tablePrefix+"live"+typeStr+"s") << " SET changeset=$1, username=$2, uid=$3, timestamp=$4, version=$5, tags=$6";
-				if(nodeObject != nullptr)
-					ss << ", geom=ST_GeometryFromText($8, 4326)";
-				else if(wayObject != nullptr)
-					ss << ", members=$8";
-				else if(relationObject != nullptr)
-					ss << ", members=$8, memberroles=$9";
-				ss << " WHERE id = $7;";
-				string tagsJson;
-				EncodeTags(osmObject->tags, tagsJson);
-
-				if(objId < 0)
-				{
-					errStr = "We should never have to assign an ID and SQL update the live table.";
-					return false;
-				}
-
-				try
-				{
-					if(nodeObject != nullptr)
-					{
-						if(verbose >= 1)
-							cout << ss.str() << endl;
-						prepare_deduplicated(c, tablePrefix+"updatenode", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"updatenode", osmObject->metaData.changeset, osmObject->metaData.username,\
-							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, objId, wkt.str());
-#else
-						work->prepared(tablePrefix+"updatenode")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(wkt.str()).exec();
-#endif
-					}
-					else if(wayObject != nullptr)
-					{
-						if(verbose >= 1)
-							cout << ss.str() << endl;
-						prepare_deduplicated(c, tablePrefix+"updateway", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"updateway", osmObject->metaData.changeset, osmObject->metaData.username,\
-							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version, tagsJson, objId, refsJson);
-#else
-						work->prepared(tablePrefix+"updateway")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)(tagsJson)(objId)(refsJson).exec();
-#endif
-					}
-					else if(relationObject != nullptr)
-					{
-						if(verbose >= 1)
-							cout << ss.str() << endl;
-						prepare_deduplicated(c, tablePrefix+"updaterelation", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-						work->exec_prepared(tablePrefix+"updaterelation", osmObject->metaData.changeset, osmObject->metaData.username,\
-							osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
-							tagsJson, objId, refsJson, rolesJson);
-#else
-						work->prepared(tablePrefix+"updaterelation")(osmObject->metaData.changeset)(osmObject->metaData.username)\
-							(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-							(tagsJson)(objId)(refsJson)(rolesJson).exec();
-#endif
-					}
-
-				}
-				catch (const pqxx::sql_error &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-				catch (const std::exception &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-			}
-		}
-		else
-		{
-			//Insert into history table
-			stringstream ss;
-			ss << "INSERT INTO "<< c.quote_name(tablePrefix+"old"+typeStr+"s")+" (id, changeset, username, uid, timestamp, version, tags, visible";
-			if(nodeObject != nullptr)
-				ss << ", geom";
-			else if(wayObject != nullptr)
-				ss << ", members";
-			else if(relationObject != nullptr)
-				ss << ", members, memberroles";
-			ss << ") VALUES ";
-			string tagsJson;
-			EncodeTags(osmObject->tags, tagsJson);
-
-			if(objId <= 0)
-			{
-				if(osmObject->metaData.version != 1)
-				{
-					errStr = "Cannot assign a new node to any version but 1.";
-					return false;
-				}
-
-				//Assign a new ID
-				objId = nextObjId;
-				createdNodeIds[osmObject->objId] = nextObjId;
-				nextObjId ++;
-			}
-
-			ss << "($1,$2,$3,$4,$5,$6,$7,$8";
-			if(nodeObject != nullptr)
-				ss << ",ST_GeometryFromText($9, 4326)";
-			else if(wayObject != nullptr)
-				ss << ",$9";
-			else if(relationObject != nullptr)
-				ss << ",$9,$10";
-			ss << ") "<< ocdn << ";";
-
-			try
-			{	
-				if(nodeObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					prepare_deduplicated(c, tablePrefix+"insertoldnode", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-					work->exec_prepared(tablePrefix+"insertoldnode", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
-						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
-						tagsJson, osmObject->metaData.visible, wkt.str());
-#else
-					work->prepared(tablePrefix+"insertoldnode")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(wkt.str()).exec();
-#endif
-				}
-				else if(wayObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					prepare_deduplicated(c, tablePrefix+"insertoldway", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-					work->exec_prepared(tablePrefix+"insertoldway", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
-						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
-						tagsJson, osmObject->metaData.visible, refsJson);
-#else
-					work->prepared(tablePrefix+"insertoldway")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(refsJson).exec();
-#endif
-				}
-				else if(relationObject != nullptr)
-				{
-					if(verbose >= 1)
-						cout << ss.str() << endl;
-					prepare_deduplicated(c, tablePrefix+"insertoldrelation", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
-					work->exec_prepared(tablePrefix+"insertoldrelation", objId, osmObject->metaData.changeset, osmObject->metaData.username,\
-						osmObject->metaData.uid, osmObject->metaData.timestamp, osmObject->metaData.version,\
-						tagsJson, osmObject->metaData.visible, refsJson, rolesJson);
-#else
-					work->prepared(tablePrefix+"insertoldrelation")(objId)(osmObject->metaData.changeset)(osmObject->metaData.username)\
-						(osmObject->metaData.uid)(osmObject->metaData.timestamp)(osmObject->metaData.version)\
-						(tagsJson)(osmObject->metaData.visible)(refsJson)(rolesJson).exec();
-#endif
-				}
-
-			}
-			catch (const pqxx::sql_error &e)
-			{
-				stringstream ss2;
-				ss2 << e.what() << ":" << e.query() << ":" << ss.str();
-				errStr = ss2.str();
-				return false;
-			}
-			catch (const std::exception &e)
-			{
-				stringstream ss2;
-				ss2 << e.what() << ";" << ss.str() << endl;
-				errStr = ss2.str();
-				return false;
-			}
-
-			stringstream ssi;
-			ssi << "INSERT INTO "<< c.quote_name(tablePrefix+typeStr+"ids") +" (id) VALUES ($1) "<< ocdn << ";";
-
-			if(verbose >= 1)
-				cout << ssi.str() << endl;
-			prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"ids2", ssi.str());
-			if(ocdnSupported)
-			{
-#if PQXX_VERSION_MAJOR >= 7
-				work->exec_prepared(tablePrefix+"insert"+typeStr+"ids2", objId);
-#else
-				work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
-#endif
-			}
-			else
-			{
-				//For support of older postgreSQL
-				//Check if id already exists in table
-				stringstream ssi2;
-				ssi2 << "SELECT COUNT(id) FROM "<< c.quote_name(tablePrefix+typeStr+"ids") << " WHERE id=$1;";
-				prepare_deduplicated(c, tablePrefix+"insert"+typeStr+"idexists2", ssi2.str());
-#if PQXX_VERSION_MAJOR >= 7
-				pqxx::result r = work->exec_prepared(tablePrefix+"insert"+typeStr+"idexists2", objId);
-#else
-				pqxx::result r = work->prepared(tablePrefix+"insert"+typeStr+"idexists2")(objId).exec();
-#endif
-			
-				if(r.size() == 0)
-					throw runtime_error("No data returned from db unexpectedly");
-				const pqxxrow row = r[0];
-				int64_t count = row[0].as<int64_t>();
-
-				//Insert id value if not already in table
-				if(count == 0)
-				{
-#if PQXX_VERSION_MAJOR >= 7
-					work->exec_prepared(tablePrefix+"insert"+typeStr+"ids2", objId);
-#else
-					work->prepared(tablePrefix+"insert"+typeStr+"ids2")(objId).exec();
-#endif
-				}
-			}
-		}
-
-		if(wayObject != nullptr)
-		{
-			//Update way member table
-			size_t j=0;
-			while(j < wayObject->refs.size())
-			{
-				stringstream sswm;
-				size_t insertSize = 0;
-				sswm << "INSERT INTO "<< c.quote_name(tablePrefix+"way_mems") + " (id, version, index, member) VALUES ";
-
-				size_t initialj = j;
-				for(; j<wayObject->refs.size() && insertSize < 1000; j++)
-				{
-					if(j!=initialj)
-						sswm << ",";
-					sswm << "("<<objId<<","<<wayObject->metaData.version<<","<<j<<","<<wayObject->refs[j]<<")";
-					insertSize ++;
-				}
-				sswm << ";";
-
-				try
-				{
-					if(verbose >= 1)
-						cout << sswm.str() << endl;
-					work->exec(sswm.str());
-				}
-				catch (const pqxx::sql_error &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-				catch (const std::exception &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-			}
-		}
-		else if(relationObject != nullptr)
-		{
-			//Update relation member tables
-			for(size_t j=0;j < relationObject->members.size(); j++)
-			{
-				const RelationMember &member = relationObject->members[j];
-				stringstream ssrm;
-				ssrm << "INSERT INTO "<< c.quote_name(tablePrefix+"relation_mems_"+ObjectTypeName(member.type)[0]) << " (id, version, index, member) VALUES ";
-				ssrm << "("<<objId<<","<<relationObject->metaData.version<<","<<j<<","<<member.ref<<");";
-
-				try
-				{
-					if(verbose >= 1)
-						cout << ssrm.str() << endl;
-					work->exec(ssrm.str());
-				}
-				catch (const pqxx::sql_error &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-				catch (const std::exception &e)
-				{
-					errStr = e.what();
-					return false;
-				}
-			}
-		}
+		first = last;
 	}
-
 	return true;
 }
 
@@ -853,10 +458,13 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 		}
 	}
 
-	//Store relations one by one (since one relation can depend on another)		
+	//Update numbering for created relations used in later relations. A relation
+	//can only depend on one that comes before it. The IDs are those the store
+	//below is about to give out, in the same order.
+	std::map<int64_t, int64_t> relationIdsToCome;
+	int64_t nextRelationId = nextIdMap["relation"];
 	for(size_t i=0; i<osmData.relations.size(); i++)
 	{
-		//Check refs for the relation we are about to add
 		class OsmRelation &rel = osmData.relations[i];
 		for(RelationMember &member : rel.members)
 		{
@@ -864,22 +472,28 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 			std::map<int64_t, int64_t>::iterator it = createdRelationIds.find(member.ref);
 			if(it == createdRelationIds.end())
 			{
-				stringstream ss;
-				ss << "Relation "<< rel.objId << " depends on undefined relation " << member.ref;
-				errStr = ss.str();
-				return false;
+				it = relationIdsToCome.find(member.ref);
+				if(it == relationIdsToCome.end())
+				{
+					stringstream ss;
+					ss << "Relation "<< rel.objId << " depends on undefined relation " << member.ref;
+					errStr = ss.str();
+					return false;
+				}
 			}
 			member.ref = it->second;
 		}
-
-		//Add to database
-		objPtrs.clear();
-		objPtrs.push_back(&osmData.relations[i]);
-
-		ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr, 0);
-		if(!ok)
-			return false;
+		if(rel.objId <= 0)
+			relationIdsToCome[rel.objId] = nextRelationId ++;
 	}
+
+	//Store relations
+	objPtrs.clear();
+	for(size_t i=0; i<osmData.relations.size(); i++)
+		objPtrs.push_back(&osmData.relations[i]);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr, 0);
+	if(!ok)
+		return false;
 
 	ok = UpdateNextObjectIds(c, work, tablePrefix, nextIdMap, nextIdMapOriginal, errStr);
 	if(!ok)
