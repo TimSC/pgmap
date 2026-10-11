@@ -102,13 +102,23 @@ int main(int argc, char **argv)
 		if(inputStr == "3")
 		{
 			cout << "Importing " << config["dump_path"] << endl;
-			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			// In one transaction: the import then happens entirely or not at
+			// all, and the database can skip its write-ahead log for tables
+			// that start empty (see DbImportMapFile)
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("");
 			bool ok = admin->ImportMapFile(verbose, config["dump_path"], errStr);
 
 			if(ok)
+			{
+				admin->Commit();
 				cout << "All done!" << endl;
+			}
 			else
+			{
+				admin->Abort();
 				cout << errStr.errStr << endl;
+				cout << "Nothing was imported." << endl;
+			}
 			continue;
 		}
 

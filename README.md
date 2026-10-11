@@ -107,7 +107,11 @@ Update the pgmap config.cfg files with your new password. Use 127.0.0.1 rather t
 
 	nano config.cfg
 
-Add your database config info to config.cfg then check we can connect:
+Add your database config info to config.cfg. Any setting can instead be given in the environment, which replaces what the file says and works without a file: its name in capitals after `PGMAP_`, so `PGMAP_DBHOST` for dbhost, `PGMAP_DBPASS` for dbpass and `PGMAP_DUMP_PATH` for dump_path. For example:
+
+	PGMAP_DBHOST=10.0.0.5 PGMAP_DBPASS=secret ./admin
+
+Then check we can connect:
 
 	./admin
 
@@ -121,6 +125,8 @@ Set the dump_path variable in pgmap's config.cfg to the actual path of the data 
 
 "Import map data" reads the file named by dump_path straight into the tables, using PostgreSQL's COPY, which is much faster than conventional SQL. It needs libpqxx 7 or later.
 
+The import is one transaction: if it fails, nothing is imported. Before importing a country or a planet, see "Recommended PostgreSQL settings for a large import" below.
+
 You should do at least "Create tables", "Import map data" (skip if you want an empty database), "Create indicies", "Refresh max IDs", "Refresh max changeset IDs and UIDs" in order. Create indicies can take DAYS for a planet dump. Hopefully no errors occur. If you finish these steps, congratulations, you have successfully imported your map data! It might be prudent to remove superuser access for your database user, since it is no longer needed:
 
     sudo su postgres
@@ -130,6 +136,37 @@ You should do at least "Create tables", "Import map data" (skip if you want an e
     ALTER USER pycrocosm WITH NOSUPERUSER;
 
 If you are attempting to configure pycrocosm, you can return to that README at this stage.
+
+### Recommended PostgreSQL settings for a large import
+
+PostgreSQL's defaults suit a small machine and are slow for loading a country or a planet. These settings are worth changing before a large import. They are PostgreSQL's own, not pgmap's: pgmap does not set any of them. `SHOW config_file;` in psql says where postgresql.conf is (on Ubuntu, /etc/postgresql/16/main/postgresql.conf), and `SHOW maintenance_work_mem;`, for example, says what a setting is now.
+
+For "Import map data":
+
+    wal_level = minimal
+    max_wal_senders = 0
+
+Normally everything written to a table is also written to the write-ahead log, which for an import takes about ten times the size of the input file (40 MB for a 4 MB o5m file, when measured). With `wal_level = minimal`, PostgreSQL leaves a table's rows out of the log when the table was emptied in the transaction that fills it, which is how the import works. `max_wal_senders = 0` is required with it. Both need PostgreSQL to be restarted. The admin tool prints a note when it imports with any other wal_level. These two turn off replication and log archiving, so set them back afterwards (`wal_level = replica` is the default) if the database is replicated or backed up by archiving its log.
+
+For "Create indicies", which is the longest step:
+
+    maintenance_work_mem = 2GB
+    max_parallel_maintenance_workers = 4
+
+`maintenance_work_mem` is the memory one index build may sort in. The default of 64MB makes a large build spill to disk and merge in many passes. Somewhere between 1GB and a quarter of the machine's memory is reasonable; each parallel worker and each autovacuum worker may use as much again, so leave room for several. `max_parallel_maintenance_workers` (default 2) lets one build use more processor cores, but only for the ordinary (B-tree) indices: the spatial (GiST) and tag (GIN) indices are built by a single process whatever it is set to.
+
+For both steps:
+
+    max_wal_size = 16GB
+    checkpoint_timeout = 30min
+
+A bulk load fills the write-ahead log quickly, and with the default `max_wal_size` of 1GB PostgreSQL stops to checkpoint every few seconds. A larger allowance lets it get on with the load, at the cost of that much disk space for the log while it runs.
+
+All of these except the first two take effect on a reload (`sudo systemctl reload postgresql`), and can also be given to one database with `ALTER DATABASE db_map SET maintenance_work_mem = '2GB';`, which applies to connections made afterwards. They can be left in place after the import; only `wal_level` and `max_wal_senders` need thought.
+
+Do not turn off `fsync` or `full_page_writes` to go faster: a crash or power cut then can corrupt the whole database, not only the import.
+
+Only the size of the write-ahead log was measured with pgmap. The rest is PostgreSQL's general guidance for bulk loading, and how much each helps depends on the machine.
 
 Database Design
 ---------------

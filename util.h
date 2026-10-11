@@ -240,15 +240,19 @@ public:
 		return true; }
 };
 
+///Reads the settings in a config file, one "name:value" to a line. A setting
+///can also be given in the environment, as its name in capitals after PGMAP_
+///(PGMAP_DBHOST for dbhost), which replaces what the file says. Returns false
+///only if there is neither a file nor any such variable.
 bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut);
 void WriteSettingsFile(const std::string &settingsPath, const std::map<std::string, std::string> &config);
 
 void StrReplaceAll( string &s, const string &search, const string &replace );
 std::string EscapeQuotes(std::string str);
 std::string GeneratePgConnectionString(std::map<std::string, std::string> config);
-///One value from pgmap's settings file, by name, with the spaces around it
-///removed. Returns defaultValue if the file cannot be read or has no line for
-///that name. This is how other programs, such as the Python bindings' users,
+///One of pgmap's settings, by name. It is taken from the environment if given
+///there, as ReadSettingsFile describes, and otherwise from the settings file,
+///with the spaces around it removed. Returns defaultValue if it is in neither. This is how other programs, such as the Python bindings' users,
 ///share the settings of the command line tools without keeping a copy of them.
 ///The file is the one named by the PGMAP_CONFIG environment variable, or
 ///config.cfg in the current directory, where the command line tools look.

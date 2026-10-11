@@ -3,6 +3,8 @@
 #include <sstream>
 #include <cmath>
 #include "util.h"
+#include <cstring>
+#include <cctype>
 #include "cppo5m/io.h"
 using namespace std;
 
@@ -53,25 +55,65 @@ string mergestr(const std::vector<string> &parts, const std::string &glue)
 	return ss.str();
 }
 
+// A setting can be given in the environment instead of the config file, or to
+// replace what the file says: the setting's name in capitals after PGMAP_, so
+// PGMAP_DBHOST for dbhost and PGMAP_DUMP_PATH for dump_path. These two
+// variables begin the same way and are not settings.
+static const char *CONFIG_ENV_PREFIX = "PGMAP_";
+static bool IsConfigEnvName(const std::string &name)
+{
+	return name.compare(0, strlen(CONFIG_ENV_PREFIX), CONFIG_ENV_PREFIX) == 0 &&
+		name.size() > strlen(CONFIG_ENV_PREFIX) && name != "PGMAP_CONFIG" && name != "PGMAP_CFLAGS";
+}
+
+static std::string ConfigEnvName(const std::string &setting)
+{
+	string name = CONFIG_ENV_PREFIX;
+	for(char ch : setting)
+		name.push_back((char)toupper((unsigned char)ch));
+	return name;
+}
+
+extern char **environ;
+
 bool ReadSettingsFile(const std::string &settingsPath, std::map<std::string, std::string> &configOut)
 {
 	string configContent;
-	if(!ReadFileContents(settingsPath.c_str(), false, configContent))
+	bool found = ReadFileContents(settingsPath.c_str(), false, configContent);
+	if(found)
 	{
+		std::vector<std::string> lines = split(configContent, '\n');
+		for(size_t i=0; i < lines.size(); i++)
+		{
+			const std::string &line = lines[i];
+			std::vector<std::string> parts = split(line, ':');
+			if (parts.size() < 2) continue;
+			std::vector<std::string> partsSlice(++parts.begin(), parts.end());
+			string value = mergestr(partsSlice, ":");
+			configOut[parts[0]] = value;
+		}
+	}
+
+	// Settings given in the environment replace those of the file, and can
+	// stand in for a file that is not there
+	bool fromEnvironment = false;
+	for(char **entry = environ; entry != nullptr && *entry != nullptr; entry++)
+	{
+		string text(*entry);
+		size_t equals = text.find('=');
+		if(equals == string::npos) continue;
+		string name = text.substr(0, equals);
+		if(!IsConfigEnvName(name)) continue;
+		string setting;
+		for(char ch : name.substr(strlen(CONFIG_ENV_PREFIX)))
+			setting.push_back((char)tolower((unsigned char)ch));
+		configOut[setting] = text.substr(equals + 1);
+		fromEnvironment = true;
+	}
+
+	if(!found && !fromEnvironment)
 		cerr << "Warning: config file \"" << settingsPath << "\" could not be found" << endl;
-		return false;
-	}
-	std::vector<std::string> lines = split(configContent, '\n');
-	for(size_t i=0; i < lines.size(); i++)
-	{
-		const std::string &line = lines[i];
-		std::vector<std::string> parts = split(line, ':');
-		if (parts.size() < 2) continue;
-		std::vector<std::string> partsSlice(++parts.begin(), parts.end());
-		string value = mergestr(partsSlice, ":");
-		configOut[parts[0]] = value;
-	}
-	return true;
+	return found || fromEnvironment;
 }
 
 void WriteSettingsFile(const std::string &settingsPath, const std::map<std::string, std::string> &config)
@@ -110,6 +152,11 @@ std::string EscapeQuotes(std::string str)
 std::string GetConfigValue(const std::string &name,
 	const std::string &defaultValue)
 {
+	// The environment comes first: see ReadSettingsFile
+	const char *given = getenv(ConfigEnvName(name).c_str());
+	if(given != nullptr)
+		return given;
+
 	const char *named = getenv("PGMAP_CONFIG");
 	string settingsPath = (named != nullptr && named[0] != '\0') ? named : "config.cfg";
 	string configContent;

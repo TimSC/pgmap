@@ -843,6 +843,32 @@ bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 #if PQXX_VERSION_MAJOR >= 7
 	try
 	{
+		// PostgreSQL does not have to write a table's rows to its write-ahead
+		// log as well as to the table when the table was emptied in the
+		// transaction that fills it (and wal_level is minimal): if the
+		// transaction fails, the table simply goes back to being empty. So each
+		// table that is empty is truncated here, which changes nothing else.
+		// A table that already has rows is left alone and added to. This needs
+		// the caller to import within one transaction to have any effect.
+		for(const char *suffix : {"livenodes", "liveways", "liverelations", "oldnodes", "oldways",
+			"oldrelations", "nodeids", "wayids", "relationids", "way_mems", "relation_mems_n",
+			"relation_mems_w", "relation_mems_r"})
+		{
+			string table = c.quote_name(tablePrefix + suffix);
+			if(work->exec("SELECT 1 FROM " + table + " LIMIT 1").empty())
+				work->exec("TRUNCATE " + table);
+		}
+
+		if(verbose >= 1)
+		{
+			string walLevel = work->exec("SHOW wal_level")[0][0].as<string>();
+			if(walLevel != "minimal")
+				cout << "Note: the database has wal_level=" << walLevel << ", so everything imported is also "
+					"written to its write-ahead log. For a large import, setting wal_level=minimal and "
+					"max_wal_senders=0 in postgresql.conf and restarting PostgreSQL avoids that; set them "
+					"back afterwards if the database is replicated or archived." << endl;
+		}
+
 		std::shared_ptr<MapTableImport> import(new MapTableImport(c, work, tablePrefix, verbose));
 		LoadOsmFromFile(filename, import);
 		// A decoder finishes its output itself; doing so again writes nothing
