@@ -6,6 +6,7 @@
 #include "dbquery.h"
 #include "dbusername.h"
 #include "dbmeta.h"
+#include "dbeditactivity.h"
 #include "util.h"
 #include "cppGzip/DecodeGzip.h"
 #include "cppo5m/io.h"
@@ -1147,6 +1148,11 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 			std::stringbuf sb(xmlData);
 			LoadFromOsmChangeXml(sb, *data);
 
+			// The edits are recorded as an upload's are, so that whatever follows
+			// the edit activity, such as a stored extract, sees them. One diff
+			// file is one atomic edit.
+			class EditActivityRecorder recorder(c, work, tableModPrefix, pgCommon);
+
 			for(size_t i=0; i<data->blocks.size(); i++)
 			{
 				const std::string &action = data->blocks[i].action;
@@ -1154,7 +1160,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				class OsmData &block = data->blocks[i].data;
 
 				//Set visibility flag depending on action
-				bool isCreate = action == "delete";
+				bool isCreate = action == "create";
 				bool isDelete = action == "delete";
 				for(size_t j=0; j<block.nodes.size(); j++)
 					block.nodes[j].metaData.visible = !isDelete;
@@ -1163,6 +1169,9 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				for(size_t j=0; j<block.relations.size(); j++)
 					block.relations[j].metaData.visible = !isDelete;
 
+				//Note how things are before the block changes them
+				recorder.BeforeStore(action, block);
+
 				//Store objects
 				std::map<int64_t, int64_t> createdNodeIds, createdWayIds, createdRelationIds;
 
@@ -1170,6 +1179,7 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 					createdNodeIds, createdWayIds, createdRelationIds, errStr);
 				if(!ok)
 					cout << "Warning: " << errStr << endl;
+				bool stored = ok;
 
 				std::set<int64_t> waysToUpdate, relsToUpdate;
 				for(size_t j=0; j<block.ways.size(); j++)
@@ -1185,10 +1195,13 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 
 				if(!isCreate)
 				{
-					//Get affected parent objects
+					//Get affected parent objects, as they were found before the
+					//block was stored
 					std::shared_ptr<class OsmData> affectedParents = make_shared<class OsmData>();
-
-					pgCommon->GetAffectedParents2(block, affectedParents);
+					if(recorder.Enabled())
+						*affectedParents = recorder.AffectedParents();
+					else
+						pgCommon->GetAffectedParents2(block, affectedParents);
 
 					//Ensure a copy of affected parents is in the active table
 					std::map<int64_t, int64_t> unusedNodeIds, unusedWayIds, unusedRelationIds;
@@ -1214,6 +1227,10 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 					0,
 					tableModPrefix,
 					errStr);
+
+				//Record the edit, now that the boxes say where things have got to
+				if(stored && !recorder.AfterStore(action, block, errStr))
+					return false;
 			}
 		}
 	}

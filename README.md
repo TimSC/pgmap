@@ -283,6 +283,16 @@ tests that as well. It is NULL for every other edit, which here means nowhere
 more, not unknown. It and the four collections each have a GiST index. The
 older `bbox` column of the table is not used.
 
+Rows are written by the web API's upload and by the admin tool's "Apply
+diffs". Applying diffs follows the same rules, with these differences: each
+diff file is one atomic edit, with one row for each of its action blocks; a
+row takes its changeset and user from the first object of its block and its
+time from the latest; and nothing is checked, so a diff that deletes an object
+still in use is recorded as it stands. Several queries are made for every
+block, which makes applying a large diff slower than it was. Nothing is
+recorded on a map below schema 14. Importing map data or changeset metadata
+does not write rows.
+
 `related_parents` and the bounding box columns were added to schema 14 after
 it was first in use. They are NULL in rows recorded before then, which means
 not recorded. On a map already at version 14, asking the admin tool for schema

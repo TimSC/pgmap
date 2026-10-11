@@ -4,7 +4,10 @@
 #include <pqxx/pqxx>
 #include <string>
 #include <vector>
+#include <map>
+#include <set>
 #include "pgmap.h"
+#include "dbusername.h"
 
 class EditActivity
 {
@@ -113,5 +116,51 @@ void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
 	int64_t limit = 0,
 	const std::vector<double> &bbox = std::vector<double>(),
 	bool newest = false);
+
+// Records the edit activity of changes that are applied to the map without
+// going through the web API's upload, such as replication diffs. It follows
+// the rules of upload_block in pycrocosm's changeset/views.py, where they are
+// written out, and the two have to be kept in step: what each list of a
+// record holds, the boxes that go with the lists, and relation_reach_bbox.
+//
+// One recorder is one atomic edit: the blocks it records share an atomic edit
+// ID and are numbered in order. For each block, call BeforeStore while the
+// map is as it was, store the block and bring the boxes of its ways and
+// relations and of AffectedParents() up to date, then call AfterStore. The
+// map must stay exclusively locked from the first block until commit.
+class EditActivityRecorder
+{
+public:
+	EditActivityRecorder(pqxx::connection &c, pqxx::transaction_base *work,
+		const std::string &tableActivePrefix, class PgCommon *common);
+
+	// False on a map whose schema has no atomic edits, where nothing is recorded
+	bool Enabled() const {return enabled;}
+
+	void BeforeStore(const std::string &action, const class OsmData &block);
+	// The ways and relations holding the block's objects, found by BeforeStore
+	const class OsmData &AffectedParents() const {return *parents;}
+	bool AfterStore(const std::string &action, const class OsmData &block, std::string &errStr);
+
+private:
+	typedef std::pair<int, int64_t> ObjKey; // Type (0 node, 1 way, 2 relation) and ID
+	typedef std::map<ObjKey, std::vector<double> > BoxMap;
+
+	pqxx::connection &c;
+	pqxx::transaction_base *work;
+	std::string tableActivePrefix;
+	class PgCommon *common;
+	class DbUsernameLookup usernames;
+	bool enabled;
+	int64_t atomicEditId, blockIndex;
+
+	std::shared_ptr<class OsmData> existing, parents;
+	BoxMap existingBoxes, parentBoxesBefore;
+	std::vector<std::vector<double> > reachBoxes;
+
+	void Visible(const std::string &type, const std::set<int64_t> &ids, std::shared_ptr<class OsmData> out);
+	void Boxes(const class OsmData &objs, BoxMap &out);
+	void ReachBoxes(const class OsmData &objs);
+};
 
 #endif //_EDIT_ACTIVITY_H

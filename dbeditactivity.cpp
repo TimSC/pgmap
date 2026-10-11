@@ -4,6 +4,8 @@
 #include "dbjson.h"
 #include "util.h"
 #include "dbprepared.h"
+#include "dbquery.h"
+#include "pgcommon.h"
 using namespace std;
 
 #if PQXX_VERSION_MAJOR >= 6
@@ -556,4 +558,323 @@ void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
 		c.quote_name(tablePrefix + "edit_activity"));
 	editActivityId = latest[0][0].as<int64_t>();
 	atomicEditId = latest[0][1].as<int64_t>();
+}
+
+// ************* Recording activity outside an upload *************
+
+static const char *ACTIVITY_TYPE_NAMES[3] = {"node", "way", "relation"};
+
+EditActivityRecorder::EditActivityRecorder(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tableActivePrefix, class PgCommon *common):
+	c(c), work(work), tableActivePrefix(tableActivePrefix), common(common),
+	usernames(c, work, "", ""), //Only IDs, versions and positions are wanted
+	atomicEditId(0), blockIndex(0),
+	existing(new class OsmData()), parents(new class OsmData())
+{
+	// Activity is grouped into atomic edits from schema 14, which this sequence came with
+	string sequence = c.quote_name(tableActivePrefix + "atomic_edit_id_seq");
+	enabled = !work->exec("SELECT to_regclass(" + work->quote(sequence) + ")")[0][0].is_null();
+}
+
+void EditActivityRecorder::Visible(const std::string &type, const std::set<int64_t> &ids,
+	std::shared_ptr<class OsmData> out)
+{
+	std::set<int64_t>::const_iterator it = ids.begin();
+	while(it != ids.end())
+		GetVisibleObjectsById(c, work, usernames, tableActivePrefix, type, ids, it, 1000, out);
+}
+
+// The box of each way and relation as the map has them now: the stored one,
+// or for a way without one, a box worked out from its nodes.
+void EditActivityRecorder::Boxes(const class OsmData &objs, BoxMap &out)
+{
+	std::set<int64_t> wayIds, relationIds;
+	for(size_t i=0; i<objs.ways.size(); i++) wayIds.insert(objs.ways[i].objId);
+	for(size_t i=0; i<objs.relations.size(); i++) relationIds.insert(objs.relations[i].objId);
+
+	for(int type=1; type<=2; type++)
+	{
+		const std::set<int64_t> &ids = type == 1 ? wayIds : relationIds;
+		if(ids.empty()) continue;
+		std::map<int64_t, std::vector<double> > stored;
+		common->GetObjectBboxes(ACTIVITY_TYPE_NAMES[type], ids, stored);
+		for(auto it=stored.begin(); it!=stored.end(); it++)
+			if(it->second.size() == 4)
+				out[ObjKey(type, it->first)] = it->second;
+	}
+
+	std::set<int64_t> unboxed;
+	for(int64_t wayId : wayIds)
+		if(out.find(ObjKey(1, wayId)) == out.end())
+			unboxed.insert(wayId);
+	if(unboxed.empty()) return;
+
+	// The ways are read again, so the nodes are those they have at this moment
+	std::shared_ptr<class OsmData> found(new class OsmData());
+	Visible("way", unboxed, found);
+	std::set<int64_t> nodeIds;
+	for(size_t i=0; i<found->ways.size(); i++)
+		nodeIds.insert(found->ways[i].refs.begin(), found->ways[i].refs.end());
+	Visible("node", nodeIds, found);
+	std::map<int64_t, std::pair<double, double> > positions;
+	for(size_t i=0; i<found->nodes.size(); i++)
+		positions[found->nodes[i].objId] = std::make_pair(found->nodes[i].lon, found->nodes[i].lat);
+	for(size_t i=0; i<found->ways.size(); i++)
+	{
+		std::vector<double> box;
+		for(int64_t ref : found->ways[i].refs)
+		{
+			auto it = positions.find(ref);
+			if(it == positions.end()) continue;
+			if(box.empty())
+				box = {it->second.first, it->second.second, it->second.first, it->second.second};
+			else
+			{
+				box[0] = std::min(box[0], it->second.first);
+				box[1] = std::min(box[1], it->second.second);
+				box[2] = std::max(box[2], it->second.first);
+				box[3] = std::max(box[3], it->second.second);
+			}
+		}
+		if(!box.empty())
+			out[ObjKey(1, found->ways[i].objId)] = box;
+	}
+}
+
+// Adds the boxes of the ways that hold a node member of any of the relations:
+// where an edit to a relation matters beyond the relation's own box. See
+// relation_reach_bboxes in pycrocosm's changeset/views.py for why.
+void EditActivityRecorder::ReachBoxes(const class OsmData &objs)
+{
+	std::set<int64_t> nodeIds;
+	for(size_t i=0; i<objs.relations.size(); i++)
+		for(const RelationMember &member : objs.relations[i].members)
+			if(member.type == ObjectType::Node && member.ref > 0)
+				nodeIds.insert(member.ref);
+	if(nodeIds.empty()) return;
+	std::shared_ptr<class OsmData> ways(new class OsmData());
+	common->GetWaysForNodes(nodeIds, ways);
+	BoxMap boxes;
+	Boxes(*ways, boxes);
+	for(auto it=boxes.begin(); it!=boxes.end(); it++)
+		reachBoxes.push_back(it->second);
+}
+
+static void AppendNodePositions(const std::vector<OsmNode> &nodes,
+	std::map<std::pair<int, int64_t>, std::vector<double> > &out)
+{
+	for(const OsmNode &node : nodes)
+		out[std::make_pair(0, node.objId)] = {node.lon, node.lat, node.lon, node.lat};
+}
+
+static std::string BoxPolygonWkt(const std::vector<double> &box)
+{
+	stringstream wkt;
+	wkt.precision(17);
+	wkt << "POLYGON((" << box[0] << " " << box[1] << "," << box[0] << " " << box[3] << ","
+		<< box[2] << " " << box[3] << "," << box[2] << " " << box[1] << "," << box[0] << " " << box[1] << "))";
+	return wkt.str();
+}
+
+// One geometry for each object of a list, in order: a point for a node, the
+// rectangle of its box for a way or relation. An object without one has an
+// empty polygon where that is expected, as of deleted objects; otherwise the
+// box is not known and nothing is returned, which leaves the column unset.
+static std::string BoxCollectionWkt(const std::vector<std::string> &types,
+	const std::vector<std::pair<int64_t, int64_t> > &idVers,
+	const std::map<std::pair<int, int64_t>, std::vector<double> > &boxes, bool noneExpected)
+{
+	if(types.empty()) return "GEOMETRYCOLLECTION EMPTY";
+	stringstream wkt;
+	wkt.precision(17);
+	wkt << "GEOMETRYCOLLECTION(";
+	for(size_t i=0; i<types.size(); i++)
+	{
+		int type = types[i] == "node" ? 0 : (types[i] == "way" ? 1 : 2);
+		auto it = boxes.find(std::make_pair(type, idVers[i].first));
+		if(i > 0) wkt << ",";
+		if(it == boxes.end())
+		{
+			if(!noneExpected) return "";
+			wkt << "POLYGON EMPTY";
+		}
+		else if(type == 0)
+			wkt << "POINT(" << it->second[0] << " " << it->second[1] << ")";
+		else
+			wkt << BoxPolygonWkt(it->second);
+	}
+	wkt << ")";
+	return wkt.str();
+}
+
+static void ListTypeIdVers(const class OsmData &objs, std::vector<std::string> &types,
+	std::vector<std::pair<int64_t, int64_t> > &idVers)
+{
+	for(const OsmNode &obj : objs.nodes)
+	{
+		types.push_back("node");
+		idVers.push_back(std::make_pair(obj.objId, obj.metaData.version));
+	}
+	for(const OsmWay &obj : objs.ways)
+	{
+		types.push_back("way");
+		idVers.push_back(std::make_pair(obj.objId, obj.metaData.version));
+	}
+	for(const OsmRelation &obj : objs.relations)
+	{
+		types.push_back("relation");
+		idVers.push_back(std::make_pair(obj.objId, obj.metaData.version));
+	}
+}
+
+void EditActivityRecorder::BeforeStore(const std::string &action, const class OsmData &block)
+{
+	existing.reset(new class OsmData());
+	parents.reset(new class OsmData());
+	existingBoxes.clear();
+	parentBoxesBefore.clear();
+	reachBoxes.clear();
+	if(!enabled) return;
+
+	// existing: the block's objects as the map has them before the edit.
+	// Nothing was there before a creation.
+	if(action != "create")
+	{
+		std::set<int64_t> ids;
+		for(const OsmNode &obj : block.nodes) ids.insert(obj.objId);
+		Visible("node", ids, existing);
+		ids.clear();
+		for(const OsmWay &obj : block.ways) ids.insert(obj.objId);
+		Visible("way", ids, existing);
+		ids.clear();
+		for(const OsmRelation &obj : block.relations) ids.insert(obj.objId);
+		Visible("relation", ids, existing);
+
+		Boxes(*existing, existingBoxes);
+		AppendNodePositions(existing->nodes, existingBoxes);
+		ReachBoxes(*existing);
+
+		// affectedparents: what holds the block's objects without being in
+		// it, with the boxes they have before anything moves
+		common->GetAffectedParents2(block, parents);
+		Boxes(*parents, parentBoxesBefore);
+	}
+}
+
+bool EditActivityRecorder::AfterStore(const std::string &action, const class OsmData &block, std::string &errStr)
+{
+	if(!enabled) return true;
+	if(block.nodes.empty() && block.ways.empty() && block.relations.empty()) return true;
+
+	class EditActivity activity;
+	activity.action = action;
+	activity.nodes = block.nodes.size();
+	activity.ways = block.ways.size();
+	activity.relations = block.relations.size();
+
+	// A diff's objects each say who changed them and in which changeset. A
+	// record has one of each: those of the block's first object, and the
+	// latest of the times.
+	const MetaData *first = !block.nodes.empty() ? &block.nodes[0].metaData :
+		(!block.ways.empty() ? &block.ways[0].metaData : &block.relations[0].metaData);
+	activity.changeset = first->changeset;
+	activity.uid = first->uid;
+	activity.timestamp = 0;
+	for(const OsmNode &obj : block.nodes) activity.timestamp = std::max(activity.timestamp, (int64_t)obj.metaData.timestamp);
+	for(const OsmWay &obj : block.ways) activity.timestamp = std::max(activity.timestamp, (int64_t)obj.metaData.timestamp);
+	for(const OsmRelation &obj : block.relations) activity.timestamp = std::max(activity.timestamp, (int64_t)obj.metaData.timestamp);
+
+	ListTypeIdVers(*existing, activity.existingType, activity.existingIdVer);
+	ListTypeIdVers(block, activity.updatedType, activity.updatedIdVer);
+	ListTypeIdVers(*parents, activity.affectedparentsType, activity.affectedparentsIdVer);
+
+	// related: unedited objects below the edited ones. For a creation, every
+	// object the block refers to; for a modification, the nodes of its ways
+	// and of the affected parent ways; for a deletion, none. Anything in the
+	// block or among the affected parents is left out.
+	std::set<int64_t> known[3], wanted[3];
+	for(const OsmNode &obj : block.nodes) known[0].insert(obj.objId);
+	for(const OsmWay &obj : block.ways) known[1].insert(obj.objId);
+	for(const OsmRelation &obj : block.relations) known[2].insert(obj.objId);
+	for(const OsmWay &obj : parents->ways) known[1].insert(obj.objId);
+	for(const OsmRelation &obj : parents->relations) known[2].insert(obj.objId);
+	if(action == "create" || action == "modify")
+		for(const OsmWay &obj : block.ways)
+			wanted[0].insert(obj.refs.begin(), obj.refs.end());
+	if(action == "create")
+		for(const OsmRelation &obj : block.relations)
+			for(const RelationMember &member : obj.members)
+				wanted[(int)member.type].insert(member.ref);
+	if(action == "modify")
+		for(const OsmWay &obj : parents->ways)
+			wanted[0].insert(obj.refs.begin(), obj.refs.end());
+	std::shared_ptr<class OsmData> related(new class OsmData());
+	std::set<int64_t> relatedNodeIds;
+	for(int type=0; type<3; type++)
+	{
+		std::set<int64_t> ids;
+		for(int64_t objId : wanted[type])
+			if(known[type].find(objId) == known[type].end())
+				ids.insert(objId);
+		Visible(ACTIVITY_TYPE_NAMES[type], ids, related);
+		if(type == 0) relatedNodeIds = ids;
+	}
+	ListTypeIdVers(*related, activity.relatedType, activity.relatedIdVer);
+
+	// relatedparents: the relations holding a related node, other than those
+	// already in the block or among the affected parents
+	activity.relatedparentsRecorded = true;
+	if(!relatedNodeIds.empty())
+	{
+		std::shared_ptr<class OsmData> found(new class OsmData());
+		common->GetRelationsForObjs("node", relatedNodeIds, found);
+		std::set<int64_t> listed;
+		for(const OsmRelation &obj : found->relations)
+		{
+			if(known[2].find(obj.objId) != known[2].end() || !listed.insert(obj.objId).second)
+				continue;
+			activity.relatedparentsType.push_back("relation");
+			activity.relatedparentsIdVer.push_back(std::make_pair(obj.objId, obj.metaData.version));
+		}
+	}
+
+	// Where the objects of each list are. A deleted object is nowhere afterwards.
+	BoxMap updatedBoxes, parentBoxesAfter;
+	if(action != "delete")
+	{
+		Boxes(block, updatedBoxes);
+		AppendNodePositions(block.nodes, updatedBoxes);
+		ReachBoxes(block);
+	}
+	Boxes(*parents, parentBoxesAfter);
+	activity.existingBbox = BoxCollectionWkt(activity.existingType, activity.existingIdVer, existingBoxes, false);
+	activity.updatedBbox = BoxCollectionWkt(activity.updatedType, activity.updatedIdVer, updatedBoxes, action == "delete");
+	activity.affectedparentsBeforeBbox = BoxCollectionWkt(activity.affectedparentsType,
+		activity.affectedparentsIdVer, parentBoxesBefore, false);
+	activity.affectedparentsAfterBbox = BoxCollectionWkt(activity.affectedparentsType,
+		activity.affectedparentsIdVer, parentBoxesAfter, false);
+	if(!reachBoxes.empty())
+	{
+		std::vector<double> reach = reachBoxes[0];
+		for(const std::vector<double> &box : reachBoxes)
+		{
+			reach[0] = std::min(reach[0], box[0]);
+			reach[1] = std::min(reach[1], box[1]);
+			reach[2] = std::max(reach[2], box[2]);
+			reach[3] = std::max(reach[3], box[3]);
+		}
+		activity.relationReachBbox = BoxPolygonWkt(reach);
+	}
+
+	// Allocated once the map is locked, as an upload does; see PgTransaction::InsertEditActivity
+	if(atomicEditId == 0)
+	{
+		string sequence = c.quote_name(tableActivePrefix + "atomic_edit_id_seq");
+		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
+	}
+	activity.atomicEditId = atomicEditId;
+	activity.blockIndex = blockIndex;
+	bool ok = DbInsertEditActivity(c, work, tableActivePrefix, activity, errStr, 0);
+	if(ok) blockIndex ++;
+	return ok;
 }
