@@ -365,6 +365,101 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
+// The member tables, with the kind of object that owns each one's rows
+static const char *MEMBER_TABLES[4][2] = {{"way_mems", "way"}, {"relation_mems_n", "relation"},
+	{"relation_mems_w", "relation"}, {"relation_mems_r", "relation"}};
+
+// The views of the objects a table set shows: its own live objects, and its
+// parent's except those it has taken over. distinct says whether rows are
+// also compared with each other to remove duplicates, as before version 15.
+static bool DbDefineVisibleViews(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
+	const std::string &parentPrefix, const std::string &tablePrefix, bool distinct, std::string &errStr)
+{
+	if(parentPrefix.empty()) return true; // Such a view is just its live table
+	for(const char *kind : {"node", "way", "relation"})
+	{
+		string view = c.quote_name(tablePrefix + "visible" + kind + "s");
+		string parent = c.quote_name(parentPrefix + "visible" + kind + "s");
+		string ids = c.quote_name(tablePrefix + kind + "ids");
+		string live = c.quote_name(tablePrefix + "live" + kind + "s");
+		string sql = "CREATE OR REPLACE VIEW " + view + " AS SELECT " + parent + ".* FROM " + parent +
+			" LEFT JOIN " + ids + " ON " + ids + ".id = " + parent + ".id WHERE " + ids + ".id IS NULL " +
+			(distinct ? "UNION" : "UNION ALL") + " SELECT * FROM " + live + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+	return true;
+}
+
+// Version 15:
+//  - The member tables (way_mems, relation_mems_*) hold the members of the
+//    live version of each way and relation, and nothing else. Until now rows
+//    were added for every version stored and never removed, and nothing
+//    stopped the same row being added twice. Only the live version's rows
+//    are ever looked up; an old version's members remain in its history row.
+//    The tables are rebuilt here from the live tables, which are the
+//    authority, and given a primary key of (id, version, index).
+//  - The visible* views no longer compare whole rows to remove duplicates
+//    (UNION ALL in place of UNION): the two halves cannot overlap.
+bool DbUpgradeTables14to15(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
+{
+	for(const auto &entry : MEMBER_TABLES)
+	{
+		string suffix = entry[0], owner = entry[1];
+		string table = c.quote_name(tablePrefix + suffix);
+		string live = c.quote_name(tablePrefix + "live" + owner + "s");
+		string memberIndex = tablePrefix + suffix + "_mids";
+		bool hadIndex = !work->exec("SELECT to_regclass(" + work->quote(c.quote_name(memberIndex)) + ")")[0][0].is_null();
+
+		// Filling an empty table and indexing it afterwards is far quicker
+		// than deleting from a full one
+		string sql = "DROP INDEX IF EXISTS " + c.quote_name(memberIndex) + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		sql = "TRUNCATE " + table + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		if(owner == "way")
+			sql = "INSERT INTO " + table + " (id, version, index, member) SELECT o.id, o.version, "
+				"(m.ordinality-1)::integer, m.value::text::bigint FROM " + live +
+				" o CROSS JOIN LATERAL jsonb_array_elements(o.members) WITH ORDINALITY m;";
+		else
+			sql = "INSERT INTO " + table + " (id, version, index, member) SELECT o.id, o.version, "
+				"(m.ordinality-1)::integer, (m.value->>1)::bigint FROM " + live +
+				" o CROSS JOIN LATERAL jsonb_array_elements(o.members) WITH ORDINALITY m "
+				"WHERE m.value->>0 = " + work->quote(string(1, suffix.back()) == "n" ? string("node") :
+					(suffix.back() == 'w' ? string("way") : string("relation"))) + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		sql = "ALTER TABLE " + table + " ADD CONSTRAINT " + c.quote_name(tablePrefix + suffix + "_key") +
+			" PRIMARY KEY (id, version, index);";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		if(hadIndex)
+		{
+			sql = "CREATE INDEX " + c.quote_name(memberIndex) + " ON " + table + " (member);";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	}
+	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, false, errStr);
+}
+
+// The member tables keep what they hold, which the earlier version reads
+// just as well; only the key and the form of the views go back.
+bool DbDowngradeTables15To14(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
+{
+	for(const auto &entry : MEMBER_TABLES)
+	{
+		string suffix = entry[0];
+		string sql = "ALTER TABLE " + c.quote_name(tablePrefix + suffix) + " DROP CONSTRAINT IF EXISTS " +
+			c.quote_name(tablePrefix + suffix + "_key") + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		for(const char *column : {"id", "version", "index"})
+		{
+			sql = "ALTER TABLE " + c.quote_name(tablePrefix + suffix) + " ALTER COLUMN " + column + " DROP NOT NULL;";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	}
+	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, true, errStr);
+}
+
 // Legacy rows remain ungrouped: timestamps cannot recover upload boundaries.
 bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, string &errStr)
@@ -535,7 +630,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	cout << "Starting schema version" << schemaVersion << endl;
 
 	if(latest)
-		targetVer = 14;
+		targetVer = 15;
 	bool ok = true;
 
 	//Upgrading
@@ -585,15 +680,29 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		schemaVersion = 14;
 	}
 
-	if(schemaVersion == 14 and targetVer >= 14)
+	if(schemaVersion >= 14 and targetVer >= schemaVersion)
 	{
 		// Schema 14 has gained columns since it was introduced. Every step of
 		// creating its extract tables leaves alone whatever is already there,
-		// so asking for version 14 again brings an older version 14 up to date.
+		// so asking for the version a map already has, or a later one, brings
+		// an older version 14 up to date.
 		if(!DbAmendSchema14(c, work, verbose, tablePrefix, errStr)) return false;
 	}
 
+	if(schemaVersion == 14 and targetVer > schemaVersion)
+	{
+		if(!DbUpgradeTables14to15(c, work, verbose, parentPrefix, tablePrefix, errStr)) return false;
+		if(!DbSetMetaValue(c, work, "schema_version", "15", tablePrefix, errStr)) return false;
+		schemaVersion = 15;
+	}
+
 	//Downgrading
+	if(targetVer < 15 and schemaVersion == 15)
+	{
+		if(!DbDowngradeTables15To14(c, work, verbose, parentPrefix, tablePrefix, errStr)) return false;
+		if(!DbSetMetaValue(c, work, "schema_version", "14", tablePrefix, errStr)) return false;
+		schemaVersion = 14;
+	}
 	if(targetVer < 14 and schemaVersion == 14)
 	{
 		if(!DbDowngradeTables14To13(c, work, verbose, tablePrefix, errStr)) return false;
@@ -681,9 +790,13 @@ public:
 		ObjectRow row;
 		Common(way, 1, row);
 		EncodeInt64Vec(way.refs, row.extra);
-		for(size_t i=0; i<way.refs.size(); i++)
-			members[0].push_back({way.objId, (int64_t)way.metaData.version, (int64_t)i, way.refs[i]});
-		buffered += way.refs.size();
+		// Only the live version of an object has rows in the member tables
+		if(IsLive(way))
+		{
+			for(size_t i=0; i<way.refs.size(); i++)
+				members[0].push_back({way.objId, (int64_t)way.metaData.version, (int64_t)i, way.refs[i]});
+			buffered += way.refs.size();
+		}
 		Add(way, 1, row);
 	}
 
@@ -699,7 +812,8 @@ public:
 			refTypeStrs.push_back(ObjectTypeName(member.type));
 			refIds.push_back(member.ref);
 			refRoles.push_back(member.role);
-			members[1 + (int)member.type].push_back({relation.objId, (int64_t)relation.metaData.version, (int64_t)i, member.ref});
+			if(IsLive(relation))
+				members[1 + (int)member.type].push_back({relation.objId, (int64_t)relation.metaData.version, (int64_t)i, member.ref});
 		}
 		buffered += relation.members.size();
 		EncodeRelationMems(refTypeStrs, refIds, row.extra);
@@ -741,6 +855,12 @@ private:
 	// way_mems, then relation_mems_n, _w and _r
 	std::vector<MemberRow> members[4];
 
+	// The current, visible version of an object is live; the rest is history
+	static bool IsLive(const OsmObject &obj)
+	{
+		return obj.metaData.current && obj.metaData.visible;
+	}
+
 	// Something left out of a file is stored as NULL
 	void Common(const OsmObject &obj, int type, ObjectRow &row)
 	{
@@ -757,8 +877,7 @@ private:
 
 	void Add(const OsmObject &obj, int type, const ObjectRow &row)
 	{
-		// The current, visible version of an object is live; the rest is history
-		if(obj.metaData.current && obj.metaData.visible)
+		if(IsLive(obj))
 			live[type].push_back(row);
 		else
 			old[type].push_back(row);
@@ -869,12 +988,43 @@ bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 					"back afterwards if the database is replicated or archived." << endl;
 		}
 
+		// A member table that starts empty is loaded without its key and its
+		// index of members, which are put back once it is full: building them
+		// in one go is much quicker than keeping them up row by row.
+		std::vector<string> keysToRestore, indicesToRestore;
+		for(const auto &entry : MEMBER_TABLES)
+		{
+			string suffix = entry[0];
+			string table = c.quote_name(tablePrefix + suffix);
+			if(!work->exec("SELECT 1 FROM " + table + " LIMIT 1").empty()) continue;
+			auto exists = [&](const string &name) {
+				return !work->exec("SELECT to_regclass(" + work->quote(c.quote_name(name)) + ")")[0][0].is_null();
+			};
+			if(exists(tablePrefix + suffix + "_key"))
+			{
+				work->exec("ALTER TABLE " + table + " DROP CONSTRAINT " + c.quote_name(tablePrefix + suffix + "_key"));
+				keysToRestore.push_back(suffix);
+			}
+			if(exists(tablePrefix + suffix + "_mids"))
+			{
+				work->exec("DROP INDEX " + c.quote_name(tablePrefix + suffix + "_mids"));
+				indicesToRestore.push_back(suffix);
+			}
+		}
+
 		std::shared_ptr<MapTableImport> import(new MapTableImport(c, work, tablePrefix, verbose));
 		LoadOsmFromFile(filename, import);
 		// A decoder finishes its output itself; doing so again writes nothing
 		import->Finish();
 		if(verbose >= 1)
 			cout << import->Total() << " objects imported" << endl;
+
+		for(const string &suffix : keysToRestore)
+			work->exec("ALTER TABLE " + c.quote_name(tablePrefix + suffix) + " ADD CONSTRAINT " +
+				c.quote_name(tablePrefix + suffix + "_key") + " PRIMARY KEY (id, version, index)");
+		for(const string &suffix : indicesToRestore)
+			work->exec("CREATE INDEX " + c.quote_name(tablePrefix + suffix + "_mids") + " ON " +
+				c.quote_name(tablePrefix + suffix) + " (member)");
 	}
 	catch (const std::exception &e)
 	{

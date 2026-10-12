@@ -16,7 +16,7 @@ using namespace std;
 
 // The geometry columns holding the boxes that go with the lists of objects.
 // They were added to schema 14 after it was first in use; a map that is at
-// version 14 without them has to be asked for schema 14 again.
+// version 14 without them has to be asked for the latest schema again.
 // The first four are the collections; the last is a single polygon.
 static const size_t ACTIVITY_BBOX_COUNT = 5, ACTIVITY_COLLECTION_COUNT = 4;
 static const char *ACTIVITY_BBOX_COLUMNS[ACTIVITY_BBOX_COUNT] = {"existing_bbox", "updated_bbox",
@@ -203,8 +203,8 @@ static std::string ActivityError(const std::exception &e)
 {
 	string message = e.what();
 	if(message.find("does not exist") != string::npos)
-		message += " (the edit activity table may predate the current schema 14: "
-			"ask the admin tool for schema version 14 again)";
+		message += " (the edit activity table may predate the current schema: "
+			"ask the admin tool for the latest schema version again)";
 	return message;
 }
 

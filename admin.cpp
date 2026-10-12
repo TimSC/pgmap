@@ -330,7 +330,7 @@ int main(int argc, char **argv)
 
 		if(inputStr == "g")
 		{
-			cout << "Schema version?" << endl;
+			cout << "Schema version? (the latest is 15)" << endl;
 			std::string schemaVer;
 			cin >> schemaVer;
 

@@ -39,6 +39,7 @@ struct StoreDecision
 	int64_t objId; // As stored: a new object has been given its ID
 	bool copyLiveToOld, deleteLive, insertLive, updateLive, insertOld;
 	bool memberRows; // Whether its member rows are still to be written
+	bool dropMemberRows; // Whether the rows of the version that was live are to go
 	string tagsJson, refsJson, rolesJson, wkt;
 };
 
@@ -60,8 +61,12 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 	 *   - the live row is first copied to history if this is newer than it,
 	 *   - a visible object at least as new as both becomes the live row,
 	 *     inserted or updated in place, and anything else goes to history.
-	 * Member rows are added for a way or relation unless it is a live row
-	 * rewritten at the version it already has.
+	 * The member tables hold the members of live rows only (schema 15): a
+	 * way or relation that stops being live, or is live at a new version,
+	 * has its old member rows removed, and rows are written for what becomes
+	 * live. A live row rewritten at the version it already has keeps its
+	 * rows. On an older schema, which has no index to find an object's rows
+	 * by, nothing is removed and rows are written for history versions too.
 	 *
 	 * The tables are asked about all the objects at once, and each kind of
 	 * change is then made by one statement for all the objects it applies
@@ -138,6 +143,7 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 			// rows already. Adding them again would leave every member listed
 			// once more each time.
 			d.memberRows = !(d.updateLive && version == currentVersion);
+			d.dropMemberRows = d.deleteLive || d.copyLiveToOld;
 
 			if(d.objId <= 0)
 			{
@@ -279,6 +285,23 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 				suffixes[1] = "relation_mems_w";
 				suffixes[2] = "relation_mems_r";
 			}
+			// Whether the tables are as schema 15 has them: keyed, and holding
+			// live versions only
+			bool liveOnly = !work->exec("SELECT to_regclass(" + work->quote(c.quote_name(
+				tablePrefix + suffixes[0] + "_key")) + ")")[0][0].is_null();
+			if(liveOnly)
+			{
+				ids.clear();
+				for(const StoreDecision &d : decisions)
+					if(d.dropMemberRows || (d.memberRows && (d.insertLive || d.updateLive)))
+						ids.push_back(d.objId);
+				if(!ids.empty())
+					for(const char *suffix : suffixes)
+						if(suffix[0] != '\0')
+							run("DELETE FROM " + c.quote_name(tablePrefix + suffix) + " WHERE id = ANY(" +
+								IdArrayLiteral(ids) + ");");
+			}
+
 			stringstream memberSql[3];
 			size_t memberRows[3] = {0, 0, 0};
 			auto flush = [&](int table) {
@@ -297,6 +320,7 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 			for(const StoreDecision &d : decisions)
 			{
 				if(!d.memberRows) continue;
+				if(liveOnly && d.insertOld) continue;
 				if(isWay)
 				{
 					const class OsmWay *way = dynamic_cast<const class OsmWay *>(d.obj);

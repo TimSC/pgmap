@@ -193,6 +193,39 @@ Work in progress
 
 
 
+Member tables and views (schema version 15)
+-------------------------------------------
+
+The member tables (`way_mems`, `relation_mems_n`, `relation_mems_w` and
+`relation_mems_r`) say which ways and relations hold an object. From version
+15 they hold the members of the live version of each way and relation, and
+nothing else, and have a primary key of `(id, version, index)`:
+
+* Before, rows were added for every version of an object that was stored and
+  never removed, so the tables grew with the history of edits. Only the live
+  version's rows are ever looked up. The members of an old version remain in
+  its row of the history table (`oldways`, `oldrelations`).
+* Before, nothing stopped the same row being added twice, and it was, each
+  time an edit touched a member of a way or relation. The key makes that an
+  error.
+
+When a way or relation is edited or deleted, the rows of the version that was
+live are removed and those of the new live version, if there is one, are
+written. An import writes rows for live objects only.
+
+The `visible*` views, which show a table set's own objects together with its
+parent's, join their two halves with `UNION ALL` in place of `UNION`. The
+halves cannot overlap, and `UNION` had PostgreSQL compare whole rows, tags and
+all, to find that out.
+
+Upgrading from version 14 (admin tool, "Upgrade/downgrade db schema", version
+15) empties each member table and fills it again from the live tables, then
+adds the key. On a large map this is a long step, comparable to importing the
+ways: the member tables are among the largest, and the key is an index over
+every row. It can be run while nothing is editing the map. pgmap works with a
+map still at version 14, without removing old rows there. Downgrading to 14
+drops the key and puts the views back; the tables keep what they hold.
+
 Atomic edit activity (schema version 14)
 ---------------------------------------
 
@@ -332,9 +365,9 @@ does not write rows.
 
 `related_parents` and the bounding box columns were added to schema 14 after
 it was first in use. They are NULL in rows recorded before then, which means
-not recorded. On a map already at version 14, asking the admin tool for schema
-version 14 again adds the columns. That has to be done: until it is, recording
-an edit and reading the records fail, with an error saying so.
+not recorded. On a map already at version 14 or later, asking the admin tool
+for the latest schema version adds the columns. That has to be done: until it
+is, recording an edit and reading the records fail, with an error saying so.
 
 Extract storage (schema version 14)
 ----------------------------------
@@ -352,8 +385,8 @@ extracts by extract ID; each extract has one current state without an overlay.
   it from, blank meaning this map's own. pgmap's own tools do not act on
   them; pycrocosm's `updateextracts` command does, using `PgExtractPatch` to
   apply edits published by another server. They were added to schema 14 after it was
-  first in use; on a map already at version 14, asking the admin tool for
-  schema version 14 again adds them.
+  first in use; on a map already at version 14 or later, asking the admin tool
+  for the latest schema version adds them.
 * `extract_livenodes`, `extract_liveways`, `extract_liverelations`: columns match
   the main live objects, with `extract_id` added. Primary keys are
   `(extract_id, id)`; tags/members/roles use JSONB, node coordinates use Point
