@@ -605,8 +605,45 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		memBboxes.push_back(bb);
 	}
 
+	// A member that exists but has no stored box must not simply be left out:
+	// the relation's box would then be too small, and nothing would say so.
+	// That happens on a map whose base tables never had their boxes worked out.
+	bool extentUnknown = false;
+
 	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
 		tablePrefix, "way", memWayIds, memBboxesOfType2);
+
+	// A way's box can be had from its nodes
+	std::set<int64_t> unboxedWayIds;
+	for(auto it=memBboxesOfType2.begin(); it!=memBboxesOfType2.end(); it++)
+		if(it->second.size() != 4)
+			unboxedWayIds.insert(it->first);
+	if(!unboxedWayIds.empty())
+	{
+		std::shared_ptr<class OsmData> ways(new class OsmData());
+		auto wayIt = unboxedWayIds.begin();
+		while(wayIt != unboxedWayIds.end())
+			GetVisibleObjectsById(conn, work, dbUsernameLookup, tablePrefix, "way", unboxedWayIds, wayIt, 1000, ways);
+		std::set<int64_t> wayNodeIds;
+		for(const OsmWay &way : ways->ways)
+			wayNodeIds.insert(way.refs.begin(), way.refs.end());
+		std::map<int64_t, vector<double> > positions;
+		GetVisibleObjectBboxesById(conn, work, dbUsernameLookup, tablePrefix, "node", wayNodeIds, positions);
+		for(const OsmWay &way : ways->ways)
+		{
+			std::vector<vector<double> > nodeBoxes;
+			for(int64_t ref : way.refs)
+			{
+				auto found = positions.find(ref);
+				if(found != positions.end())
+					nodeBoxes.push_back(found->second);
+			}
+			// With none of its nodes to be found a way has no extent, which is not the same as not knowing it
+			std::vector<double> wayBox;
+			FindOuterBbox(nodeBoxes, wayBox);
+			memBboxesOfType2[way.objId] = wayBox;
+		}
+	}
 	for(auto it=memBboxesOfType2.begin(); it!=memBboxesOfType2.end(); it++)
 	{
 		vector<double> &bb = it->second; 
@@ -615,6 +652,24 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 
 	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
 		tablePrefix, "relation", memRelIds, memBboxesOfType3);
+
+	// A member relation's box cannot be had so cheaply. Without one, and with
+	// members of its own that might have an extent, this relation's box is not
+	// known, and is stored as NULL, which is what that means everywhere else.
+	std::set<int64_t> unboxedRelationIds;
+	for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
+		if(it->second.size() != 4)
+			unboxedRelationIds.insert(it->first);
+	if(!unboxedRelationIds.empty())
+	{
+		std::shared_ptr<class OsmData> relations(new class OsmData());
+		auto relIt = unboxedRelationIds.begin();
+		while(relIt != unboxedRelationIds.end())
+			GetVisibleObjectsById(conn, work, dbUsernameLookup, tablePrefix, "relation", unboxedRelationIds, relIt, 1000, relations);
+		for(const OsmRelation &member : relations->relations)
+			if(!member.members.empty())
+				extentUnknown = true;
+	}
 	for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
 	{
 		vector<double> &bb = it->second; 
@@ -622,7 +677,8 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 	}
 
 	std::vector<double> outerBbox;
-	FindOuterBbox(memBboxes, outerBbox);
+	if(!extentUnknown)
+		FindOuterBbox(memBboxes, outerBbox);
 
 	if(outerBbox.size() == 4)
 	{
