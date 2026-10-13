@@ -1038,7 +1038,68 @@ bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 #endif
 }
 
-bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+// ************* The indices of the map tables, and their version *************
+//
+// The indices of the main map tables are not part of the schema version.
+// Tables are created before a bulk import and indexed after it, and building
+// the indices of a large map takes long enough that it has to be something
+// that can be stopped and run again. So "Create indicies" is a step of its
+// own, which adds whatever is missing.
+//
+// Adding what is missing cannot take away an index that is no longer wanted,
+// or rebuild one whose definition has changed while its name has not. Those
+// changes are made once each, by index version: a table set records, as
+// index_version in its meta table, the version its indices were last brought
+// up to, and DbCreateIndices makes the changes of every later version before
+// adding what is missing. To change the indices:
+//   1. raise MAP_INDEX_VERSION (dbadmin.h),
+//   2. for an index to be dropped or rebuilt, add the DROP to
+//      DbChangeIndicesFrom, under the version being left behind,
+//   3. for an index to be added or rebuilt, add or alter its CREATE in
+//      DbCreateCurrentIndices.
+// The indices that a schema step creates for the tables it adds (edit
+// activity, stored extracts, the key of the member tables) stay with that
+// schema step and are not counted here.
+
+int DbGetIndexVersion(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix)
+{
+	string errStr;
+	try
+	{
+		return std::stoi(DbGetMetaValue(c, work, "index_version", tablePrefix, errStr));
+	}
+	catch (const std::exception &) {}
+	return 0; // Never recorded: nothing is known about the indices
+}
+
+// What to tell someone about a table set whose indices are behind, or
+// nothing if they are up to date
+std::string DbIndexVersionNote(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix)
+{
+	int version = DbGetIndexVersion(c, work, tablePrefix);
+	if(version >= MAP_INDEX_VERSION) return "";
+	stringstream ss;
+	ss << "The indices of the " << tablePrefix << " tables ";
+	if(version == 0)
+		ss << "have no recorded version";
+	else
+		ss << "are at version " << version;
+	ss << " (the current version is " << MAP_INDEX_VERSION << "): run \"Create indicies\".";
+	return ss.str();
+}
+
+// The changes that adding missing indices cannot make, for a table set whose
+// indices are at fromVersion. Zero is a table set of unknown state.
+static bool DbChangeIndicesFrom(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, int fromVersion, std::string &errStr)
+{
+	// Version 1 is the set of indices as it stood when versions began: there
+	// is nothing to undo on the way to it. Later versions go here, as
+	//   if(fromVersion < 2) { DROP INDEX IF EXISTS ... }
+	return true;
+}
+
+static bool DbCreateCurrentIndices(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
@@ -1206,6 +1267,25 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;	
 	}
 	return ok;
+}
+
+bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
+	int verbose, 
+	const string &tablePrefix, 
+	std::string &errStr)
+{
+	int version = DbGetIndexVersion(c, work, tablePrefix);
+	if(verbose >= 1)
+		cout << "Indices of " << tablePrefix << ": version " << version << ", bringing to " << MAP_INDEX_VERSION << endl;
+	if(version < MAP_INDEX_VERSION)
+		if(!DbChangeIndicesFrom(c, work, verbose, tablePrefix, version, errStr)) return false;
+	// Every index is checked each time, so a run that was stopped, or an
+	// index that has gone missing, is put right by running this again
+	if(!DbCreateCurrentIndices(c, work, verbose, tablePrefix, errStr)) return false;
+	// Recorded only once all of it has succeeded
+	if(version != MAP_INDEX_VERSION)
+		if(!DbSetMetaValue(c, work, "index_version", to_string(MAP_INDEX_VERSION), tablePrefix, errStr)) return false;
+	return true;
 }
 
 bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work, 

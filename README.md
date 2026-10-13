@@ -193,6 +193,34 @@ Work in progress
 
 
 
+Index version
+-------------
+
+The indices of the main map tables are built by the admin tool's "Create
+indicies", after the tables have been created and data imported. They are not
+part of the schema version, and have a version of their own: when the step
+has finished, it records `index_version` in the `meta` table of each table
+set (static, modify and test).
+
+The admin tool compares that with the version of the indices it builds, and
+says so above its menu when a table set is behind, for example
+
+    The indices of the planet_static_ tables are at version 1 (the current
+    version is 2): run "Create indicies".
+
+A table set with no recorded version, such as one whose indices were built
+before versions were recorded, is reported the same way. Running "Create
+indicies" is always safe: it makes the changes of any later versions, such as
+dropping an index that is no longer wanted, checks every index and adds any
+that is missing, and then records the current version. Run it after upgrading
+the schema of an existing map, and whenever the admin tool asks.
+
+The indices that a schema version brings with the tables it adds (edit
+activity, stored extracts, the key of the member tables) are created by the
+schema upgrade and are not counted in the index version. The optional
+combined indices of boxes and tags ("Create/drop bbox indices") are not
+either. The current index version is 1.
+
 Member tables and views (schema version 15)
 -------------------------------------------
 

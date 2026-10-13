@@ -2068,6 +2068,26 @@ bool PgAdmin::CreateMapIndices(int verbose, class PgMapError &errStr)
 	return ok;
 }
 
+int PgAdmin::GetLatestIndexVersion()
+{
+	return MAP_INDEX_VERSION;
+}
+
+std::string PgAdmin::GetIndexVersionNotes()
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	string notes;
+	for(const string &prefix : {this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix})
+	{
+		string note = DbIndexVersionNote(*dbconn, work.get(), prefix);
+		if(!note.empty())
+			notes += note + "\n";
+	}
+	return notes;
+}
+
 bool PgAdmin::ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;

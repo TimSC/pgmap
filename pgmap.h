@@ -347,6 +347,11 @@ public:
 	// optionally followed by .gz.
 	bool ImportMapFile(int verbose, const std::string &filename, class PgMapError &errStr);
 	bool CreateMapIndices(int verbose, class PgMapError &errStr);
+	// The version of the indices "Create indicies" builds, and what to say
+	// about the table sets whose indices are behind it: a line for each, or
+	// nothing if all are up to date.
+	int GetLatestIndexVersion();
+	std::string GetIndexVersionNotes();
 	bool ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);
 	bool ImportChangesetMetadata(const std::string &fina, int verbose, class PgMapError &errStr);

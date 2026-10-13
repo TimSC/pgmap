@@ -49,6 +49,17 @@ int main(int argc, char **argv)
 	class PgMapError errStr;
 	while(running)
 	{
+		// Say so if the indices are behind what this version of the tool builds
+		try
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			string notes = admin->GetIndexVersionNotes();
+			if(!notes.empty())
+				cout << endl << notes;
+		}
+		catch(const std::exception &) {} // As before the tables exist
+		cout << endl;
+
 
 		cout << "1. Drop tables" << endl;
 		cout << "2. Create tables" << endl;

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "dbextract.h"
 #include <stdexcept>
 #include <vector>
@@ -620,10 +621,34 @@ void PgExtractPatch::Apply()
         }
     }
 
-    // Changed nodes and ways, for giving ways their boxes again below
-    std::vector<int64_t> changedNodes = replaced[0], changedWays = replaced[1];
-    changedNodes.insert(changedNodes.end(), candidates[0].begin(), candidates[0].end());
-    changedWays.insert(changedWays.end(), candidates[1].begin(), candidates[1].end());
+    // Everything below looks only at what this patch touched and what is
+    // joined to it, so that the work depends on the size of the patch and
+    // not on the size of the extract.
+    auto idsFrom = [&](const string &sql)
+    {
+        std::vector<int64_t> out;
+        for(const auto &row : w.exec(sql))
+            out.push_back(row[0].as<int64_t>());
+        return out;
+    };
+    auto joined = [](std::vector<int64_t> first, const std::vector<int64_t> &second)
+    {
+        first.insert(first.end(), second.begin(), second.end());
+        std::sort(first.begin(), first.end());
+        first.erase(std::unique(first.begin(), first.end()), first.end());
+        return first;
+    };
+    string own = "extract_id=" + id;
+    std::vector<int64_t> touchedNodes = joined(replaced[0], candidates[0]);
+    std::vector<int64_t> touchedWays = joined(replaced[1], candidates[1]);
+    std::vector<int64_t> touchedRelations = joined(replaced[2], candidates[2]);
+
+    // The nodes of the ways about to be replaced: once a way has other nodes,
+    // the ones it had may have no reason left to be in the extract
+    std::vector<int64_t> formerWayNodes;
+    if(!replaced[1].empty())
+        formerWayNodes = idsFrom("SELECT DISTINCT member FROM " + table("extract_way_mems") + " WHERE " + own +
+            " AND id = ANY(" + IdArraySql(replaced[1]) + ")");
 
     // Membership rows go with their way or relation
     for(int index = 2; index >= 0; index--)
@@ -637,26 +662,63 @@ void PgExtractPatch::Apply()
     // on itself: ways with a node in the rectangle, then nodes in it or used
     // by a way that stayed, then relations with a node or way that stayed.
     string bbox = "(SELECT bbox FROM " + table("extracts") + " WHERE id=" + id + ")";
-    w.exec("DELETE FROM " + table("extract_liveways") + " w WHERE w.extract_id=" + id +
-        " AND NOT EXISTS (SELECT 1 FROM " + table("extract_way_mems") + " m JOIN " +
-        table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
-        " WHERE m.extract_id=" + id + " AND m.id=w.id AND n.geom && " + bbox + ")");
-    w.exec("DELETE FROM " + table("extract_livenodes") + " n WHERE n.extract_id=" + id +
-        " AND NOT (n.geom && " + bbox + ") AND NOT EXISTS (SELECT 1 FROM " +
-        table("extract_way_mems") + " m WHERE m.extract_id=" + id + " AND m.member=n.id)");
-    w.exec("DELETE FROM " + table("extract_liverelations") + " r WHERE r.extract_id=" + id +
-        " AND NOT EXISTS (SELECT 1 FROM " + table("extract_relation_mems_n") + " m JOIN " +
-        table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
-        " WHERE m.extract_id=" + id + " AND m.id=r.id)"
-        " AND NOT EXISTS (SELECT 1 FROM " + table("extract_relation_mems_w") + " m JOIN " +
-        table("extract_liveways") + " y ON y.extract_id=" + id + " AND y.id=m.member"
-        " WHERE m.extract_id=" + id + " AND m.id=r.id)");
 
-    if(!changedNodes.empty() || !changedWays.empty())
+    // Ways: those touched, and those holding a touched node, which may have
+    // moved out of the rectangle or gone
+    std::vector<int64_t> examinedWays = touchedWays;
+    if(!touchedNodes.empty())
+        examinedWays = joined(examinedWays, idsFrom("SELECT DISTINCT id FROM " + table("extract_way_mems") +
+            " WHERE " + own + " AND member = ANY(" + IdArraySql(touchedNodes) + ")"));
+    std::vector<int64_t> droppedWays, droppedWayNodes;
+    if(!examinedWays.empty())
+    {
+        droppedWays = idsFrom("SELECT w.id FROM " + table("extract_liveways") + " w WHERE w." + own +
+            " AND w.id = ANY(" + IdArraySql(examinedWays) + ")"
+            " AND NOT EXISTS (SELECT 1 FROM " + table("extract_way_mems") + " m JOIN " +
+            table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
+            " WHERE m.extract_id=" + id + " AND m.id=w.id AND n.geom && " + bbox + ")");
+        if(!droppedWays.empty())
+        {
+            droppedWayNodes = idsFrom("SELECT DISTINCT member FROM " + table("extract_way_mems") + " WHERE " + own +
+                " AND id = ANY(" + IdArraySql(droppedWays) + ")");
+            w.exec("DELETE FROM " + table("extract_liveways") + " WHERE " + own +
+                " AND id = ANY(" + IdArraySql(droppedWays) + ")");
+        }
+    }
+
+    // Nodes: those touched, and those of ways that were replaced or dropped
+    std::vector<int64_t> examinedNodes = joined(joined(touchedNodes, formerWayNodes), droppedWayNodes);
+    std::vector<int64_t> droppedNodes;
+    if(!examinedNodes.empty())
+        droppedNodes = idsFrom("DELETE FROM " + table("extract_livenodes") + " n WHERE n." + own +
+            " AND n.id = ANY(" + IdArraySql(examinedNodes) + ")"
+            " AND NOT (n.geom && " + bbox + ") AND NOT EXISTS (SELECT 1 FROM " +
+            table("extract_way_mems") + " m WHERE m.extract_id=" + id + " AND m.member=n.id) RETURNING n.id");
+
+    // Relations: those touched, and those with a member node or way that was
+    // touched or dropped
+    std::vector<int64_t> examinedRelations = touchedRelations;
+    std::vector<int64_t> memberNodes = joined(touchedNodes, droppedNodes), memberWays = joined(touchedWays, droppedWays);
+    if(!memberNodes.empty())
+        examinedRelations = joined(examinedRelations, idsFrom("SELECT DISTINCT id FROM " +
+            table("extract_relation_mems_n") + " WHERE " + own + " AND member = ANY(" + IdArraySql(memberNodes) + ")"));
+    if(!memberWays.empty())
+        examinedRelations = joined(examinedRelations, idsFrom("SELECT DISTINCT id FROM " +
+            table("extract_relation_mems_w") + " WHERE " + own + " AND member = ANY(" + IdArraySql(memberWays) + ")"));
+    if(!examinedRelations.empty())
+        w.exec("DELETE FROM " + table("extract_liverelations") + " r WHERE r.extract_id=" + id +
+            " AND r.id = ANY(" + IdArraySql(examinedRelations) + ")"
+            " AND NOT EXISTS (SELECT 1 FROM " + table("extract_relation_mems_n") + " m JOIN " +
+            table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
+            " WHERE m.extract_id=" + id + " AND m.id=r.id)"
+            " AND NOT EXISTS (SELECT 1 FROM " + table("extract_relation_mems_w") + " m JOIN " +
+            table("extract_liveways") + " y ON y.extract_id=" + id + " AND y.id=m.member"
+            " WHERE m.extract_id=" + id + " AND m.id=r.id)");
+
+    // The examined ways are the ones whose boxes can have changed
+    if(!examinedWays.empty())
         UpdateExtractWayBboxes(*connection, w, prefix, extractId,
-            "w.id = ANY(" + IdArraySql(changedWays) + ") OR EXISTS (SELECT 1 FROM " +
-            table("extract_way_mems") + " c WHERE c.extract_id=" + id + " AND c.id=w.id AND c.member = ANY(" +
-            IdArraySql(changedNodes) + "))");
+            "w.id = ANY(" + IdArraySql(examinedWays) + ")");
 
     // What the caller may need to follow up
     for(int index = 0; index < 3; index++)
@@ -667,11 +729,13 @@ void PgExtractPatch::Apply()
             " AND id = ANY(" + IdArraySql(candidates[index]) + ") ORDER BY id"))
             arrived[index].push_back(row[0].as<int64_t>());
     }
+    // Nodes that a way of this patch needs and the extract has not been given
     missingNodes.clear();
-    for(const auto &row : w.exec("SELECT DISTINCT m.member FROM " + table("extract_way_mems") +
-        " m WHERE m.extract_id=" + id + " AND NOT EXISTS (SELECT 1 FROM " + table("extract_livenodes") +
-        " n WHERE n.extract_id=" + id + " AND n.id=m.member) ORDER BY m.member"))
-        missingNodes.push_back(row[0].as<int64_t>());
+    if(!examinedWays.empty())
+        missingNodes = idsFrom("SELECT DISTINCT m.member FROM " + table("extract_way_mems") +
+            " m WHERE m.extract_id=" + id + " AND m.id = ANY(" + IdArraySql(examinedWays) + ")"
+            " AND NOT EXISTS (SELECT 1 FROM " + table("extract_livenodes") +
+            " n WHERE n.extract_id=" + id + " AND n.id=m.member) ORDER BY m.member");
 }
 
 void PgExtractPatch::SetCheckpoint(int64_t editActivityId, int64_t atomicEditId)
