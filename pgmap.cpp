@@ -2390,9 +2390,6 @@ PgMap::~PgMap()
 		this->sharedWork->work.reset();
 	this->sharedWork.reset();
 
-#if PQXX_VERSION_MAJOR < 7
-	dbconn->disconnect();
-#endif
 	dbconn.reset();
 }
 

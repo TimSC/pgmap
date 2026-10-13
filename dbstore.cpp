@@ -9,13 +9,8 @@
 #include <set>
 using namespace std;
 
-#if PQXX_VERSION_MAJOR >= 6
 #define pqxxfield pqxx::field
 #define pqxxrow pqxx::row
-#else
-#define pqxxfield pqxx::result::field
-#define pqxxrow pqxx::result::tuple
-#endif
 
 // The most objects written by one group of statements
 static const size_t STORE_BATCH_OBJECTS = 500;
@@ -367,11 +362,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
 
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
-	string ocdn = " ON CONFLICT DO NOTHING";
-	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-		ocdn = "";
+	const string ocdn = " ON CONFLICT DO NOTHING";
 
 	//The objects are stored a batch at a time. A batch ends early at an
 	//object the batch already has, so that the later one finds what the
@@ -688,11 +679,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 
 		prepare_deduplicated(conn, tablePrefix+"update_relation_bbox", sql.str());
 
-#if PQXX_VERSION_MAJOR >= 7
 		work->exec_prepared(tablePrefix+"update_relation_bbox", outerBbox[0], outerBbox[1], outerBbox[2], outerBbox[3], rel.objId);
-#else
-		work->prepared(tablePrefix+"update_relation_bbox")(outerBbox[0])(outerBbox[1])(outerBbox[2])(outerBbox[3])(rel.objId).exec();
-#endif
 	}
 	else
 	{

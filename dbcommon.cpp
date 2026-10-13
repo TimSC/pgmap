@@ -2,11 +2,7 @@
 #include <iostream>
 using namespace std;
 
-#if PQXX_VERSION_MAJOR >= 6
 #define pqxxrow pqxx::row
-#else
-#define pqxxrow pqxx::result::tuple
-#endif 
 
 bool DbExec(pqxx::transaction_base *work, const string& sql, string &errStr, size_t *rowsAffected, int verbose)
 {
@@ -82,14 +78,5 @@ bool DbCheckTableExists(pqxx::connection &c, pqxx::transaction_base *work,
 
 	pqxx::result r = work->exec(sql);
 	return r.size() > 0;
-}
-
-void DbGetVersion(pqxx::connection &c, pqxx::transaction_base *work, int &majorVerOut, int &minorVerOut)
-{
-	string sql = "SELECT current_setting('server_version_num');";
-	pqxx::result r = work->exec(sql);
-	int ver = r[0][0].as<int>();
-	majorVerOut = ver / 10000;
-	minorVerOut = (ver / 100) % 100;
 }
 

@@ -3,13 +3,8 @@
 #include "dbprepared.h"
 using namespace std;
 
-#if PQXX_VERSION_MAJOR >= 6
 #define pqxxfield pqxx::field
 #define pqxxrow pqxx::row
-#else
-#define pqxxfield pqxx::result::field
-#define pqxxrow pqxx::result::tuple
-#endif
 
 bool GetMaxObjIdLiveOrOld(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::string &objType, 
@@ -76,16 +71,12 @@ bool SetNextIdValue(pqxx::connection &c,
 	ss << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << "(id, maxid) VALUES ($1, $2);";
 
 	prepare_deduplicated(c, tablePrefix+"setnextId", ss.str());
-#if PQXX_VERSION_MAJOR >= 7
 	pqxx::params params;
 	params.reserve(2);
 	params.append(objType);
 	params.append(value);
 
 	work->exec_prepared(tablePrefix+"setnextId", params);
-#else
-	work->prepared(tablePrefix+"setnextId")(objType)(value).exec();
-#endif
 	return true;
 }
 

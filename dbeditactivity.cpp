@@ -8,11 +8,7 @@
 #include "pgcommon.h"
 using namespace std;
 
-#if PQXX_VERSION_MAJOR >= 6
 #define pqxxrow pqxx::row
-#else
-#define pqxxrow pqxx::result::tuple
-#endif
 
 // The geometry columns holding the boxes that go with the lists of objects.
 // They were added to schema 14 after it was first in use; a map that is at
@@ -411,19 +407,11 @@ bool DbInsertEditActivity(pqxx::connection &c, pqxx::transaction_base *work,
 			cout << sql.str() << endl;
 
 		prepare_deduplicated(c, tablePrefix+"insert_edit_activity3", sql.str());
-#if PQXX_VERSION_MAJOR >= 7
 		work->exec_prepared(tablePrefix+"insert_edit_activity3", activity.changeset, activity.timestamp,
 			activity.uid, activity.action, activity.nodes, activity.ways, activity.relations, existingEnc, updatedEnc,
 			affectedParentsEnc, relatedEnc, activity.atomicEditId, activity.blockIndex, relatedParentsEnc,
 			activity.existingBbox, activity.updatedBbox, activity.affectedparentsBeforeBbox,
 			activity.affectedparentsAfterBbox, activity.relationReachBbox);
-#else
-		work->prepared(tablePrefix+"insert_edit_activity3")(activity.changeset)(activity.timestamp)
-			(activity.uid)(activity.action)(activity.nodes)(activity.ways)(activity.relations)(existingEnc)(updatedEnc)
-			(affectedParentsEnc)(relatedEnc)(activity.atomicEditId)(activity.blockIndex)(relatedParentsEnc)
-			(activity.existingBbox)(activity.updatedBbox)(activity.affectedparentsBeforeBbox)
-			(activity.affectedparentsAfterBbox)(activity.relationReachBbox).exec();
-#endif
 	}
 	catch (const std::exception &e)
 	{
@@ -444,11 +432,7 @@ void DbGetMostActiveUsers(pqxx::connection &c, pqxx::transaction_base *work,
 	sql << " FROM " << c.quote_name(tablePrefix+"edit_activity") << " WHERE timestamp>=$1 GROUP BY uid ORDER BY objects DESC LIMIT 10;";
 
 	prepare_deduplicated(c, tablePrefix+"get_most_active_users", sql.str());
-#if PQXX_VERSION_MAJOR >= 7
 	pqxx::result r = work->exec_prepared(tablePrefix+"get_most_active_users", startTimestamp);
-#else
-	pqxx::result r = work->prepared(tablePrefix+"get_most_active_users")(startTimestamp).exec();
-#endif
 
 	int uidCol = r.column_number("uid");
 	int nodesCol = r.column_number("nodes");

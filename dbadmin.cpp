@@ -88,12 +88,7 @@ bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work,
 	const string &tablePrefix, 
 	std::string &errStr)
 {
-	//PostgreSQL 9.3 and earlier does not support JSONB
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
 	string j = "JSONB";
-	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-		j = "JSON";
 
 	string sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"oldnodes")+" (id BIGINT, changeset BIGINT, changeset_index SMALLINT, username TEXT, uid INTEGER, visible BOOLEAN, timestamp BIGINT, version INTEGER, tags "+j+", geom GEOMETRY(Point, 4326));";
 	bool ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
@@ -219,13 +214,7 @@ bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work,
 	bool ok = true;
 	string sql;
 
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
 	string ine = "IF NOT EXISTS ";
-	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-	{
-		ine = "";
-	}
 
 	sql = "CREATE TABLE IF NOT EXISTS "+c.quote_name(tablePrefix+"edit_activity")+" (id SERIAL PRIMARY KEY, changeset BIGINT, timestamp BIGINT, uid INTEGER, bbox GEOMETRY(Geometry, 4326), action VARCHAR(16), nodes INT, ways INT, relations INT, existing JSONB, updated JSONB, affectedparents JSONB, related JSONB);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
@@ -753,7 +742,6 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 
 // ************* Importing a map file straight into the tables *************
 
-#if PQXX_VERSION_MAJOR >= 7
 
 // Receives the objects of a map file and writes them to one set of map
 // tables with COPY, which is the fast way into PostgreSQL. The data goes
@@ -953,13 +941,11 @@ private:
 	}
 };
 
-#endif //PQXX_VERSION_MAJOR >= 7
 
 bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &filename, const std::string &tablePrefix,
 	std::string &errStr)
 {
-#if PQXX_VERSION_MAJOR >= 7
 	try
 	{
 		// PostgreSQL does not have to write a table's rows to its write-ahead
@@ -1032,10 +1018,6 @@ bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 		return false;
 	}
 	return true;
-#else
-	errStr = "Importing a map file needs libpqxx 7 or later";
-	return false;
-#endif
 }
 
 // ************* The indices of the map tables, and their version *************
@@ -1106,15 +1088,7 @@ static bool DbCreateCurrentIndices(pqxx::connection &c, pqxx::transaction_base *
 {
 	bool ok = true;
 	string sql;
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
 	string ine = "IF NOT EXISTS ";
-	bool brinSupported = true;
-	if(majorVer < 9 || (majorVer == 9 && minorVer <= 3))
-	{
-		ine = "";
-		brinSupported = false;
-	}
 
 	if(DbCountPrimaryKeyCols(c, work, tablePrefix+"oldnodes")==0)
 	{
@@ -1209,7 +1183,6 @@ static bool DbCreateCurrentIndices(pqxx::connection &c, pqxx::transaction_base *
 	sql = "CREATE INDEX "+ine+c.quote_name(tablePrefix+"liverelations_ts")+" ON "+c.quote_name(tablePrefix+"liverelations")+" (timestamp);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	if(brinSupported)
 	{
 		//Object user indices
 		//Is this really used?
@@ -1295,8 +1268,6 @@ bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	bool ok = true;
 	string sql;
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
 	string ine = "IF NOT EXISTS ";
 
 	if(!DbCheckIndexExists(c, work, tablePrefix+"livenodes_gix_tags"))
@@ -1336,8 +1307,6 @@ bool DbDropBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	bool ok = true;
 	string sql;
-	int majorVer=0, minorVer=0;
-	DbGetVersion(c, work, majorVer, minorVer);
 	string ie = "IF EXISTS ";
 
 	sql = "DROP INDEX "+ie+c.quote_name(tablePrefix+"livenodes_gix_tags")+";";

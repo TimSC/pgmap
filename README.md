@@ -53,6 +53,8 @@ The SWIGWORDSIZE64 option in setup.py assumes you are using a 64 bit platform. S
 Install and configure postgis
 -----------------------------
 
+pgmap needs PostgreSQL 9.5 or later, with PostGIS, and libpqxx 7. Earlier versions of either are no longer provided for: the build stops with a message on an older libpqxx.
+
 On Linux Mint 18.* and Ubuntu Xenial:
 
     sudo apt install postgis postgresql postgresql-9.5-postgis-2.2

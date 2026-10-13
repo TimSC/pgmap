@@ -10,11 +10,7 @@ extern "C" {
 }
 using namespace std;
 
-#if PQXX_VERSION_MAJOR >= 6
 #define pqxxrow pqxx::row
-#else
-#define pqxxrow pqxx::result::tuple
-#endif 
 
 void DecodeRowsToChangesets(pqxx::result &rows, class DbUsernameLookup &usernames, 
 	std::vector<class PgChangeset> &changesets)
@@ -388,7 +384,6 @@ bool InsertChangesetInDb(pqxx::connection &c,
 
 	try
 	{
-#if PQXX_VERSION_MAJOR >= 7
 
 		prepare_deduplicated(c, tablePrefix+"insertchangeset", ss.str());
 
@@ -433,52 +428,6 @@ bool InsertChangesetInDb(pqxx::connection &c,
 
 		work->exec_prepared(tablePrefix+"insertchangeset", params);
 
-#else
-
-		prepare_deduplicated(c, tablePrefix+"insertchangeset", ss.str());
-
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"insertchangeset");
-		invoc(changeset.objId);
-		if(changeset.username.size() > 0)
-			invoc(changeset.username);
-		else
-			invoc();
-		if(changeset.uid != 0)
-			invoc(changeset.uid);
-		else
-			invoc();
-
-		string tagJson;
-		EncodeTags(changeset.tags, tagJson);
-		invoc(tagJson);
-
-		if(changeset.open_timestamp != 0)
-			invoc(changeset.open_timestamp);
-		else
-			invoc();
-		if(changeset.close_timestamp != 0)
-			invoc(changeset.close_timestamp);
-		else
-			invoc();
-		invoc(changeset.is_open);
-		if(changeset.bbox_set)
-		{
-			invoc(changeset.x1);
-			invoc(changeset.y1);
-			invoc(changeset.x2);
-			invoc(changeset.y2);
-		}
-		else
-		{
-			invoc();
-			invoc();
-			invoc();
-			invoc();
-		}
-
-		invoc.exec();
-
-#endif
 	}
 	catch (const pqxx::sql_error &e)
 	{
@@ -508,7 +457,6 @@ int UpdateChangesetInDb(pqxx::connection &c,
 
 	try
 	{
-#if PQXX_VERSION_MAJOR >= 7
 		prepare_deduplicated(c, tablePrefix+"updatechangeset", ss.str());
 
 		pqxx::params params;
@@ -538,36 +486,6 @@ int UpdateChangesetInDb(pqxx::connection &c,
 
 		pqxx::result result = work->exec_prepared(tablePrefix+"updatechangeset", params);
 
-#else
-		prepare_deduplicated(c, tablePrefix+"updatechangeset", ss.str());
-
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"updatechangeset");
-		invoc(changeset.username);
-		invoc(changeset.uid);
-		string tagJson;
-		EncodeTags(changeset.tags, tagJson);
-		invoc(tagJson);
-		invoc(changeset.open_timestamp);
-		invoc(changeset.close_timestamp);
-		invoc(changeset.is_open);
-		if(changeset.bbox_set)
-		{
-			invoc(changeset.x1);
-			invoc(changeset.y1);
-			invoc(changeset.x2);
-			invoc(changeset.y2);
-		}
-		else
-		{
-			invoc();
-			invoc();
-			invoc();
-			invoc();
-		}
-		invoc(changeset.objId);
-
-		pqxx::result result = invoc.exec();
-#endif
 		rowsAffected = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
@@ -601,7 +519,6 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 
 	try
 	{
-#if PQXX_VERSION_MAJOR >= 7
 		prepare_deduplicated(c, tablePrefix+"expandchangeset", ss.str());
 
 		pqxx::params params;
@@ -612,18 +529,6 @@ int DbExpandChangesetBbox(pqxx::connection &c,
 		params.append(cid);
 
 		pqxx::result result = work->exec_prepared(tablePrefix+"expandchangeset", params);
-#else
-		prepare_deduplicated(c, tablePrefix+"expandchangeset", ss.str());
-
-		pqxx::prepare::invocation invoc = work->prepared(tablePrefix+"expandchangeset");
-		invoc(bbox[0]);
-		invoc(bbox[1]);
-		invoc(bbox[2]);
-		invoc(bbox[3]);
-		invoc(cid);
-
-		pqxx::result result = invoc.exec();
-#endif
 		rowsAffected = result.affected_rows();
 	}
 	catch (const pqxx::sql_error &e)
