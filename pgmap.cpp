@@ -2212,7 +2212,8 @@ bool PgAdmin::GenerateUsernameTable(int verbose, class PgMapError &errStr)
 	return true;
 }
 
-bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr)
+bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr,
+	bool onlyMissingWays)
 {
 	std::string nativeErrStr;
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
@@ -2225,7 +2226,7 @@ bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, cl
 		ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose, 
 			this->tableStaticPrefix, 
 			this,
-			nativeErrStr);
+			nativeErrStr, onlyMissingWays);
 		errStr.errStr = nativeErrStr;
 		if(!ok) return ok;
 	}
@@ -2236,7 +2237,7 @@ bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, cl
 		ok = DbUpdateWayBboxes(*dbconn, work.get(), verbose,
 			this->tableModPrefix, 
 			this,
-			nativeErrStr);
+			nativeErrStr, onlyMissingWays);
 		errStr.errStr = nativeErrStr;
 		if(!ok) return ok;
 	}

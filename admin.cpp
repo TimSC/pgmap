@@ -330,11 +330,28 @@ int main(int argc, char **argv)
 			std::string updateActiveStr;
 			cin >> updateActiveStr;
 
-			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
-			bool ok = admin->UpdateBboxes(verbose, atoi(updateStaticStr.c_str()), atoi(updateActiveStr.c_str()), errStr);
+			cout << "Only ways that have no box yet, as when taking up a run that was stopped (1/0)?" << endl;
+			std::string onlyMissingStr;
+			cin >> onlyMissingStr;
 
-			cout << "All done!" << ok << endl;
-			admin->Commit();
+			// Without a transaction around the whole of it, so that the ways
+			// are committed a batch at a time and a stopped run keeps what it did
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = false;
+			try
+			{
+				ok = admin->UpdateBboxes(verbose, atoi(updateStaticStr.c_str()), atoi(updateActiveStr.c_str()), errStr,
+					atoi(onlyMissingStr.c_str()));
+			}
+			catch(const std::exception &e)
+			{
+				errStr.errStr = e.what();
+			}
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
 
 			continue;
 		}

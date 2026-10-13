@@ -223,6 +223,49 @@ schema upgrade and are not counted in the index version. The optional
 combined indices of boxes and tags ("Create/drop bbox indices") are not
 either. The current index version is 1.
 
+### Working out the boxes of ways and relations
+
+"Update way/relation bboxes" in the admin tool stores, with every way and
+relation, the box around it. A map with `useBboxInQuery` on needs them, and
+they are also what an edit's record takes its boxes from. Edits keep the boxes
+of what they touch up to date; this step is for everything else, such as a
+map that has just been imported.
+
+The ways are done 50,000 at a time, and each batch is kept as it finishes, so
+the step shows how far it has got and loses nothing if it is stopped. To take
+up a stopped run, answer 1 to "Only ways that have no box yet": ways that
+already have a box are then passed over. The relations are worked out
+afterwards, in the database, from their node members and the boxes of their
+way members and then through relations that hold relations, however deep.
+
+On a whole planet this is a long step, as every way has to find its nodes: an
+earlier version took over eight days for the ways. Run "Create indicies"
+first: the batches need the primary key of the ways, and without it the ways
+are done by one statement that keeps nothing until it has finished. Set the
+server to read only while it runs, or edits made meanwhile to a way not yet
+reached are worked out twice, which is harmless but wasted.
+
+### Indices for boxes and tags
+
+"Create/drop bbox indices" in the admin tool builds the optional indices that
+searches by area and by tag use: a spatial index on the stored box of each way
+and relation, which a map with `useBboxInQuery` on needs, and a text index on
+the tags of each node, way and relation, which the Overpass and XAPI tag
+searches use. A search by tag within an area uses both.
+
+Earlier versions built one combined index for each kind of object, on its
+position or box and its tags together. The separate indices are several times
+quicker to build and smaller, and a search by tag alone is much quicker with
+them. A table that already has a combined index keeps it, and the step says
+so: it goes on serving. To change over, drop the bbox indices and create them
+again, which on a large map is worth planning for, as the text index reads the
+tags of every object.
+
+Both building and querying are helped by a generous `maintenance_work_mem`
+(see the recommended settings above). The step finishes by gathering
+statistics for each table it indexed, which the planner needs to tell a common
+tag from a rare one.
+
 Member tables and views (schema version 15)
 -------------------------------------------
 

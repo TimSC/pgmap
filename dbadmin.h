@@ -80,7 +80,8 @@ int DbUpdateWayBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,
 	const std::string &tablePrefix, 
 	class PgCommon *adminObj,
-	std::string &errStr);
+	std::string &errStr,
+	bool onlyMissing = false);
 
 int DbUpdateRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
     int verbose,

@@ -358,7 +358,12 @@ public:
 	bool RefreshMaxChangesetUid(int verbose, class PgMapError &errStr);
 	bool GenerateUsernameTable(int verbose, class PgMapError &errStr);
 
-	bool UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr);
+	// Works out the stored box of every way and relation. With
+	// onlyMissingWays, ways that already have a box are passed over, which
+	// takes up a run that was stopped. Got from GetAdmin() with no
+	// transaction, the ways are committed a batch at a time.
+	bool UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr,
+		bool onlyMissingWays = false);
 	bool CreateBboxIndices(int verbose, class PgMapError &errStr);
 	bool DropBboxIndices(int verbose, class PgMapError &errStr);
 
