@@ -17,7 +17,7 @@ int main(int argc, char **argv)
 		("help", "produce help message")
 		("wkt", po::value<string>(), "WKT polygon file name")
 		("bbox", po::value<string>(), "bbox shape (e.g -1.078,50.788,-1.074,50.790)")
-		("save-db", "Save rectangular extract to database instead of a file")
+		("save-db", "Save the extract to the database instead of a file, within --bbox or the --wkt polygon")
 		("name", po::value<string>()->default_value(""), "Optional database extract name")
 		("out", po::value<string>(), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
 		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (not available for .pbf)")
@@ -70,9 +70,9 @@ int main(int argc, char **argv)
 
 	if(vm.count("save-db"))
 	{
-		if(bbox.size() != 4 || vm.count("wkt") || vm.count("out") || vm.count("edit-ids"))
+		if((bbox.size() == 4) == (wkt.size() > 0) || vm.count("out") || vm.count("edit-ids"))
 		{
-			cerr << "--save-db requires --bbox and cannot be combined with --wkt, --out or --edit-ids" << endl;
+			cerr << "--save-db requires one of --bbox and --wkt, and cannot be combined with --out or --edit-ids" << endl;
 			return 2;
 		}
 		try
@@ -82,7 +82,8 @@ int main(int argc, char **argv)
 			PgMap map(GeneratePgConnectionString(config), config["dbtableprefix"],
 				config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 			auto transaction = map.GetTransaction("ACCESS SHARE");
-			int64_t id = transaction->SaveExtract(bbox, vm["name"].as<string>());
+			int64_t id = wkt.size() > 0 ? transaction->SaveExtractWkt(wkt, vm["name"].as<string>()) :
+				transaction->SaveExtract(bbox, vm["name"].as<string>());
 			transaction->Commit();
 			cout << "Saved database extract " << id << endl;
 			return 0;

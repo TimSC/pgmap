@@ -53,6 +53,7 @@ class PgExtractImport : public IDataStreamHandler
     int64_t extractId = 0;
     bool haveBbox = false, haveCheckpoint = false, finished = false;
     std::vector<double> bbox;
+    std::string boundaryWkt; // Empty for the rectangle bbox
     int64_t editActivityId = 0, atomicEditId = 0;
     std::string fileEditActivityId, fileAtomicEditId;
     int64_t numNodes = 0, numWays = 0, numRelations = 0;
@@ -77,6 +78,10 @@ public:
     void StoreWay(const OsmWay &way) override;
     void StoreRelation(const OsmRelation &relation) override;
     void Finish() override;
+
+    // Gives the extract a boundary of any polygon, as WKT, in place of the
+    // rectangle from the bbox or the file. Checked as DbCheckExtractBoundary does.
+    void SetBoundaryWkt(const std::string &wkt);
 };
 
 // Changes what a stored extract holds without reading the map, for keeping an
@@ -172,7 +177,11 @@ class ExtractInfo
 public:
 	int64_t extractId = 0;
 	std::string name;
+	// The rectangle around the extract's boundary: left, bottom, right, top
 	std::vector<double> bbox;
+	// The boundary itself, as WKT, and whether it is just that rectangle
+	std::string boundaryWkt;
+	bool rectangular = true;
 	bool useBboxInQuery = false;
 	// Seconds since the epoch when the extract was saved or last updated.
 	int64_t performedAt = 0;
@@ -212,4 +221,10 @@ std::vector<int64_t> DbListExtractIds(pqxx::connection &connection,
 // ordering is ignored. Does not modify the extract.
 void DbCompareExtract(class PgTransaction &transaction, int64_t extractId,
 	const std::string &name, ExtractComparison &out);
+// An extract's boundary can be any polygon, given as WKT: a single polygon,
+// valid, within the range of longitude and latitude, and not crossing the
+// antimeridian (nothing wider than 180 degrees of longitude is taken). Throws
+// std::invalid_argument saying what is wrong; returns the polygon as WKT.
+std::string DbCheckExtractBoundary(pqxx::transaction_base &work, const std::string &wkt);
+
 #endif

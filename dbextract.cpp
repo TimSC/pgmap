@@ -89,10 +89,12 @@ int64_t DbUpdateExtract(pqxx::connection &c, pqxx::transaction_base &w,
 		return sql;
 	};
 
-	w.exec("CREATE TEMP TABLE " + seeds + " ON COMMIT DROP AS SELECT id FROM " + table("visiblenodes") + " WHERE geom && " + bbox);
+	// The boundary may be any polygon: what is in it, not just in the
+	// rectangle around it. For a rectangle the two are the same.
+	w.exec("CREATE TEMP TABLE " + seeds + " ON COMMIT DROP AS SELECT id FROM " + table("visiblenodes") + " WHERE ST_Intersects(geom, " + bbox + ")");
 	w.exec("CREATE UNIQUE INDEX ON " + seeds + " (id)");
 	w.exec("CREATE TEMP TABLE " + ways + " ON COMMIT DROP AS " + (bboxMode ?
-		"SELECT v.id FROM " + table("visibleways") + " v WHERE v.bbox && " + bbox :
+		"SELECT v.id FROM " + table("visibleways") + " v WHERE ST_Intersects(v.bbox, " + bbox + ")" :
 		owners("way", "way_mems", seeds)));
 	w.exec("CREATE UNIQUE INDEX ON " + ways + " (id)");
 	w.exec("CREATE TEMP TABLE " + nodes + " ON COMMIT DROP AS SELECT id FROM " + seeds +
@@ -100,7 +102,7 @@ int64_t DbUpdateExtract(pqxx::connection &c, pqxx::transaction_base &w,
 		") v CROSS JOIN LATERAL jsonb_array_elements(v.members) member");
 	w.exec("CREATE UNIQUE INDEX ON " + nodes + " (id)");
 	w.exec("CREATE TEMP TABLE " + relations + " ON COMMIT DROP AS " + (bboxMode ?
-		"SELECT v.id FROM " + table("visiblerelations") + " v WHERE v.bbox && " + bbox :
+		"SELECT v.id FROM " + table("visiblerelations") + " v WHERE ST_Intersects(v.bbox, " + bbox + ")" :
 		owners("relation", "relation_mems_n", nodes) + " UNION " +
 		owners("relation", "relation_mems_w", ways)));
 	w.exec("CREATE UNIQUE INDEX ON " + relations + " (id)");
@@ -296,6 +298,11 @@ void PgExtractImport::StoreAttributes(const TagMap &attributes)
     auto atomic = attributes.find("atomic_edit_id");
     if(activity != attributes.end()) fileEditActivityId = activity->second;
     if(atomic != attributes.end()) fileAtomicEditId = atomic->second;
+    // An extract whose boundary is not a rectangle is written with it, as WKT,
+    // which a boundary from the caller replaces
+    auto boundary = attributes.find("boundary");
+    if(boundary != attributes.end() && !haveBbox)
+        SetBoundaryWkt(boundary->second);
 }
 
 void PgExtractImport::StoreBounds(const Bounds &bounds)
@@ -454,6 +461,12 @@ void PgExtractImport::Flush()
     InsertExtractRows(*connection, Work(), prefix, *rows);
 }
 
+void PgExtractImport::SetBoundaryWkt(const string &wkt)
+{
+    boundaryWkt = DbCheckExtractBoundary(Work(), wkt);
+    haveBbox = true;
+}
+
 void PgExtractImport::Finish()
 {
     if(finished) return;
@@ -468,9 +481,15 @@ void PgExtractImport::Finish()
         haveCheckpoint = true;
     }
     string id = to_string(extractId);
-    string sql = "UPDATE " + connection->quote_name(prefix + "extracts") + " SET bbox=ST_MakeEnvelope(";
-    for(double value : bbox) sql += ExactDouble(value) + ",";
-    sql += "4326)";
+    string sql = "UPDATE " + connection->quote_name(prefix + "extracts") + " SET bbox=";
+    if(!boundaryWkt.empty())
+        sql += "ST_GeomFromText(" + w.quote(boundaryWkt) + ", 4326)";
+    else
+    {
+        sql += "ST_MakeEnvelope(";
+        for(double value : bbox) sql += ExactDouble(value) + ",";
+        sql += "4326)";
+    }
     if(haveCheckpoint)
         sql += ",edit_activity_id=" + to_string(editActivityId) + ",atomic_edit_id=" + to_string(atomicEditId);
     w.exec(sql + " WHERE id=" + id);
@@ -676,7 +695,7 @@ void PgExtractPatch::Apply()
             " AND w.id = ANY(" + IdArraySql(examinedWays) + ")"
             " AND NOT EXISTS (SELECT 1 FROM " + table("extract_way_mems") + " m JOIN " +
             table("extract_livenodes") + " n ON n.extract_id=" + id + " AND n.id=m.member"
-            " WHERE m.extract_id=" + id + " AND m.id=w.id AND n.geom && " + bbox + ")");
+            " WHERE m.extract_id=" + id + " AND m.id=w.id AND ST_Intersects(n.geom, " + bbox + "))");
         if(!droppedWays.empty())
         {
             droppedWayNodes = idsFrom("SELECT DISTINCT member FROM " + table("extract_way_mems") + " WHERE " + own +
@@ -692,7 +711,7 @@ void PgExtractPatch::Apply()
     if(!examinedNodes.empty())
         droppedNodes = idsFrom("DELETE FROM " + table("extract_livenodes") + " n WHERE n." + own +
             " AND n.id = ANY(" + IdArraySql(examinedNodes) + ")"
-            " AND NOT (n.geom && " + bbox + ") AND NOT EXISTS (SELECT 1 FROM " +
+            " AND NOT ST_Intersects(n.geom, " + bbox + ") AND NOT EXISTS (SELECT 1 FROM " +
             table("extract_way_mems") + " m WHERE m.extract_id=" + id + " AND m.member=n.id) RETURNING n.id");
 
     // Relations: those touched, and those with a member node or way that was
@@ -835,7 +854,8 @@ void DbListExtracts(pqxx::connection &c, pqxx::transaction_base &w, const string
 		"ST_YMax(e.bbox), e.use_bbox_in_query, EXTRACT(EPOCH FROM e.performed_at)::bigint, "
 		"e.edit_activity_id, e.atomic_edit_id, (SELECT COALESCE(max(id),0) FROM " + table("edit_activity") +
 		"), " + count("node") + ", " + count("way") + ", " + count("relation") +
-		", e.auto_update, e.update_url FROM " + table("extracts") + " e" +
+		", e.auto_update, e.update_url, ST_AsText(e.bbox), ST_Equals(e.bbox, ST_Envelope(e.bbox)) FROM " +
+		table("extracts") + " e" +
 		(extractId > 0 ? " WHERE e.id=" + to_string(extractId) : string()) + " ORDER BY e.id");
 	for(const auto &row : rows)
 	{
@@ -853,6 +873,8 @@ void DbListExtracts(pqxx::connection &c, pqxx::transaction_base &w, const string
 		info.relations = row[13].as<int64_t>();
 		info.autoUpdate = row[14].as<bool>();
 		info.updateUrl = row[15].as<string>();
+		info.boundaryWkt = row[16].as<string>();
+		info.rectangular = row[17].as<bool>();
 		out.push_back(info);
 	}
 }
@@ -881,7 +903,11 @@ void DbCompareExtract(PgTransaction &transaction, int64_t extractId,
 	auto fresh = make_shared<ExtractVersionCollector>();
 	shared_ptr<IDataStreamHandler> sink = fresh;
 	auto query = transaction.GetQueryMgr();
-	int status = query->Start(out.bbox, time(nullptr), sink);
+	// The same query as made the extract: the rectangle, or the polygon
+	ExtractInfo info;
+	transaction.GetExtract(out.extractId, info);
+	int status = info.rectangular ? query->Start(out.bbox, time(nullptr), sink) :
+		query->Start(info.boundaryWkt, time(nullptr), sink);
 	while(status == 0) status = query->Continue();
 	if(status < 0) throw runtime_error("Map query failed");
 
@@ -912,4 +938,49 @@ void DbCompareExtract(PgTransaction &transaction, int64_t extractId,
 		else out.missingFromExtract++;
 		out.differences.push_back(difference);
 	}
+}
+
+std::string DbCheckExtractBoundary(pqxx::transaction_base &work, const std::string &wkt)
+{
+	if(wkt.find_first_not_of(" \t\r\n") == string::npos)
+		throw invalid_argument("The boundary is empty");
+	// Read in a savepoint, so that text PostGIS cannot read leaves the
+	// transaction usable for saying so
+	pqxx::result r;
+	pqxx::dbtransaction *outer = dynamic_cast<pqxx::dbtransaction *>(&work);
+	string sql = "SELECT GeometryType(g), ST_IsEmpty(g), ST_IsValid(g), ST_IsValidReason(g), "
+		"ST_XMin(g), ST_YMin(g), ST_XMax(g), ST_YMax(g), ST_AsText(g) FROM (SELECT ST_GeomFromText(" +
+		work.quote(wkt) + ", 4326) AS g) boundary";
+	try
+	{
+		if(outer != nullptr)
+		{
+			pqxx::subtransaction reading(*outer, "boundary");
+			r = reading.exec(sql);
+			reading.commit();
+		}
+		else
+			r = work.exec(sql);
+	}
+	catch(const pqxx::sql_error &e)
+	{
+		string message = e.what();
+		message = message.substr(0, message.find('\n'));
+		throw invalid_argument("The boundary is not WKT that can be read: " + message);
+	}
+	string type = r[0][0].as<string>();
+	if(type != "POLYGON")
+		throw invalid_argument("The boundary must be a single polygon, not " + type);
+	if(r[0][1].as<bool>())
+		throw invalid_argument("The boundary is an empty polygon");
+	if(!r[0][2].as<bool>())
+		throw invalid_argument("The boundary is not a valid polygon: " + r[0][3].as<string>());
+	double left = r[0][4].as<double>(), bottom = r[0][5].as<double>();
+	double right = r[0][6].as<double>(), top = r[0][7].as<double>();
+	if(left < -180 || right > 180 || bottom < -90 || top > 90)
+		throw invalid_argument("The boundary goes beyond longitude -180 to 180 or latitude -90 to 90");
+	if(right - left > 180)
+		throw invalid_argument("The boundary is wider than 180 degrees of longitude, as one crossing the "
+			"antimeridian would be; that is not supported");
+	return r[0][8].as<string>();
 }

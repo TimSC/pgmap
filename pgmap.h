@@ -70,6 +70,7 @@ private:
 	std::shared_ptr<IDataStreamHandler> mapQueryEnc;
 	std::vector<double> mapQueryBbox;
 	std::string mapQueryWkt;
+	std::vector<double> mapQueryWktBounds; // The rectangle around mapQueryWkt
 	std::shared_ptr<class PgWork> sharedWork;
 	std::shared_ptr<pqxx::icursorstream> cursor;
 	std::string extraNodesSql, relationsSql;
@@ -101,6 +102,8 @@ class PgTransaction : public PgCommon
 private:
 	int64_t atomicEditId = 0;
 	int64_t activityBlockIndex = 0;
+	int64_t SaveExtractArea(const std::string &areaSql, const std::vector<double> &bbox,
+		const std::string &wkt, const std::string &name);
 	std::shared_ptr<class EditActivityRecorder> activityRecorder;
 	void LockExtractTables(const std::string &accessMode);
 
@@ -203,6 +206,9 @@ public:
 	// Stream a rectangular snapshot to current-state extract tables and return its ID.
 	// The caller commits metadata, checkpoints and contents together.
 	int64_t SaveExtract(const std::vector<double> &bbox, const std::string &name);
+	// The same for a boundary of any polygon, given as WKT: a single valid
+	// polygon not crossing the antimeridian (see DbCheckExtractBoundary).
+	int64_t SaveExtractWkt(const std::string &wkt, const std::string &name);
 
 	// Bring a stored extract up to date with the map and return its ID.
 	// Select by positive ID, or by a unique name when ID is zero.

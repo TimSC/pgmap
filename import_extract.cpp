@@ -1,3 +1,5 @@
+#include <fstream>
+#include <sstream>
 #include <iostream>
 #include <memory>
 #include <boost/program_options.hpp>
@@ -16,6 +18,8 @@ int main(int argc, char **argv)
 			("in", po::value<std::string>(), (std::string("Input file name, ending in ") + OsmInputFileNames()).c_str())
 			("name", po::value<std::string>(), "Name for the new extract")
 			("bbox", po::value<std::string>(), "Area the extract covers (e.g -1.078,50.788,-1.074,50.790), instead of the bounds in the file")
+			("wkt", po::value<std::string>(), "Boundary of the extract as a WKT polygon, instead of the bounds in the file")
+			("wkt-file", po::value<std::string>(), "File holding the boundary as a WKT polygon")
 			("edit-activity-id", po::value<int64_t>(), "Edit activity ID the contents are current to, instead of the one in the file")
 			("atomic-edit-id", po::value<int64_t>(), "Atomic edit ID the contents are current to, instead of the one in the file")
 			("config", po::value<std::string>()->default_value("config.cfg"), "Database configuration");
@@ -57,6 +61,20 @@ int main(int argc, char **argv)
 		}
 
 		std::map<std::string,std::string> config;
+		// A boundary of any polygon, in place of a rectangle
+		std::string boundaryWkt;
+		if(vm.count("wkt") + vm.count("wkt-file") + vm.count("bbox") > 1)
+			throw std::invalid_argument("Give one of --bbox, --wkt and --wkt-file");
+		if(vm.count("wkt"))
+			boundaryWkt = vm["wkt"].as<std::string>();
+		if(vm.count("wkt-file"))
+		{
+			std::ifstream file(vm["wkt-file"].as<std::string>());
+			if(!file) throw std::invalid_argument("Cannot read " + vm["wkt-file"].as<std::string>());
+			std::stringstream text;
+			text << file.rdbuf();
+			boundaryWkt = text.str();
+		}
 		ReadSettingsFile(vm["config"].as<std::string>(), config);
 		PgMap map(GeneratePgConnectionString(config), config["dbtableprefix"],
 			config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
@@ -64,6 +82,8 @@ int main(int argc, char **argv)
 		try
 		{
 			auto importer = transaction->StartImportExtract(name, bbox, editActivityId, atomicEditId);
+			if(!boundaryWkt.empty())
+				importer->SetBoundaryWkt(boundaryWkt);
 			LoadOsmFromFile(source, importer);
 			// The extract and all of its contents appear together, or not at all.
 			transaction->Commit();

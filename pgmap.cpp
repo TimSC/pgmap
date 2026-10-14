@@ -223,6 +223,16 @@ int PgMapQuery::Start(const std::string &wkt, int64_t timestamp, std::shared_ptr
 	mapQueryActive = true;
 	this->mapQueryPhase = 0;
 	this->mapQueryWkt = wkt;
+	// The rectangle around it, for the bounds of what is written
+	this->mapQueryWktBounds.clear();
+	{
+		std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+		if(!work) throw runtime_error("Transaction has been deleted");
+		pqxx::result r = work->exec("SELECT ST_XMin(g), ST_YMin(g), ST_XMax(g), ST_YMax(g) FROM "
+			"(SELECT ST_GeomFromText(" + work->quote(wkt) + ", 4326) AS g) area");
+		if(!r[0][0].is_null())
+			for(int i=0; i<4; i++) this->mapQueryWktBounds.push_back(r[0][i].as<double>());
+	}
 
 	std::vector<double> emptyBbox;
 	return this->StartCommon(emptyBbox, timestamp, enc);
@@ -296,6 +306,12 @@ void PgMapQuery::SelectObjects()
 	}
 	else
 		area = "ST_GeomFromText(" + c.quote(this->mapQueryWkt) + ", 4326)";
+	// What is in a polygon, not just in the rectangle around it. For a
+	// rectangle the two are the same, and && alone is quicker.
+	bool polygon = this->mapQueryBbox.size() != 4;
+	auto within = [&](const string &column) {
+		return polygon ? "ST_Intersects(" + column + ", " + area + ")" : column + " && " + area;
+	};
 	const string nodeColumns = "o.*, ST_X(o.geom) AS lon, ST_Y(o.geom) AS lat";
 
 	DropMapQueryTables(work.get());
@@ -307,7 +323,7 @@ void PgMapQuery::SelectObjects()
 
 	// 1. Nodes in the area
 	work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_SEEDS + " ON COMMIT DROP AS " +
-		fromLayers("node", nodeColumns, [&](const string &) { return "WHERE o.geom && " + area; }));
+		fromLayers("node", nodeColumns, [&](const string &) { return "WHERE " + within("o.geom"); }));
 
 	// 2. Ways
 	if(!useBboxInQuery)
@@ -317,7 +333,7 @@ void PgMapQuery::SelectObjects()
 					" m JOIN " + MAP_QUERY_SEEDS + " s ON m.member=s.id) w ON o.id=w.id AND o.version=w.version WHERE true"; }));
 	else
 		work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_WAYS + " ON COMMIT DROP AS " +
-			fromLayers("way", "o.*", [&](const string &) { return "WHERE o.bbox && " + area; }));
+			fromLayers("way", "o.*", [&](const string &) { return "WHERE " + within("o.bbox"); }));
 
 	// 3. Nodes of those ways that are outside the area
 	work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_EXTRA + " ON COMMIT DROP AS "
@@ -338,7 +354,7 @@ void PgMapQuery::SelectObjects()
 				" m JOIN " + MAP_QUERY_WAYS + " s ON m.member=s.id";
 			return "JOIN (" + holders + ") r ON o.id=r.id AND o.version=r.version WHERE true"; });
 	else
-		this->relationsSql = fromLayers("relation", "o.*", [&](const string &) { return "WHERE o.bbox && " + area; });
+		this->relationsSql = fromLayers("relation", "o.*", [&](const string &) { return "WHERE " + within("o.bbox"); });
 }
 
 int PgMapQuery::Continue()
@@ -356,6 +372,9 @@ int PgMapQuery::Continue()
 		this->mapQueryEnc->StoreIsDiff(false);
 		if(this->mapQueryBbox.size() == 4)
 			this->mapQueryEnc->StoreBounds(Bounds(this->mapQueryBbox[0], this->mapQueryBbox[1], this->mapQueryBbox[2], this->mapQueryBbox[3]));
+		else if(this->mapQueryWktBounds.size() == 4)
+			this->mapQueryEnc->StoreBounds(Bounds(this->mapQueryWktBounds[0], this->mapQueryWktBounds[1],
+				this->mapQueryWktBounds[2], this->mapQueryWktBounds[3]));
 		this->mapQueryPhase = 1;
 		return 0;
 	}
@@ -430,6 +449,7 @@ void PgMapQuery::Reset()
 	this->mapQueryEnc.reset();
 	this->mapQueryBbox.clear();
 	this->mapQueryWkt.clear();
+	this->mapQueryWktBounds.clear();
 	this->cursor.reset();
 	this->extraNodesSql.clear();
 	this->relationsSql.clear();
@@ -803,6 +823,27 @@ int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &nam
 	if(bbox[0] < -180 || bbox[2] > 180 || bbox[1] < -90 || bbox[3] > 90 ||
 		bbox[0] >= bbox[2] || bbox[1] >= bbox[3])
 		throw invalid_argument("Bbox must be a nonempty longitude/latitude rectangle");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	string envelope = "ST_MakeEnvelope(";
+	for(size_t i=0; i<4; ++i) envelope += work->quote(bbox[i]) + ",";
+	envelope += "4326)";
+	return SaveExtractArea(envelope, bbox, "", name);
+}
+
+int64_t PgTransaction::SaveExtractWkt(const string &wkt, const string &name)
+{
+	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
+		throw runtime_error("Map must be locked while creating an extract");
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	string boundary = DbCheckExtractBoundary(*work, wkt);
+	return SaveExtractArea("ST_GeomFromText(" + work->quote(boundary) + ", 4326)", vector<double>(), boundary, name);
+}
+
+int64_t PgTransaction::SaveExtractArea(const string &areaSql, const vector<double> &bbox,
+	const string &wkt, const string &name)
+{
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")
 		throw runtime_error("Map must be locked while creating an extract");
 	LockExtractTables("EXCLUSIVE");
@@ -815,18 +856,15 @@ int64_t PgTransaction::SaveExtract(const vector<double> &bbox, const string &nam
 	auto mode = work->exec("SELECT value FROM " + dbconn->quote_name(tableActivePrefix + "meta") +
 		" WHERE key='useBboxInQuery'");
 	bool bboxMode = !mode.empty() && atoi(mode[0][0].as<string>().c_str()) == 1;
-	string envelope = "ST_MakeEnvelope(";
-	for(size_t i=0; i<4; ++i) envelope += work->quote(bbox[i]) + ",";
-	envelope += "4326)";
 	string sql = "INSERT INTO " + dbconn->quote_name(tableActivePrefix + "extracts") +
 		" (name, bbox, use_bbox_in_query, performed_at, edit_activity_id, atomic_edit_id) VALUES (" +
-		work->quote(name) + "," + envelope + "," + (bboxMode ? "true" : "false") +
+		work->quote(name) + "," + areaSql + "," + (bboxMode ? "true" : "false") +
 		",CURRENT_TIMESTAMP," + checkpoint[0][0].as<string>() + "," +
 		checkpoint[0][1].as<string>() + ") RETURNING id";
 	int64_t id = work->exec(sql)[0][0].as<int64_t>();
 	shared_ptr<IDataStreamHandler> sink = make_shared<ExtractDatabaseWriter>(*dbconn, *work, tableActivePrefix, id);
 	auto query = GetQueryMgr();
-	int status = query->Start(bbox, time(nullptr), sink);
+	int status = wkt.empty() ? query->Start(bbox, time(nullptr), sink) : query->Start(wkt, time(nullptr), sink);
 	while(status == 0) status = query->Continue();
 	if(status < 0) throw runtime_error("Extract map query failed");
 	return id;

@@ -606,6 +606,7 @@ a map file as a new extract. Build with `make import_extract`, then:
 
     ./import_extract --in=portsmouth.osm.gz --name=portsmouth
     ./import_extract --in=area.pbf --name=area --bbox=-1.078,50.788,-1.074,50.790
+    ./import_extract --in=town.osm.gz --name=town --wkt-file=town.wkt
 
 The input format follows the file name, which must end in .osm, .o5m, .pbf or
 .json, optionally followed by .gz. The command prints the new extract's ID and

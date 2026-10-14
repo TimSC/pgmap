@@ -47,22 +47,22 @@ int main(int argc, char **argv)
 		// The IDs an extract is current to are its stored checkpoint, not the
 		// map's latest: the extract may be waiting for an update.
 		TagMap headerAttribs;
-		if(vm.count("edit-ids"))
+		std::vector<ExtractInfo> extracts, selected;
+		transaction->ListExtracts(extracts);
+		for(const ExtractInfo &info : extracts)
+			if(id ? info.extractId == id : info.name == name)
+				selected.push_back(info);
+		// Not found or ambiguous is reported by the export itself below
+		if(vm.count("edit-ids") && selected.size() == 1)
 		{
-			std::vector<ExtractInfo> extracts, selected;
-			transaction->ListExtracts(extracts);
-			for(const ExtractInfo &info : extracts)
-				if(id ? info.extractId == id : info.name == name)
-					selected.push_back(info);
-			// Not found or ambiguous is reported by the export itself below
-			if(selected.size() == 1)
-			{
-				if(selected[0].editActivityId < 0 || selected[0].atomicEditId < 0)
-					throw std::runtime_error("Extract has no checkpoint to write with --edit-ids");
-				headerAttribs["edit_activity_id"] = std::to_string(selected[0].editActivityId);
-				headerAttribs["atomic_edit_id"] = std::to_string(selected[0].atomicEditId);
-			}
+			if(selected[0].editActivityId < 0 || selected[0].atomicEditId < 0)
+				throw std::runtime_error("Extract has no checkpoint to write with --edit-ids");
+			headerAttribs["edit_activity_id"] = std::to_string(selected[0].editActivityId);
+			headerAttribs["atomic_edit_id"] = std::to_string(selected[0].atomicEditId);
 		}
+		// A boundary that is not a rectangle, which the file's bounds cannot hold
+		if(selected.size() == 1 && !selected[0].rectangular)
+			headerAttribs["boundary"] = selected[0].boundaryWkt;
 
 		// The writer publishes only a complete file, preserving an existing output on failure.
 		OsmFileWriter writer(destination, headerAttribs);
