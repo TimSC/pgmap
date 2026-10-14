@@ -119,11 +119,11 @@ int main(int argc, char **argv)
 		cout << "2. Create tables" << endl;
 		cout << "3. Import map data (from the file named by dump_path)" << endl;
 		cout << "4. Create indicies" << endl;
-		cout << "5. Apply diffs" << endl;
+		cout << "5. Apply diffs (optional)" << endl;
 		cout << "6. Refresh max IDs" << endl;
-		cout << "7. Import changetset metadata" << endl;
+		cout << "7. Import changeset metadata (optional)" << endl;
 		cout << "8. Refresh max changeset IDs and UIDs" << endl;
-		cout << "9. Build username table" << endl << endl;
+		cout << "9. Build username table (optional)" << endl << endl;
 		cout << "a. Reset active tables (this will delete all edits after the import)" << endl;
 		cout << "b. Reset test tables" << endl;
 		cout << "c. Check nodes exist for ways" << endl;
