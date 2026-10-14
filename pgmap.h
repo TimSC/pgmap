@@ -284,6 +284,11 @@ public:
 	// How many current ways there are, followed by how many of them have no
 	// stored bounding box, which a search by area in useBboxInQuery mode misses.
 	std::vector<int64_t> CountWaysWithoutBbox();
+	// How many ways the map has, and how many of them have no stored box,
+	// quickly: exact for a small map, and for a large one estimated from
+	// PostgreSQL's statistics, gathering them first if a table has none.
+	// Returns {ways, without a box, 1 if exact or 0 if estimated}.
+	std::vector<int64_t> EstimateWaysWithoutBbox();
 	bool UpdateUsername(int uid, const std::string &username,
 		class PgMapError &errStr);
 

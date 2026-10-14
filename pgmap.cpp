@@ -1867,6 +1867,66 @@ std::vector<int64_t> PgTransaction::CountWaysWithoutBbox()
 	return {r[0][0].as<int64_t>(), r[0][1].as<int64_t>()};
 }
 
+std::vector<int64_t> PgTransaction::EstimateWaysWithoutBbox()
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	// The way tables the visible ways come from: the base ones and the active
+	// ones. Counting them is a read of every way, which on a planet takes
+	// minutes; a table this small or smaller is counted.
+	const int64_t countedBytes = 256 * 1024 * 1024;
+	std::vector<string> tables;
+	if(!this->tableStaticPrefix.empty() && this->tableStaticPrefix != this->tableActivePrefix)
+		tables.push_back(this->tableStaticPrefix + "liveways");
+	tables.push_back(this->tableActivePrefix + "liveways");
+
+	auto statistics = [&](const string &table) {
+		return work->exec("SELECT c.reltuples::bigint, (SELECT s.null_frac FROM pg_stats s WHERE s.schemaname = n.nspname "
+			"AND s.tablename = c.relname AND s.attname = 'bbox'), pg_relation_size(c.oid) FROM pg_class c "
+			"JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.oid = to_regclass(" +
+			work->quote(dbconn->quote_name(table)) + ")");
+	};
+
+	bool small = true;
+	for(const string &table : tables)
+	{
+		pqxx::result r = statistics(table);
+		if(!r.empty() && r[0][2].as<int64_t>() > countedBytes)
+			small = false;
+	}
+	if(small)
+	{
+		std::vector<int64_t> counted = this->CountWaysWithoutBbox();
+		counted.push_back(1);
+		return counted;
+	}
+
+	// Rows times the share of them with no box, as ANALYZE last found them.
+	// Ways the active tables have taken over from the base ones are counted
+	// in both, which an estimate can bear.
+	double total = 0.0, missing = 0.0;
+	for(const string &table : tables)
+	{
+		pqxx::result r = statistics(table);
+		if(r.empty()) continue;
+		if(r[0][0].as<int64_t>() < 0 || r[0][1].is_null())
+		{
+			// Never analysed: a sample of its rows is enough
+			work->exec("ANALYZE " + dbconn->quote_name(table) + " (bbox);");
+			r = statistics(table);
+		}
+		double rows = std::max<double>(0.0, r[0][0].as<double>());
+		double nullShare = r[0][1].is_null() ? 0.0 : r[0][1].as<double>();
+		total += rows;
+		missing += rows * nullShare;
+	}
+	return {(int64_t)std::llround(total), (int64_t)std::llround(missing), 0};
+}
+
 bool PgTransaction::UseBboxInQuery()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
