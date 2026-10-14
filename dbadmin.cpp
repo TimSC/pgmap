@@ -619,7 +619,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 	cout << "Starting schema version" << schemaVersion << endl;
 
 	if(latest)
-		targetVer = 15;
+		targetVer = MAP_SCHEMA_VERSION;
 	bool ok = true;
 
 	//Upgrading
@@ -1033,8 +1033,14 @@ bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 // changes are made once each, by index version: a table set records, as
 // index_version in its meta table, the version its indices were last brought
 // up to, and DbCreateIndices makes the changes of every later version before
-// adding what is missing. To change the indices:
-//   1. raise MAP_INDEX_VERSION (dbadmin.h),
+// adding what is missing.
+//
+// Index versions are numbered as schema versions are: index version 15 is
+// the set of indices for schema version 15. The two are recorded separately,
+// as tables are upgraded or created by one step and indexed by another, often
+// days later. MAP_INDEX_VERSION follows MAP_SCHEMA_VERSION (dbadmin.h). To
+// change the indices along with a new schema version:
+//   1. raise MAP_SCHEMA_VERSION, which raises MAP_INDEX_VERSION,
 //   2. for an index to be dropped or rebuilt, add the DROP to
 //      DbChangeIndicesFrom, under the version being left behind,
 //   3. for an index to be added or rebuilt, add or alter its CREATE in
@@ -1048,7 +1054,12 @@ int DbGetIndexVersion(pqxx::connection &c, pqxx::transaction_base *work, const s
 	string errStr;
 	try
 	{
-		return std::stoi(DbGetMetaValue(c, work, "index_version", tablePrefix, errStr));
+		int version = std::stoi(DbGetMetaValue(c, work, "index_version", tablePrefix, errStr));
+		// Index versions were first counted from 1, for the indices of schema
+		// version 15, before they were numbered with the schema
+		if(version > 0 && version < 11)
+			return 15;
+		return version;
 	}
 	catch (const std::exception &) {}
 	return 0; // Never recorded: nothing is known about the indices
@@ -1065,7 +1076,7 @@ std::string DbIndexVersionNote(pqxx::connection &c, pqxx::transaction_base *work
 	if(version == 0)
 		ss << "have no recorded version";
 	else
-		ss << "are at version " << version;
+		ss << "are those of schema version " << version;
 	ss << " (the current version is " << MAP_INDEX_VERSION << "): run \"Create indicies\".";
 	return ss.str();
 }
@@ -1075,9 +1086,9 @@ std::string DbIndexVersionNote(pqxx::connection &c, pqxx::transaction_base *work
 static bool DbChangeIndicesFrom(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const string &tablePrefix, int fromVersion, std::string &errStr)
 {
-	// Version 1 is the set of indices as it stood when versions began: there
+	// Version 15 is the set of indices as it stood when versions began: there
 	// is nothing to undo on the way to it. Later versions go here, as
-	//   if(fromVersion < 2) { DROP INDEX IF EXISTS ... }
+	//   if(fromVersion < 16) { DROP INDEX IF EXISTS ... }
 	return true;
 }
 
@@ -1255,9 +1266,8 @@ bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	// Every index is checked each time, so a run that was stopped, or an
 	// index that has gone missing, is put right by running this again
 	if(!DbCreateCurrentIndices(c, work, verbose, tablePrefix, errStr)) return false;
-	// Recorded only once all of it has succeeded
-	if(version != MAP_INDEX_VERSION)
-		if(!DbSetMetaValue(c, work, "index_version", to_string(MAP_INDEX_VERSION), tablePrefix, errStr)) return false;
+	// Recorded only once all of it has succeeded, in the current numbering
+	if(!DbSetMetaValue(c, work, "index_version", to_string(MAP_INDEX_VERSION), tablePrefix, errStr)) return false;
 	return true;
 }
 

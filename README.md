@@ -204,11 +204,17 @@ part of the schema version, and have a version of their own: when the step
 has finished, it records `index_version` in the `meta` table of each table
 set (static, modify and test).
 
-The admin tool compares that with the version of the indices it builds, and
-says so above its menu when a table set is behind, for example
+Index versions are numbered with the schema: index version 15 is the set of
+indices for schema version 15. The two are still recorded separately, as a
+map's tables are created or upgraded by one step and indexed by another, often
+much later, and a new schema version raises the index version whether or not
+the indices change.
 
-    The indices of the planet_static_ tables are at version 1 (the current
-    version is 2): run "Create indicies".
+The admin tool compares the recorded version with the one it builds, and says
+so above its menu when a table set is behind, for example
+
+    The indices of the planet_static_ tables are those of schema version 15
+    (the current version is 16): run "Create indicies".
 
 A table set with no recorded version, such as one whose indices were built
 before versions were recorded, is reported the same way. Running "Create
@@ -221,7 +227,8 @@ The indices that a schema version brings with the tables it adds (edit
 activity, stored extracts, the key of the member tables) are created by the
 schema upgrade and are not counted in the index version. The optional
 combined indices of boxes and tags ("Create/drop bbox indices") are not
-either. The current index version is 1.
+either. The current index version is 15. A map whose indices were recorded
+as version 1, as the first versions of this numbered them, is taken as 15.
 
 ### Working out the boxes of ways and relations
 

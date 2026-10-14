@@ -25,9 +25,15 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &filename, const std::string &tablePrefix,
 	std::string &errStr);
+// The latest schema version of the map tables
+const int MAP_SCHEMA_VERSION = 15;
 // The version of the indices that DbCreateIndices builds on the main map
-// tables. It is separate from the schema version: see dbadmin.cpp.
-const int MAP_INDEX_VERSION = 1;
+// tables. It is recorded separately from the schema version, as the indices
+// are built in a step of their own (see dbadmin.cpp), but numbered with it:
+// index version 15 is the set of indices for schema version 15. When the
+// schema version is raised, this is raised with it, whether or not the
+// indices change, so that the admin tool asks for "Create indicies" to be run.
+const int MAP_INDEX_VERSION = MAP_SCHEMA_VERSION;
 // The version a table set's indices were last brought up to; 0 if never recorded
 int DbGetIndexVersion(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix);
 // A sentence saying a table set's indices are behind, or nothing if they are not

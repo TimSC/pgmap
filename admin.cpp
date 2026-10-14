@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include "pgmap.h"
+#include "dbadmin.h"
 #include "util.h"
 #include "cppGzip/EncodeGzip.h"
 #include "cppo5m/osmxml.h"
@@ -358,7 +359,7 @@ int main(int argc, char **argv)
 
 		if(inputStr == "g")
 		{
-			cout << "Schema version? (the latest is 15)" << endl;
+			cout << "Schema version? (the latest is " << MAP_SCHEMA_VERSION << ")" << endl;
 			std::string schemaVer;
 			cin >> schemaVer;
 
