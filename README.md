@@ -216,6 +216,13 @@ so above its menu when a table set is behind, for example
     The indices of the planet_static_ tables are those of schema version 15
     (the current version is 16): run "Create indicies".
 
+"Upgrade/downgrade index version" (option h) brings the indices of every
+table set to a version given: the latest is what "Create indicies" builds, and
+0 takes away every index and key that step builds, after asking for
+confirmation. Dropping them before loading a large amount of data into
+existing tables, and building them again afterwards, is much quicker than
+keeping them up as the rows go in. Versions 11 to 15 have the same indices.
+
 A table set with no recorded version, such as one whose indices were built
 before versions were recorded, is reported the same way. Running "Create
 indicies" is always safe: it makes the changes of any later versions, such as

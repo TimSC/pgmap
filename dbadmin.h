@@ -38,6 +38,10 @@ const int MAP_INDEX_VERSION = MAP_SCHEMA_VERSION;
 int DbGetIndexVersion(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix);
 // A sentence saying a table set's indices are behind, or nothing if they are not
 std::string DbIndexVersionNote(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix);
+// Builds the indices of a table set to the given index version, or with 0
+// takes them all away, and records the version
+bool DbSetIndexVersion(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, int targetVersion, std::string &errStr);
 bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tablePrefix, 

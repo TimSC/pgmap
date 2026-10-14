@@ -1074,7 +1074,7 @@ std::string DbIndexVersionNote(pqxx::connection &c, pqxx::transaction_base *work
 	stringstream ss;
 	ss << "The indices of the " << tablePrefix << " tables ";
 	if(version == 0)
-		ss << "have no recorded version";
+		ss << "are not recorded as built";
 	else
 		ss << "are those of schema version " << version;
 	ss << " (the current version is " << MAP_INDEX_VERSION << "): run \"Create indicies\".";
@@ -1253,22 +1253,86 @@ static bool DbCreateCurrentIndices(pqxx::connection &c, pqxx::transaction_base *
 	return ok;
 }
 
+// The indices and keys DbCreateCurrentIndices builds, for taking them away
+// again. Keys are found by table, as their names depend on how they were made.
+static const char *INDEXED_KEY_TABLES[] = {"oldnodes", "oldways", "oldrelations", "livenodes", "liveways",
+	"liverelations", "nodeids", "wayids", "relationids", "usernames"};
+static const char *INDEX_SUFFIXES[] = {"livenodes_gix", "oldnodes_gix",
+	"way_mems_mids", "relation_mems_n_mids", "relation_mems_w_mids", "relation_mems_r_mids",
+	"oldnodes_ts2", "oldways_ts2", "oldrelations_ts2", "livenodes_ts", "liveways_ts", "liverelations_ts",
+	"oldnodes_uid2", "oldways_uid2", "oldrelations_uid2", "livenodes_uid", "liveways_uid", "liverelations_uid",
+	"oldnodes_cs2", "oldways_cs2", "oldrelations_cs2", "livenodes_cs", "liveways_cs", "liverelations_cs",
+	"changesets_uidx", "changesets_open_timestampx", "changesets_close_timestampx", "changesets_is_openx",
+	"changesets_gix"};
+
+// Index version 0: none of the indices or keys "Create indicies" builds, as
+// a table set is after its tables are created. Dropping them before loading a
+// large amount of data, and building them again afterwards, is much quicker
+// than keeping them up as the rows go in.
+static bool DbDropCurrentIndices(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, std::string &errStr)
+{
+	for(const char *suffix : INDEX_SUFFIXES)
+	{
+		string sql = "DROP INDEX IF EXISTS " + c.quote_name(tablePrefix + suffix) + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+	for(const char *suffix : INDEXED_KEY_TABLES)
+	{
+		string table = tablePrefix + suffix;
+		pqxx::result r = work->exec("SELECT conname FROM pg_constraint WHERE contype = 'p' AND conrelid = to_regclass(" +
+			work->quote(c.quote_name(table)) + ")");
+		for(const auto &row : r)
+		{
+			string sql = "ALTER TABLE " + c.quote_name(table) + " DROP CONSTRAINT " + c.quote_name(row[0].as<string>()) + ";";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	}
+	return true;
+}
+
+bool DbSetIndexVersion(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, int targetVersion, std::string &errStr)
+{
+	if(targetVersion != 0 && (targetVersion < 11 || targetVersion > MAP_INDEX_VERSION))
+	{
+		stringstream ss;
+		ss << "Index version " << targetVersion << " is not known: give 0 for none, or a version from 11 to "
+			<< MAP_INDEX_VERSION << ".";
+		errStr = ss.str();
+		return false;
+	}
+	int version = DbGetIndexVersion(c, work, tablePrefix);
+	if(verbose >= 1)
+		cout << "Indices of " << tablePrefix << ": version " << version << ", bringing to " << targetVersion << endl;
+
+	if(targetVersion == 0)
+	{
+		if(!DbDropCurrentIndices(c, work, verbose, tablePrefix, errStr)) return false;
+	}
+	else
+	{
+		// Versions 11 to 15 have one set of indices: the set as it stood when
+		// index versions began had not changed since before schema versions
+		// did. When a later version differs, the changes up to it go in
+		// DbChangeIndicesFrom, and those back down from it go here, before the
+		// set of the version asked for is built.
+		if(version < targetVersion)
+			if(!DbChangeIndicesFrom(c, work, verbose, tablePrefix, version, errStr)) return false;
+		// Every index is checked each time, so a run that was stopped, or an
+		// index that has gone missing, is put right by running this again
+		if(!DbCreateCurrentIndices(c, work, verbose, tablePrefix, errStr)) return false;
+	}
+	// Recorded only once all of it has succeeded, in the current numbering
+	return DbSetMetaValue(c, work, "index_version", to_string(targetVersion), tablePrefix, errStr);
+}
+
 bool DbCreateIndices(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const string &tablePrefix, 
 	std::string &errStr)
 {
-	int version = DbGetIndexVersion(c, work, tablePrefix);
-	if(verbose >= 1)
-		cout << "Indices of " << tablePrefix << ": version " << version << ", bringing to " << MAP_INDEX_VERSION << endl;
-	if(version < MAP_INDEX_VERSION)
-		if(!DbChangeIndicesFrom(c, work, verbose, tablePrefix, version, errStr)) return false;
-	// Every index is checked each time, so a run that was stopped, or an
-	// index that has gone missing, is put right by running this again
-	if(!DbCreateCurrentIndices(c, work, verbose, tablePrefix, errStr)) return false;
-	// Recorded only once all of it has succeeded, in the current numbering
-	if(!DbSetMetaValue(c, work, "index_version", to_string(MAP_INDEX_VERSION), tablePrefix, errStr)) return false;
-	return true;
+	return DbSetIndexVersion(c, work, verbose, tablePrefix, MAP_INDEX_VERSION, errStr);
 }
 
 // ************* The optional indices for finding objects by box and by tag *************

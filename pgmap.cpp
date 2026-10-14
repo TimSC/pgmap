@@ -2133,6 +2133,34 @@ int PgAdmin::GetLatestIndexVersion()
 	return MAP_INDEX_VERSION;
 }
 
+bool PgAdmin::SetIndexVersion(int verbose, int targetVersion, class PgMapError &errStr)
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	for(const string &prefix : {this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix})
+	{
+		string nativeErrStr;
+		if(!DbSetIndexVersion(*dbconn, work.get(), verbose, prefix, targetVersion, nativeErrStr))
+		{
+			errStr.errStr = nativeErrStr;
+			return false;
+		}
+	}
+	return true;
+}
+
+std::vector<int> PgAdmin::GetIndexVersions()
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	std::vector<int> out;
+	for(const string &prefix : {this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix})
+		out.push_back(DbGetIndexVersion(*dbconn, work.get(), prefix));
+	return out;
+}
+
 std::string PgAdmin::GetIndexVersionNotes()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

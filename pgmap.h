@@ -356,6 +356,11 @@ public:
 	// about the table sets whose indices are behind it: a line for each, or
 	// nothing if all are up to date.
 	int GetLatestIndexVersion();
+	// Brings the indices of every table set to an index version, upgrading
+	// or downgrading: 0 takes away all that "Create indicies" builds
+	bool SetIndexVersion(int verbose, int targetVersion, class PgMapError &errStr);
+	// The recorded index version of each table set, static, modify and test
+	std::vector<int> GetIndexVersions();
 	std::string GetIndexVersionNotes();
 	bool ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);

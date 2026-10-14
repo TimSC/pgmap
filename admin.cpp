@@ -77,7 +77,8 @@ int main(int argc, char **argv)
 		cout << "d. Check object ID tables" << endl;
 		cout << "e. Update way/relation bboxes" << endl;
 		cout << "g. Upgrade/downgrade db schema" << endl;
-		cout << "h. Create/drop bbox indices" << endl;
+		cout << "h. Upgrade/downgrade index version" << endl;
+		cout << "i. Create/drop bbox indices" << endl;
 
 		cout << endl << "q. Quit" << endl;
 
@@ -375,6 +376,49 @@ int main(int argc, char **argv)
 		}
 
 		if(inputStr == "h")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			std::vector<int> versions = admin->GetIndexVersions();
+			cout << "Index versions now (static, modify, test): " << versions[0] << ", " << versions[1] << ", "
+				<< versions[2] << endl;
+			cout << "Index version? (the latest is " << MAP_INDEX_VERSION << "; 0 drops every index and key "
+				"that \"Create indicies\" builds)" << endl;
+			std::string versionStr;
+			cin >> versionStr;
+			int target = atoi(versionStr.c_str());
+			if(target == 0)
+			{
+				cout << "Without its indices the map is very slow to query and to edit until they are built "
+					"again. Type yes to drop them:" << endl;
+				std::string confirm;
+				cin >> confirm;
+				if(confirm != "yes")
+				{
+					cout << "Nothing was changed." << endl;
+					continue;
+				}
+			}
+			// Without a transaction around the whole of it: each index is kept
+			// as it is built, and a run that was stopped is taken up by running
+			// it again
+			bool ok = false;
+			try
+			{
+				ok = admin->SetIndexVersion(verbose, target, errStr);
+			}
+			catch(const std::exception &e)
+			{
+				errStr.errStr = e.what();
+			}
+
+			if(ok)
+				cout << "All done!" << endl;
+			else
+				cout << errStr.errStr << endl;
+			continue;
+		}
+
+		if(inputStr == "i")
 		{
 			cout << "Create or delete (c/d)?" << endl;
 			std::string action;
