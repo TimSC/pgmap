@@ -489,17 +489,19 @@ changeset, or edit activity tables. Object versions and original metadata are
 retained, but IDs continue to come from the source map.
 
 All extract queries must scope object and membership lookups by extract ID.
-The extract tool can save initial rectangular snapshots, which `update_extract`
-brings up to date with later edits. Stored extracts can be exported with
-`export_extract`. Downgrade to 13 and direct map-table dropping remove these
+The extract tool can save initial snapshots, which the parent project's
+`manage.py updateextracts` brings up to date with later edits. Stored extracts
+are exported, imported and deleted with the parent project's `manage.py
+exportextract`, `importextract` and `deleteextract` commands, which call the
+functions described below. Downgrade to 13 and direct map-table dropping remove these
 tables. Already-version-14 databases will not automatically run the amended
 migration; adding these tables requires a separate application of the DDL.
 
 Output file formats
 -------------------
 
-`dump`, `extract` and `export_extract` choose the output format from the file
-name given to `--out`:
+`dump`, `extract` and `PgTransaction::ExportExtractToFile` (behind `manage.py
+exportextract`) choose the output format from the file name given to them:
 
 * `.osm` for OSM XML
 * `.o5m` for o5m
@@ -510,7 +512,7 @@ Add `.gz` to any of them, for example `.osm.gz`, to gzip the file. PBF is
 already compressed internally, so `.pbf.gz` gains almost nothing. Any other
 name is refused before the database is read.
 
-The tools write to a temporary file beside the destination and move it into
+They write to a temporary file beside the destination and move it into
 place only when the output is complete, so a failed run leaves an existing file
 as it was. o5m and PBF store coordinates to seven decimal places, where XML
 keeps everything the database holds.
@@ -522,7 +524,6 @@ The `extract` and `dump` tools can record which edits their output includes:
 
     ./extract --bbox=-1.078,50.788,-1.074,50.790 --out=portsmouth.osm.gz --edit-ids
     ./dump --out=dump.o5m.gz --edit-ids
-    ./export_extract --id=1 --out=portsmouth.json --edit-ids
 
 `--edit-ids` records two values in the file header: `edit_activity_id`, the latest
 edit activity row ID, and `atomic_edit_id`, the latest atomic edit ID (zero if
@@ -539,8 +540,8 @@ depends on the format:
   the IDs if it rewrites the file.
 * `.pbf`: not available; the tools stop with an error.
 
-`export_extract --edit-ids` writes the same two names, holding the stored
-extract's checkpoint: the edits the extract is current to, which is behind the
+An exported stored extract records the same two names unless asked not to
+(`manage.py exportextract --no-edit-ids`), holding the extract's checkpoint: the edits the extract is current to, which is behind the
 map if the extract is waiting for an update. cppo5m reads the values back from
 all three formats as the document's attributes.
 
@@ -578,21 +579,21 @@ those additions applied separately. Rebuild the tool/bindings after updating.
 Exporting a stored extract
 --------------------------
 
-Build with `make export_extract`, then select by ID or unique name:
+From the parent project, select the extract by ID or unique name:
 
-    ./export_extract --id=1 --out=portsmouth.osm.gz
-    ./export_extract --name=portsmouth --out=portsmouth.o5m.gz
+    python3 manage.py exportextract --id 1 --out portsmouth.osm.gz
+    python3 manage.py exportextract --name portsmouth --out portsmouth.o5m.gz
 
-The output format follows the file name, as described under "Output file
-formats" below. The tool reads
-`config.cfg` by default; use `--config=/path/to/config.cfg` to select another
-configuration. It uses `dbtablemodifyprefix` for extract tables.
+This calls `PgTransaction::ExportExtractToFile`, or `ExportExtract` to encode to
+any `IDataStreamHandler`. The output format follows the file name, as described
+under "Output file formats" above. Extract tables use `dbtablemodifyprefix`.
 
 Every stored node, way, and relation is exported in ID order within its type,
 including outside completion nodes. The rectangle is written as bounds, not
-used to filter the stored contents again. Objects stream in batches from one
-consistent database snapshot, preserving stored usernames and source versions.
-An unknown ID/name is an error; duplicate names require selecting by ID.
+used to filter the stored contents again; a polygon boundary is also written as
+the `boundary` header attribute. Objects stream in batches from one consistent
+database snapshot, preserving stored usernames and source versions. An unknown
+ID/name is an error; duplicate names require selecting by ID.
 
 The output is written to a temporary file beside the destination and renamed
 only on success. An existing destination is replaced on success and retained
@@ -601,31 +602,32 @@ on failure. Export does not modify the database or require a schema change.
 Importing a file as a stored extract
 ------------------------------------
 
-`import_extract` is the reverse of `export_extract`: it stores the contents of
-a map file as a new extract. Build with `make import_extract`, then:
+Importing is the reverse of exporting: it stores the contents of a map file as
+a new extract. From the parent project:
 
-    ./import_extract --in=portsmouth.osm.gz --name=portsmouth
-    ./import_extract --in=area.pbf --name=area --bbox=-1.078,50.788,-1.074,50.790
-    ./import_extract --in=town.osm.gz --name=town --wkt-file=town.wkt
+    python3 manage.py importextract --in portsmouth.osm.gz --name portsmouth
+    python3 manage.py importextract --in area.pbf --name area --bbox -1.078,50.788,-1.074,50.790
+    python3 manage.py importextract --in town.osm.gz --name town --wkt-file town.wkt
 
-The input format follows the file name, which must end in .osm, .o5m, .pbf or
-.json, optionally followed by .gz. The command prints the new extract's ID and
-how many objects it holds. Each invocation creates a new extract; `--name` is
-optional and is not checked for uniqueness. The tool reads `config.cfg` unless
-`--config` names another file, and uses `dbtablemodifyprefix` for the extract
-tables.
+This calls `PgTransaction::ImportExtractFromFile`, or `StartImportExtract` to
+feed the decoded objects from elsewhere. The input format follows the file
+name, which must end in .osm, .o5m, .pbf or .json, optionally followed by .gz.
+The command prints the new extract's ID and how many objects it holds. Each
+import creates a new extract; the command refuses a name already in use, though
+the pgmap functions do not check.
 
-The extract's rectangle is the bounds recorded in the file. Give `--bbox` if
-the file has none, or to use a different rectangle. The contents are stored as
-they are and are not filtered against the rectangle.
+The extract's area is the `boundary` header attribute if the file has one,
+otherwise the bounds recorded in the file. Give `--bbox` or `--wkt` if the file
+has neither, or to use a different area. The contents are stored as they are
+and are not filtered against the area.
 
 The extract's checkpoint is taken from the `edit_activity_id` and
-`atomic_edit_id` header attributes that `export_extract --edit-ids` writes, or
-from `--edit-activity-id` and `--atomic-edit-id` if given (both or neither). A
-.pbf file cannot hold these attributes. An extract imported without a
-checkpoint can be exported and compared, but `update_extract` refuses it. The
-checkpoint is only meaningful for a file that came from this map: an update
-compares it with this map's own edit activity.
+`atomic_edit_id` header attributes that an export writes, or from
+`--edit-activity-id` and `--atomic-edit-id` if given (both or neither). A .pbf
+file cannot hold these attributes. An extract imported without a checkpoint can
+be exported and compared, but updating refuses it. The checkpoint is only
+meaningful for a file that came from this map, or from the server the extract
+is set to update from: an update compares it with that map's edit activity.
 
 Every object is stored with its ID, version, tags, members, roles and metadata.
 Positions in .o5m and .pbf files have seven decimal places, so a round trip
@@ -648,16 +650,16 @@ follow the same main-map-before-extract order and lock extracts EXCLUSIVE.
 Updating a stored extract
 -------------------------
 
-    make update_extract
-    ./update_extract --id=1
-    ./update_extract --name=portsmouth
+From the parent project:
 
-The command reads `config.cfg` (or `--config=...`), locks the main map first and
+    python3 manage.py updateextracts --id 1
+
+`PgTransaction::UpdateExtract` locks the main map first and
 all extract tables exclusively afterwards, then updates to the latest visible
 source activity checkpoint. Pending edits may create, modify or delete nodes,
 ways and relations. Legacy ungrouped rows, incomplete groups, unset checkpoints,
 or a source checkpoint that has moved backwards cause failure without committing
-changes. Names must be unique.
+changes.
 
 Most logic lives in `dbextract.cpp`/`dbextract.h`. Activity is used to detect
 pending edits and validate the interval; the extract's membership is then
@@ -692,16 +694,17 @@ Deleting a stored extract
 
 `PgTransaction::DeleteExtract` (`DbDeleteExtract` in `dbextract.cpp`) removes an
 extract's metadata, objects and membership rows, selected by ID or unique name.
-It locks the extract tables EXCLUSIVE and does not touch the map. There is no
-command line tool for this; the parent project's Django admin uses it.
+It locks the extract tables EXCLUSIVE and does not touch the map. The parent
+project's Django admin and `manage.py deleteextract` use it.
 
 Comparing a stored extract with a map query
 -------------------------------------------
 
-    make compare_extract
-    ./compare_extract --id=1
-    ./compare_extract --name=portsmouth
-    ./compare_extract --all
+From the parent project:
+
+    python3 manage.py compareextract --id 1
+    python3 manage.py compareextract --name portsmouth
+    python3 manage.py compareextract --all
 
 The command reads the stored extract from the database and runs a fresh map
 query of the extract's bbox, both in one transaction snapshot, then compares
@@ -711,10 +714,10 @@ coordinates and members are not compared. It prints object counts for each side
 and lists every differing object as missing
 from the extract, not in the query, or having different versions. It notes when
 the map has edits later than the extract's checkpoint, in which case differences
-are expected until `update_extract` is run, and when the map's `useBboxInQuery`
+are expected until the extract is updated, and when the map's `useBboxInQuery`
 mode has changed since the extract was saved. Nothing is modified. The exit
-status is 0 when every extract checked matches, 1 if any differs and 2 for an
-error. The versions of
+status is 0 when every extract checked matches, and 1 if any differs or there
+is an error. The versions of
 every object on both sides are held in memory during the comparison. The
 comparison is in `DbCompareExtract` in `dbextract.cpp`, also available as
 `PgTransaction::CompareExtract` and `CompareAllExtracts` through the bindings.

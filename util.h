@@ -13,6 +13,12 @@ using namespace std;
 #include "cppGzip/EncodeGzip.h"
 #include "cppo5m/model.h"
 
+#include <chrono>
+
+// How long since started, for a tool to report when it finishes: "4.2s",
+// "12m 05s" or "3h 07m 10s".
+std::string Took(std::chrono::steady_clock::time_point started);
+
 int ReadFileContents(const char *filename, int binaryMode, std::string &contentOut);
 
 std::vector<std::string> split(const std::string &s, char delim);

@@ -870,6 +870,48 @@ int64_t PgTransaction::SaveExtractArea(const string &areaSql, const vector<doubl
 	return id;
 }
 
+int64_t PgTransaction::ExportExtractToFile(int64_t extractId, const string &name,
+	const string &filename, bool editIds)
+{
+	// The IDs an extract is current to are its stored checkpoint, not the
+	// map's latest: the extract may be waiting for an update
+	TagMap headerAttribs;
+	std::vector<ExtractInfo> extracts, selected;
+	this->ListExtracts(extracts);
+	for(const ExtractInfo &info : extracts)
+		if(extractId ? info.extractId == extractId : info.name == name)
+			selected.push_back(info);
+	// Not found or ambiguous is reported by the export itself below
+	if(selected.size() == 1)
+	{
+		if(editIds && selected[0].editActivityId >= 0 && selected[0].atomicEditId >= 0)
+		{
+			headerAttribs["edit_activity_id"] = std::to_string(selected[0].editActivityId);
+			headerAttribs["atomic_edit_id"] = std::to_string(selected[0].atomicEditId);
+		}
+		// A boundary that is not a rectangle, which the file's bounds cannot hold
+		if(!selected[0].rectangular)
+			headerAttribs["boundary"] = selected[0].boundaryWkt;
+	}
+	// The writer publishes only a complete file, keeping an existing one on failure
+	OsmFileWriter writer(filename, headerAttribs);
+	int64_t id = this->ExportExtract(extractId, name, writer.Encoder());
+	writer.Close();
+	return id;
+}
+
+std::vector<int64_t> PgTransaction::ImportExtractFromFile(const string &filename, const string &name,
+	const vector<double> &bbox, const string &wkt, int64_t editActivityId, int64_t atomicEditId)
+{
+	if(!bbox.empty() && !wkt.empty())
+		throw invalid_argument("Give a bbox or a boundary, not both");
+	auto importer = this->StartImportExtract(name, bbox, editActivityId, atomicEditId);
+	if(!wkt.empty())
+		importer->SetBoundaryWkt(wkt);
+	LoadOsmFromFile(filename, importer);
+	return {importer->GetId(), importer->GetNumNodes(), importer->GetNumWays(), importer->GetNumRelations()};
+}
+
 int64_t PgTransaction::UpdateExtract(int64_t extractId, const string &name)
 {
 	if(shareMode != "ACCESS SHARE" && shareMode != "EXCLUSIVE")

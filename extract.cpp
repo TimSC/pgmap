@@ -10,7 +10,8 @@
 namespace po = boost::program_options;
 
 int main(int argc, char **argv)
-{	
+{
+	auto started = std::chrono::steady_clock::now();	
 	// Declare the supported options.
 	po::options_description desc("Allowed options");
 	desc.add_options()
@@ -85,12 +86,12 @@ int main(int argc, char **argv)
 			int64_t id = wkt.size() > 0 ? transaction->SaveExtractWkt(wkt, vm["name"].as<string>()) :
 				transaction->SaveExtract(bbox, vm["name"].as<string>());
 			transaction->Commit();
-			cout << "Saved database extract " << id << endl;
+			cout << "Saved database extract " << id << " in " << Took(started) << endl;
 			return 0;
 		}
 		catch(const exception &error)
 		{
-			cerr << "Database extract failed: " << error.what() << endl;
+			cerr << "Database extract failed after " << Took(started) << ": " << error.what() << endl;
 			return 1;
 		}
 	}
@@ -161,8 +162,9 @@ int main(int argc, char **argv)
 	}
 	catch(const exception &error)
 	{
-		cerr << "Extract failed: " << error.what() << endl;
+		cerr << "Extract failed after " << Took(started) << ": " << error.what() << endl;
 		return 1;
 	}
+	cout << "Wrote " << outFina << " in " << Took(started) << endl;
 	return 0;
 }

@@ -9,7 +9,8 @@
 namespace po = boost::program_options;
 
 int main(int argc, char **argv)
-{	
+{
+	auto started = std::chrono::steady_clock::now();	
 	po::options_description desc("Dump the whole map");
 	desc.add_options()
 		("help", "produce help message")
@@ -79,10 +80,10 @@ int main(int argc, char **argv)
 	}
 	catch(const exception &error)
 	{
-		cerr << "Dump failed: " << error.what() << endl;
+		cerr << "Dump failed after " << Took(started) << ": " << error.what() << endl;
 		return 1;
 	}
 	
-	cout << "Add done!" << endl;
+	cout << "All done, in " << Took(started) << "." << endl;
 	return 0;
 }

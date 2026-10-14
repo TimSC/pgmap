@@ -229,6 +229,21 @@ public:
 		const std::vector<double> &bbox = std::vector<double>(),
 		int64_t editActivityId = -1, int64_t atomicEditId = -1);
 
+	// Write a stored extract to a file, the format chosen by the file's name
+	// (.osm, .o5m, .pbf or .json, optionally followed by .gz). With editIds,
+	// the extract's checkpoint goes in the file header, as does a boundary
+	// that is not a rectangle, where the format has room. The file appears
+	// only once complete. Select by positive ID, or by a unique name. Returns
+	// the extract's ID.
+	int64_t ExportExtractToFile(int64_t extractId, const std::string &name,
+		const std::string &filename, bool editIds);
+	// Store a map file as a new extract, as StartImportExtract does, its
+	// boundary the bbox, the WKT polygon, or else what the file says. Returns
+	// {ID, nodes, ways, relations}. The caller commits.
+	std::vector<int64_t> ImportExtractFromFile(const std::string &filename, const std::string &name,
+		const std::vector<double> &bbox, const std::string &wkt,
+		int64_t editActivityId = -1, int64_t atomicEditId = -1);
+
 	// Remove a stored extract and its contents; returns its ID.
 	int64_t DeleteExtract(int64_t extractId, const std::string &name);
 

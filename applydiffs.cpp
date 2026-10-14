@@ -9,7 +9,8 @@
 namespace po = boost::program_options;
 
 int main(int argc, char **argv)
-{	
+{
+	auto started = std::chrono::steady_clock::now();	
 	// Declare the supported options.
 	po::options_description desc("Allowed options");
 	desc.add_options()
@@ -56,7 +57,7 @@ int main(int argc, char **argv)
 
 	if(!ok)
 	{
-		cout << errStr.errStr << endl;
+		cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 		admin->Abort();
 		return -2;
 	}
@@ -66,7 +67,7 @@ int main(int argc, char **argv)
 
 	if(!ok)
 	{
-		cout << errStr.errStr << endl;
+		cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 		admin->Abort();
 		return -3;
 	}
@@ -74,7 +75,7 @@ int main(int argc, char **argv)
 	//Note that changeset, user ID counts are not updated (because this is currently very slow).
 
 	admin->Commit();
-	cout << "All done!" << endl;
+	cout << "All done, in " << Took(started) << "." << endl;
 	return 0;
 }
 

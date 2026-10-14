@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -286,4 +287,17 @@ void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vecto
 			if(bi[3] > bboxOut[3]) bboxOut[3] = bi[3];
 		}
 	}	
+}
+
+std::string Took(std::chrono::steady_clock::time_point started)
+{
+	double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+	char text[64];
+	if(seconds < 60)
+		snprintf(text, sizeof(text), "%.1fs", seconds);
+	else if(seconds < 3600)
+		snprintf(text, sizeof(text), "%dm %02ds", (int)seconds / 60, (int)seconds % 60);
+	else
+		snprintf(text, sizeof(text), "%dh %02dm %02ds", (int)seconds / 3600, ((int)seconds / 60) % 60, (int)seconds % 60);
+	return text;
 }

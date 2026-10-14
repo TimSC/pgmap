@@ -42,7 +42,7 @@ public:
 // The extract's rectangle is the bbox given when starting, or else the first
 // bounds in the stream. Its checkpoint is the edit_activity_id and
 // atomic_edit_id given when starting, or else those document attributes in the
-// stream (as written by export_extract --edit-ids). Without a checkpoint the
+// stream (as written by manage.py exportextract). Without a checkpoint the
 // extract can be exported and compared but not updated.
 class PgExtractImport : public IDataStreamHandler
 {

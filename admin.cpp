@@ -1,4 +1,6 @@
 #include <fstream>
+#include <chrono>
+#include <cstdio>
 #include <algorithm>
 #include <sstream>
 #include <iostream>
@@ -81,6 +83,7 @@ static bool Confirm(const std::string &consequence, const std::string &word)
 	return false;
 }
 
+// How long something took, as a person reads it: 4.2s, 12m 05s, 3h 07m 10s
 int main(int argc, char **argv)
 {	
 	cout << "Reading settings from config.cfg" << endl;
@@ -136,6 +139,8 @@ int main(int argc, char **argv)
 		cout << endl << "q. Quit" << endl;
 
 		ReadWord(inputStr);
+		// For saying how long the chosen task took
+		auto started = std::chrono::steady_clock::now();
 		int verbose = 1;
 
 		if(inputStr == "1")
@@ -149,9 +154,9 @@ int main(int argc, char **argv)
 			bool ok = admin->DropMapTables(verbose, errStr);
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 			continue;
 		}
 
@@ -162,9 +167,9 @@ int main(int argc, char **argv)
 			bool ok = admin->CreateMapTables(verbose, 0, true, errStr);
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 			continue;
 		}
 
@@ -180,12 +185,12 @@ int main(int argc, char **argv)
 			if(ok)
 			{
 				admin->Commit();
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			}
 			else
 			{
 				admin->Abort();
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				cout << "Nothing was imported." << endl;
 			}
 			continue;
@@ -197,9 +202,9 @@ int main(int argc, char **argv)
 			bool ok = admin->CreateMapIndices(verbose, errStr);
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 			continue;
 		}
 
@@ -211,12 +216,12 @@ int main(int argc, char **argv)
 			if(ok)
 			{
 				admin->Commit();
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 				cout << "Now update next object IDs, or bad things might happen!" << endl;
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				admin->Abort();
 			}
 			continue;
@@ -230,11 +235,11 @@ int main(int argc, char **argv)
 			if(ok)
 			{
 				admin->Commit();
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				admin->Abort();
 			}
 			continue;
@@ -260,7 +265,7 @@ int main(int argc, char **argv)
 					ok = admin->ImportChangesetMetadata(finaList[i], verbose, errStr);
 					if(!ok)
 					{
-						cout << errStr.errStr << endl;
+						cout << "Could not import " << finaList[i] << endl;
 						break;
 					}
 				}
@@ -273,11 +278,11 @@ int main(int argc, char **argv)
 			if(ok)
 			{
 				admin->Commit();
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				admin->Abort();
 			}
 			continue;
@@ -292,11 +297,11 @@ int main(int argc, char **argv)
 			if(ok)
 			{
 				admin->Commit();
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				admin->Abort();
 			}
 			continue;
@@ -310,11 +315,11 @@ int main(int argc, char **argv)
 			if(ok)
 			{
 				admin->Commit();
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				admin->Abort();
 			}
 			continue;
@@ -330,12 +335,12 @@ int main(int argc, char **argv)
 
 			if(ok)
 			{
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 				pgTransaction->Commit();
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				pgTransaction->Abort();
 			}
 			continue;
@@ -351,12 +356,12 @@ int main(int argc, char **argv)
 
 			if(ok)
 			{
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 				pgTransaction->Commit();
 			}
 			else
 			{
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 				pgTransaction->Abort();
 			}
 			continue;
@@ -367,7 +372,7 @@ int main(int argc, char **argv)
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
 			bool ok = admin->CheckNodesExistForWays(errStr);
 
-			cout << "All done!" << ok << endl;
+			cout << (ok ? "All done, in " : "Failed after ") << Took(started) << "." << endl;
 			admin->Commit();
 
 			continue;
@@ -378,7 +383,7 @@ int main(int argc, char **argv)
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin("ACCESS SHARE");
 			bool ok = admin->CheckObjectIdTables(errStr);
 
-			cout << "All done!" << ok << endl;
+			cout << (ok ? "All done, in " : "Failed after ") << Took(started) << "." << endl;
 			admin->Commit();
 
 			continue;
@@ -405,9 +410,9 @@ int main(int argc, char **argv)
 			}
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 
 			continue;
 		}
@@ -445,9 +450,9 @@ int main(int argc, char **argv)
 			admin->Commit();
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 			continue;
 		}
 
@@ -479,9 +484,9 @@ int main(int argc, char **argv)
 			}
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 			continue;
 		}
 
@@ -505,9 +510,9 @@ int main(int argc, char **argv)
 			admin->Commit();
 
 			if(ok)
-				cout << "All done!" << endl;
+				cout << "All done, in " << Took(started) << "." << endl;
 			else
-				cout << errStr.errStr << endl;
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
 			continue;
 		}
 
