@@ -2161,6 +2161,26 @@ std::vector<int> PgAdmin::GetIndexVersions()
 	return out;
 }
 
+std::vector<int> PgAdmin::GetSchemaVersions()
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	std::vector<int> out;
+	for(const string &prefix : {this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix})
+	{
+		int version = 0;
+		try
+		{
+			string nativeErrStr;
+			version = std::stoi(DbGetMetaValue(*dbconn, work.get(), "schema_version", prefix, nativeErrStr));
+		}
+		catch(const std::exception &) {}
+		out.push_back(version);
+	}
+	return out;
+}
+
 std::string PgAdmin::GetIndexVersionNotes()
 {
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);

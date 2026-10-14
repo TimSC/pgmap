@@ -361,6 +361,9 @@ public:
 	bool SetIndexVersion(int verbose, int targetVersion, class PgMapError &errStr);
 	// The recorded index version of each table set, static, modify and test
 	std::vector<int> GetIndexVersions();
+	// The schema version of each table set, static, modify and test; 0 for
+	// one that has none
+	std::vector<int> GetSchemaVersions();
 	std::string GetIndexVersionNotes();
 	bool ApplyDiffs(const std::string &diffPath, int verbose, class PgMapError &errStr);
 	bool RefreshMapIds(int verbose, class PgMapError &errStr);

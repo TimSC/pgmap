@@ -1,4 +1,6 @@
 #include <fstream>
+#include <algorithm>
+#include <sstream>
 #include <iostream>
 #include "pgmap.h"
 #include "dbadmin.h"
@@ -26,6 +28,57 @@ std::vector<std::string> get_file_list(const std::string& path)
         }
     }
     return m_file_list;
+}
+
+// Reading answers. Each reads one word; at the end of input (Ctrl-D) the
+// tool stops, where before it went round the menu for ever.
+
+static bool ReadWord(std::string &out)
+{
+	if(cin >> out) return true;
+	cout << endl << "No more input." << endl;
+	exit(0);
+}
+
+// A whole number, or false with a message for anything else: a stray letter
+// used to be read as 0, which for a schema version drops every table
+static bool ReadNumber(const std::string &prompt, int &out)
+{
+	cout << prompt << endl;
+	std::string text;
+	ReadWord(text);
+	size_t start = (!text.empty() && text[0] == '-') ? 1 : 0;
+	if(text.size() <= start || text.size() > 9 || text.find_first_not_of("0123456789", start) != std::string::npos)
+	{
+		cout << "\"" << text << "\" is not a number. Nothing was changed." << endl;
+		return false;
+	}
+	out = atoi(text.c_str());
+	return true;
+}
+
+// A yes or no question, answered 1 or 0 (or y or n)
+static bool ReadYesNo(const std::string &prompt, bool &out)
+{
+	cout << prompt << " (1/0)" << endl;
+	std::string text;
+	ReadWord(text);
+	if(text == "1" || text == "y" || text == "yes") { out = true; return true; }
+	if(text == "0" || text == "n" || text == "no") { out = false; return true; }
+	cout << "\"" << text << "\" is not 1 or 0. Nothing was changed." << endl;
+	return false;
+}
+
+// For a step that destroys data: says what it will do, and goes ahead only
+// if the given word is typed back
+static bool Confirm(const std::string &consequence, const std::string &word)
+{
+	cout << consequence << endl << "Type " << word << " to go ahead, or anything else to stop:" << endl;
+	std::string text;
+	ReadWord(text);
+	if(text == word) return true;
+	cout << "Nothing was changed." << endl;
+	return false;
 }
 
 int main(int argc, char **argv)
@@ -82,15 +135,18 @@ int main(int argc, char **argv)
 
 		cout << endl << "q. Quit" << endl;
 
-		cin >> inputStr;
+		ReadWord(inputStr);
 		int verbose = 1;
 
 		if(inputStr == "1")
 		{
+			if(!Confirm("This drops every map table of the " + config["dbtableprefix"] + ", " +
+				config["dbtablemodifyprefix"] + " and " + config["dbtabletestprefix"] + " table sets: the imported "
+				"map, every edit since, the edit activity and the stored extracts. It cannot be undone.", "drop"))
+				continue;
 
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
 			bool ok = admin->DropMapTables(verbose, errStr);
-			//bool ok = admin->CreateMapIndices(errStr);
 
 			if(ok)
 				cout << "All done!" << endl;
@@ -266,6 +322,9 @@ int main(int argc, char **argv)
 
 		if(inputStr == "a")
 		{
+			if(!Confirm("This deletes every edit made since the map was imported, from the " +
+				config["dbtablemodifyprefix"] + " tables, with the changesets and edit activity. It cannot be undone.", "reset"))
+				continue;
 			std::shared_ptr<class PgTransaction> pgTransaction = pgMap.GetTransaction("EXCLUSIVE");
 			bool ok = pgTransaction->ResetActiveTables(errStr);
 
@@ -284,6 +343,8 @@ int main(int argc, char **argv)
 
 		if(inputStr == "b")
 		{
+			if(!Confirm("This deletes everything in the " + config["dbtabletestprefix"] + " test tables.", "reset"))
+				continue;
 			class PgMap pgMap2(cstr, config["dbtableprefix"], config["dbtabletestprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 			std::shared_ptr<class PgTransaction> pgTransaction = pgMap2.GetTransaction("EXCLUSIVE");
 			bool ok = pgTransaction->ResetActiveTables(errStr);
@@ -325,16 +386,10 @@ int main(int argc, char **argv)
 
 		if(inputStr == "e")
 		{
-			cout << "Update static tables (1/0)?" << endl;
-			std::string updateStaticStr;
-			cin >> updateStaticStr;
-			cout << "Update active tables (1/0)?" << endl;
-			std::string updateActiveStr;
-			cin >> updateActiveStr;
-
-			cout << "Only ways that have no box yet, as when taking up a run that was stopped (1/0)?" << endl;
-			std::string onlyMissingStr;
-			cin >> onlyMissingStr;
+			bool updateStatic = false, updateActive = false, onlyMissing = false;
+			if(!ReadYesNo("Update static tables?", updateStatic)) continue;
+			if(!ReadYesNo("Update active tables?", updateActive)) continue;
+			if(!ReadYesNo("Only ways that have no box yet, as when taking up a run that was stopped?", onlyMissing)) continue;
 
 			// Without a transaction around the whole of it, so that the ways
 			// are committed a batch at a time and a stopped run keeps what it did
@@ -342,8 +397,7 @@ int main(int argc, char **argv)
 			bool ok = false;
 			try
 			{
-				ok = admin->UpdateBboxes(verbose, atoi(updateStaticStr.c_str()), atoi(updateActiveStr.c_str()), errStr,
-					atoi(onlyMissingStr.c_str()));
+				ok = admin->UpdateBboxes(verbose, updateStatic, updateActive, errStr, onlyMissing);
 			}
 			catch(const std::exception &e)
 			{
@@ -360,12 +414,34 @@ int main(int argc, char **argv)
 
 		if(inputStr == "g")
 		{
-			cout << "Schema version? (the latest is " << MAP_SCHEMA_VERSION << ")" << endl;
-			std::string schemaVer;
-			cin >> schemaVer;
-
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
-			bool ok = admin->CreateMapTables(verbose, atoi(schemaVer.c_str()), false, errStr);
+			std::vector<int> current = admin->GetSchemaVersions();
+			cout << "Schema versions now (static, modify, test): " << current[0] << ", " << current[1] << ", "
+				<< current[2] << endl;
+			int target = 0;
+			stringstream prompt;
+			prompt << "Schema version? (the latest is " << MAP_SCHEMA_VERSION << ")";
+			if(!ReadNumber(prompt.str(), target)) continue;
+			if(target < 0 || target > MAP_SCHEMA_VERSION || (target > 0 && target < 11))
+			{
+				cout << "There is no schema version " << target << ": give one from 11 to " << MAP_SCHEMA_VERSION <<
+					", or 0. Nothing was changed." << endl;
+				continue;
+			}
+			// Going down a version takes away what it added, data included
+			int highest = *std::max_element(current.begin(), current.end());
+			if(target < highest)
+			{
+				string consequence = "Downgrading takes away what the later versions added, and what is stored in it: "
+					"from version 14 down, the edit activity and stored extracts.";
+				if(target == 0)
+					consequence = "Version 0 is no tables at all: this drops every map table, the imported map and "
+						"every edit included. It cannot be undone.";
+				if(!Confirm(consequence, "downgrade"))
+					continue;
+			}
+
+			bool ok = admin->CreateMapTables(verbose, target, false, errStr);
 			admin->Commit();
 
 			if(ok)
@@ -381,23 +457,14 @@ int main(int argc, char **argv)
 			std::vector<int> versions = admin->GetIndexVersions();
 			cout << "Index versions now (static, modify, test): " << versions[0] << ", " << versions[1] << ", "
 				<< versions[2] << endl;
-			cout << "Index version? (the latest is " << MAP_INDEX_VERSION << "; 0 drops every index and key "
-				"that \"Create indicies\" builds)" << endl;
-			std::string versionStr;
-			cin >> versionStr;
-			int target = atoi(versionStr.c_str());
-			if(target == 0)
-			{
-				cout << "Without its indices the map is very slow to query and to edit until they are built "
-					"again. Type yes to drop them:" << endl;
-				std::string confirm;
-				cin >> confirm;
-				if(confirm != "yes")
-				{
-					cout << "Nothing was changed." << endl;
-					continue;
-				}
-			}
+			int target = 0;
+			stringstream prompt;
+			prompt << "Index version? (the latest is " << MAP_INDEX_VERSION << "; 0 drops every index and key "
+				"that \"Create indicies\" builds)";
+			if(!ReadNumber(prompt.str(), target)) continue;
+			if(target == 0 && !Confirm("Without its indices the map is very slow to query and to edit until they "
+				"are built again.", "drop"))
+				continue;
 			// Without a transaction around the whole of it: each index is kept
 			// as it is built, and a run that was stopped is taken up by running
 			// it again
@@ -422,7 +489,12 @@ int main(int argc, char **argv)
 		{
 			cout << "Create or delete (c/d)?" << endl;
 			std::string action;
-			cin >> action;
+			ReadWord(action);
+			if(action != "c" && action != "d")
+			{
+				cout << "\"" << action << "\" is not c or d. Nothing was changed." << endl;
+				continue;
+			}
 			bool ok = true;
 
 			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
