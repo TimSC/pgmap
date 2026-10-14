@@ -221,10 +221,15 @@ std::vector<int64_t> DbListExtractIds(pqxx::connection &connection,
 // ordering is ignored. Does not modify the extract.
 void DbCompareExtract(class PgTransaction &transaction, int64_t extractId,
 	const std::string &name, ExtractComparison &out);
-// An extract's boundary can be any polygon, given as WKT: a single polygon,
+// An extract's boundary can be any polygon or multipolygon, given as WKT:
 // valid, within the range of longitude and latitude, and not crossing the
 // antimeridian (nothing wider than 180 degrees of longitude is taken). Throws
-// std::invalid_argument saying what is wrong; returns the polygon as WKT.
+// std::invalid_argument saying what is wrong; returns the boundary as WKT.
 std::string DbCheckExtractBoundary(pqxx::transaction_base &work, const std::string &wkt);
+// A boundary grown outwards by a distance in metres, checked before and after
+// as DbCheckExtractBoundary does, as WKT. A distance of zero leaves it as it is.
+// The result is what is given as the extract's boundary; nothing afterwards
+// needs to know it was grown.
+std::string DbBufferExtractBoundary(pqxx::transaction_base &work, const std::string &wkt, double bufferMetres);
 
 #endif

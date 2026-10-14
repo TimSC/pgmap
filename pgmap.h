@@ -206,9 +206,13 @@ public:
 	// Stream a rectangular snapshot to current-state extract tables and return its ID.
 	// The caller commits metadata, checkpoints and contents together.
 	int64_t SaveExtract(const std::vector<double> &bbox, const std::string &name);
-	// The same for a boundary of any polygon, given as WKT: a single valid
-	// polygon not crossing the antimeridian (see DbCheckExtractBoundary).
+	// The same for a boundary given as WKT: a valid polygon or multipolygon
+	// not crossing the antimeridian (see DbCheckExtractBoundary).
 	int64_t SaveExtractWkt(const std::string &wkt, const std::string &name);
+	// A boundary given as WKT grown outwards by a distance in metres, as WKT,
+	// to give to SaveExtractWkt or as an imported extract's boundary in place
+	// of the one given. Checked before and after (see DbBufferExtractBoundary).
+	std::string BufferExtractBoundary(const std::string &wkt, double bufferMetres);
 
 	// Bring a stored extract up to date with the map and return its ID.
 	// Select by positive ID, or by a unique name when ID is zero.

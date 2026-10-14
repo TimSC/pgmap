@@ -841,6 +841,13 @@ int64_t PgTransaction::SaveExtractWkt(const string &wkt, const string &name)
 	return SaveExtractArea("ST_GeomFromText(" + work->quote(boundary) + ", 4326)", vector<double>(), boundary, name);
 }
 
+std::string PgTransaction::BufferExtractBoundary(const string &wkt, double bufferMetres)
+{
+	auto work = sharedWork->work;
+	if(!work) throw runtime_error("Transaction has been deleted");
+	return DbBufferExtractBoundary(*work, wkt, bufferMetres);
+}
+
 int64_t PgTransaction::SaveExtractArea(const string &areaSql, const vector<double> &bbox,
 	const string &wkt, const string &name)
 {

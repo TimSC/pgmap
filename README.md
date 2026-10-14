@@ -280,6 +280,23 @@ Both building and querying are helped by a generous `maintenance_work_mem`
 statistics for each table it indexed, which the planner needs to tell a common
 tag from a rare one.
 
+Extract boundaries (schema version 15)
+--------------------------------------
+
+An extract's boundary may be a polygon or, from version 15, a multipolygon,
+such as a region with islands. The `bbox` column of `extracts` is
+`GEOMETRY(Geometry, 4326)`, held to those two shapes by the constraint
+`extracts_bbox_shape`; until version 15 it was `GEOMETRY(Polygon, 4326)`.
+Queries test boundaries with `ST_Intersects`, which treats both alike.
+`DbCheckExtractBoundary` takes either, valid, within longitude -180 to 180 and
+latitude -90 to 90, and no wider than 180 degrees.
+
+This came after version 15 was first in use. `DbAmendSchema15` makes the change
+whenever a map at version 15 is set to version 15 or later, leaving a column
+that already has it alone, so a map already at 15 gains it the next time its
+schema is set. Going back to version 14 narrows the column again, and is
+refused, changing nothing, while any extract has a multipolygon boundary.
+
 Member tables and views (schema version 15)
 -------------------------------------------
 
@@ -463,7 +480,8 @@ Migration 13-to-14 creates the following tables under each configured table-set
 prefix. There is one shared set of tables per prefix, supporting multiple
 extracts by extract ID; each extract has one current state without an overlay.
 
-* `extracts`: generated ID, optional name, rectangular bbox (Polygon, SRID 4326),
+* `extracts`: generated ID, optional name, boundary `bbox` (SRID 4326: a polygon,
+  often a rectangle, or from schema 15 a polygon or multipolygon; see below),
   query-mode flag `use_bbox_in_query`, `performed_at` timestamp, last applied
   `edit_activity_id`, and last applied `atomic_edit_id`. A NULL
   checkpoint denotes an extract whose initial snapshot is not established.
@@ -549,19 +567,30 @@ Without the option the output is unchanged. `dump` writes `dump.o5m.gz` unless
 `--out` names another file.
 `PgTransaction::GetLatestEditIds` returns the same IDs through the bindings.
 
-Saving a rectangular extract to the database
---------------------------------------------
+Saving an extract to the database
+---------------------------------
 
 Build the tool with `make extract`, then run from the pgmap directory:
 
     ./extract --bbox=-1.078,50.788,-1.074,50.790 --save-db --name=portsmouth
+    ./extract --wkt=town.wkt --buffer=2000 --save-db --name=town
 
 Connection and prefixes come from `config.cfg`. The new extract is stored in
 `<dbtablemodifyprefix>extracts` and its associated extract object/membership
 tables. The command prints the generated extract ID. Each invocation creates a
-new extract; it does not replace an existing one. `--save-db` requires a nonempty
-bbox and cannot be combined with `--wkt` or `--out`. File output remains the
-existing default.
+new extract; it does not replace an existing one. `--save-db` requires one of
+`--bbox` and `--wkt` (a file holding a polygon or multipolygon), and cannot be
+combined with `--out` or `--edit-ids`. File output remains the existing default.
+
+`--buffer` grows the `--wkt` boundary outwards by that many metres first, for
+`--save-db` or a file alike. `PgTransaction::BufferExtractBoundary` does this
+(`DbBufferExtractBoundary` in `dbextract.cpp`): it checks the boundary, grows
+it with PostGIS's `ST_Buffer` on geography, so the distance is on the ground,
+and checks the result again, returning it as WKT. The caller then gives that
+to `SaveExtractWkt`, or as an imported extract's boundary, like any other, so
+nothing that stores or later uses a boundary knows about buffers. Pieces of a
+multipolygon closer than twice the distance join; a result that crosses the
+antimeridian is refused.
 
 `performed_at` records the snapshot transaction's start time. Row and atomic
 checkpoints are the greatest visible IDs in the source activity table, or zero
@@ -590,8 +619,8 @@ under "Output file formats" above. Extract tables use `dbtablemodifyprefix`.
 
 Every stored node, way, and relation is exported in ID order within its type,
 including outside completion nodes. The rectangle is written as bounds, not
-used to filter the stored contents again; a polygon boundary is also written as
-the `boundary` header attribute. Objects stream in batches from one consistent
+used to filter the stored contents again; a polygon or multipolygon boundary is
+also written as the `boundary` header attribute. Objects stream in batches from one consistent
 database snapshot, preserving stored usernames and source versions. An unknown
 ID/name is an error; duplicate names require selecting by ID.
 

@@ -203,6 +203,7 @@ int PgExtractExport::Continue()
 
 #include "dbjson.h"
 #include <cmath>
+#include <sstream>
 #include <cstdio>
 
 // Objects per INSERT statement, and the number of membership rows that
@@ -940,17 +941,16 @@ void DbCompareExtract(PgTransaction &transaction, int64_t extractId,
 	}
 }
 
-std::string DbCheckExtractBoundary(pqxx::transaction_base &work, const std::string &wkt)
+// Reads a boundary from SQL text, as DbCheckExtractBoundary does. what says
+// which boundary it is, for the messages.
+static string CheckBoundaryGeometry(pqxx::transaction_base &work, const string &geometrySql, const string &what)
 {
-	if(wkt.find_first_not_of(" \t\r\n") == string::npos)
-		throw invalid_argument("The boundary is empty");
 	// Read in a savepoint, so that text PostGIS cannot read leaves the
 	// transaction usable for saying so
 	pqxx::result r;
 	pqxx::dbtransaction *outer = dynamic_cast<pqxx::dbtransaction *>(&work);
 	string sql = "SELECT GeometryType(g), ST_IsEmpty(g), ST_IsValid(g), ST_IsValidReason(g), "
-		"ST_XMin(g), ST_YMin(g), ST_XMax(g), ST_YMax(g), ST_AsText(g) FROM (SELECT ST_GeomFromText(" +
-		work.quote(wkt) + ", 4326) AS g) boundary";
+		"ST_XMin(g), ST_YMin(g), ST_XMax(g), ST_YMax(g), ST_AsText(g) FROM (SELECT " + geometrySql + " AS g) boundary";
 	try
 	{
 		if(outer != nullptr)
@@ -966,21 +966,48 @@ std::string DbCheckExtractBoundary(pqxx::transaction_base &work, const std::stri
 	{
 		string message = e.what();
 		message = message.substr(0, message.find('\n'));
-		throw invalid_argument("The boundary is not WKT that can be read: " + message);
+		throw invalid_argument(what + " is not WKT that can be read: " + message);
 	}
+	// A polygon, or several, such as a region with islands. Schema 15 stores
+	// either; the queries treat them alike.
 	string type = r[0][0].as<string>();
-	if(type != "POLYGON")
-		throw invalid_argument("The boundary must be a single polygon, not " + type);
+	string shape = type == "POLYGON" ? "polygon" : "multipolygon";
+	if(type != "POLYGON" && type != "MULTIPOLYGON")
+		throw invalid_argument(what + " must be a polygon or a multipolygon, not " + type);
 	if(r[0][1].as<bool>())
-		throw invalid_argument("The boundary is an empty polygon");
+		throw invalid_argument(what + " is an empty " + shape);
 	if(!r[0][2].as<bool>())
-		throw invalid_argument("The boundary is not a valid polygon: " + r[0][3].as<string>());
+		throw invalid_argument(what + " is not a valid " + shape + ": " + r[0][3].as<string>());
 	double left = r[0][4].as<double>(), bottom = r[0][5].as<double>();
 	double right = r[0][6].as<double>(), top = r[0][7].as<double>();
 	if(left < -180 || right > 180 || bottom < -90 || top > 90)
-		throw invalid_argument("The boundary goes beyond longitude -180 to 180 or latitude -90 to 90");
+		throw invalid_argument(what + " goes beyond longitude -180 to 180 or latitude -90 to 90");
 	if(right - left > 180)
-		throw invalid_argument("The boundary is wider than 180 degrees of longitude, as one crossing the "
+		throw invalid_argument(what + " is wider than 180 degrees of longitude, as one crossing the "
 			"antimeridian would be; that is not supported");
 	return r[0][8].as<string>();
+}
+
+std::string DbCheckExtractBoundary(pqxx::transaction_base &work, const std::string &wkt)
+{
+	if(wkt.find_first_not_of(" \t\r\n") == string::npos)
+		throw invalid_argument("The boundary is empty");
+	return CheckBoundaryGeometry(work, "ST_GeomFromText(" + work.quote(wkt) + ", 4326)", "The boundary");
+}
+
+std::string DbBufferExtractBoundary(pqxx::transaction_base &work, const std::string &wkt, double bufferMetres)
+{
+	if(!std::isfinite(bufferMetres) || bufferMetres < 0)
+		throw invalid_argument("The buffer must be a distance in metres, zero or more");
+	string boundary = DbCheckExtractBoundary(work, wkt);
+	if(bufferMetres == 0)
+		return boundary;
+	// Grown by a distance on the ground, which as geography PostGIS measures in
+	// metres. Pieces closer than twice the distance join, and the result is
+	// checked again: a buffer can take a boundary across the antimeridian.
+	std::ostringstream distance;
+	distance.precision(17);
+	distance << bufferMetres;
+	return CheckBoundaryGeometry(work, "ST_Buffer(ST_GeomFromText(" + work.quote(boundary) + ", 4326)::geography, " +
+		distance.str() + ")::geometry", "The boundary with its buffer");
 }

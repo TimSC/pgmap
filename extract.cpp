@@ -18,6 +18,7 @@ int main(int argc, char **argv)
 		("help", "produce help message")
 		("wkt", po::value<string>(), "WKT polygon file name")
 		("bbox", po::value<string>(), "bbox shape (e.g -1.078,50.788,-1.074,50.790)")
+		("buffer", po::value<double>(), "Grow the --wkt polygon outwards by this many metres first")
 		("save-db", "Save the extract to the database instead of a file, within --bbox or the --wkt polygon")
 		("name", po::value<string>()->default_value(""), "Optional database extract name")
 		("out", po::value<string>(), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
@@ -68,6 +69,12 @@ int main(int argc, char **argv)
 		cerr << "Bbox or WKT filename must be specified" << endl;
 		exit(-2);
 	}
+	double buffer = vm.count("buffer") ? vm["buffer"].as<double>() : 0;
+	if(vm.count("buffer") && wkt.empty())
+	{
+		cerr << "--buffer needs --wkt" << endl;
+		return 2;
+	}
 
 	if(vm.count("save-db"))
 	{
@@ -83,6 +90,7 @@ int main(int argc, char **argv)
 			PgMap map(GeneratePgConnectionString(config), config["dbtableprefix"],
 				config["dbtablemodifyprefix"], config["dbtablemodifyprefix"], config["dbtabletestprefix"]);
 			auto transaction = map.GetTransaction("ACCESS SHARE");
+			if(vm.count("buffer")) wkt = transaction->BufferExtractBoundary(wkt, buffer);
 			int64_t id = wkt.size() > 0 ? transaction->SaveExtractWkt(wkt, vm["name"].as<string>()) :
 				transaction->SaveExtract(bbox, vm["name"].as<string>());
 			transaction->Commit();
@@ -135,6 +143,7 @@ int main(int argc, char **argv)
 	try
 	{
 		std::shared_ptr<class PgTransaction> transaction = pgMap.GetTransaction("ACCESS SHARE");
+		if(vm.count("buffer")) wkt = transaction->BufferExtractBoundary(wkt, buffer);
 
 		// The edit IDs come from the same snapshot as the map query below.
 		TagMap rootAttribs;

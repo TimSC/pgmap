@@ -379,7 +379,60 @@ static bool DbDefineVisibleViews(pqxx::connection &c, pqxx::transaction_base *wo
 	return true;
 }
 
+// The shapes an extract's boundary may have: a polygon, or from schema 15 a
+// multipolygon too, such as a region with islands. Going back to a polygon
+// column is refused while any extract has a multipolygon, which it could not
+// hold.
+static bool DbSetExtractBoundaryShapes(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, bool multipolygons, std::string &errStr)
+{
+	string name = tablePrefix + "extracts";
+	pqxx::result column = work->exec("SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a "
+		"WHERE a.attrelid = to_regclass(" + work->quote(c.quote_name(name)) + ") AND a.attname = 'bbox'");
+	if(column.empty()) return true; // No extract tables here
+	string table = c.quote_name(name);
+	string check = c.quote_name(tablePrefix + "extracts_bbox_shape");
+	string sql;
+	if(multipolygons)
+	{
+		if(column[0][0].as<string>() != "geometry(Geometry,4326)")
+		{
+			sql = "ALTER TABLE " + table + " ALTER COLUMN bbox TYPE GEOMETRY(Geometry, 4326);";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+		sql = "ALTER TABLE " + table + " DROP CONSTRAINT IF EXISTS " + check + ", ADD CONSTRAINT " + check +
+			" CHECK (GeometryType(bbox) IN ('POLYGON', 'MULTIPOLYGON'));";
+		return DbExec(work, sql, errStr, nullptr, verbose);
+	}
+
+	pqxx::result multi = work->exec("SELECT id FROM " + table + " WHERE GeometryType(bbox) <> 'POLYGON' ORDER BY id");
+	if(!multi.empty())
+	{
+		errStr = "Extracts " + multi[0][0].as<string>();
+		for(pqxx::result::size_type i = 1; i < multi.size() && i < 10; i++)
+			errStr += ", " + multi[i][0].as<string>();
+		errStr += string(multi.size() > 10 ? " and more" : "") + " in " + name + " have a multipolygon boundary, "
+			"which schema 14 cannot hold; delete them before going back to it";
+		return false;
+	}
+	sql = "ALTER TABLE " + table + " DROP CONSTRAINT IF EXISTS " + check + ";";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "ALTER TABLE " + table + " ALTER COLUMN bbox TYPE GEOMETRY(Polygon, 4326);";
+	return DbExec(work, sql, errStr, nullptr, verbose);
+}
+
+// What schema 15 has gained since it was introduced, as for schema 14: every
+// step leaves alone whatever is already there.
+bool DbAmendSchema15(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, std::string &errStr)
+{
+	return DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, true, errStr);
+}
+
 // Version 15:
+//  - An extract's boundary may be a multipolygon as well as a polygon (see
+//    DbSetExtractBoundaryShapes). This came after version 15 was first in
+//    use, so DbAmendSchema15 brings a map already at 15 up to date.
 //  - The member tables (way_mems, relation_mems_*) hold the members of the
 //    live version of each way and relation, and nothing else. Until now rows
 //    were added for every version stored and never removed, and nothing
@@ -434,6 +487,7 @@ bool DbUpgradeTables14to15(pqxx::connection &c, pqxx::transaction_base *work,
 bool DbDowngradeTables15To14(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
 {
+	if(!DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, false, errStr)) return false;
 	for(const auto &entry : MEMBER_TABLES)
 	{
 		string suffix = entry[0];
@@ -683,6 +737,12 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		if(!DbUpgradeTables14to15(c, work, verbose, parentPrefix, tablePrefix, errStr)) return false;
 		if(!DbSetMetaValue(c, work, "schema_version", "15", tablePrefix, errStr)) return false;
 		schemaVersion = 15;
+	}
+
+	if(schemaVersion >= 15 and targetVer >= schemaVersion)
+	{
+		// As for schema 14: what version 15 has gained since it was introduced
+		if(!DbAmendSchema15(c, work, verbose, tablePrefix, errStr)) return false;
 	}
 
 	//Downgrading
