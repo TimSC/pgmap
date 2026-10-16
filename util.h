@@ -19,6 +19,9 @@ using namespace std;
 // "12m 05s" or "3h 07m 10s".
 std::string Took(std::chrono::steady_clock::time_point started);
 
+// A number with the fewest digits that read back as exactly the same value.
+std::string ShortestDouble(double value);
+
 int ReadFileContents(const char *filename, int binaryMode, std::string &contentOut);
 
 std::vector<std::string> split(const std::string &s, char delim);

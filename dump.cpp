@@ -15,7 +15,9 @@ int main(int argc, char **argv)
 	desc.add_options()
 		("help", "produce help message")
 		("out", po::value<string>()->default_value("dump.o5m.gz"), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
-		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (not available for .pbf)")
+		("no-update-info", "Leave out of the file header what keeping it up to date needs: the edit IDs it is current to, "
+			"its area and the server to update from (public_url in config.cfg). .pbf has no room for them in any case")
+		("edit-ids", "Kept for scripts that give it: the edit IDs are written unless --no-update-info is given")
 	;
 	po::variables_map vm;
 	try
@@ -49,6 +51,7 @@ int main(int argc, char **argv)
 		cerr << "--edit-ids is not available for .pbf output, which has nowhere to hold the IDs" << endl;
 		return 2;
 	}
+	bool updateInfo = !vm.count("no-update-info") && OsmFileWriter::HasHeaderAttribs(outFormat);
 
 	cout << "Reading settings from config.cfg" << endl;
 	std::map<string, string> config;
@@ -71,8 +74,12 @@ int main(int argc, char **argv)
 
 		// The edit IDs come from the same snapshot as the dump below.
 		TagMap rootAttribs;
-		if(vm.count("edit-ids"))
+		if(updateInfo)
+		{
 			rootAttribs = transaction->GetLatestEditIdAttribs();
+			if(!config["public_url"].empty())
+				rootAttribs["update_url"] = config["public_url"];
+		}
 
 		OsmFileWriter writer(outFina, rootAttribs);
 		transaction->Dump(order, true, true, true, writer.Encoder());

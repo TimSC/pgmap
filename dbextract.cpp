@@ -304,6 +304,26 @@ void PgExtractImport::StoreAttributes(const TagMap &attributes)
     auto boundary = attributes.find("boundary");
     if(boundary != attributes.end() && !haveBbox)
         SetBoundaryWkt(boundary->second);
+    // and a rectangle as bbox (west,south,east,north), which says the same as
+    // the bounds, but also for a format or file that has no bounds
+    auto rectangle = attributes.find("bbox");
+    if(rectangle != attributes.end() && !haveBbox)
+    {
+        std::vector<double> sides;
+        for(const string &side : split(rectangle->second, ','))
+        {
+            size_t used = 0;
+            try { sides.push_back(std::stod(side, &used)); }
+            catch(const std::exception &) { used = 0; }
+            if(used == 0 || used != side.size())
+                throw runtime_error("The file's bbox attribute is not four numbers: " + rectangle->second);
+        }
+        if(sides.size() != 4)
+            throw runtime_error("The file's bbox attribute is not four numbers: " + rectangle->second);
+        CheckExtractBbox(sides);
+        bbox = sides;
+        haveBbox = true;
+    }
 }
 
 void PgExtractImport::StoreBounds(const Bounds &bounds)

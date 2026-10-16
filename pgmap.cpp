@@ -877,29 +877,50 @@ int64_t PgTransaction::SaveExtractArea(const string &areaSql, const vector<doubl
 	return id;
 }
 
-int64_t PgTransaction::ExportExtractToFile(int64_t extractId, const string &name,
-	const string &filename, bool editIds)
+std::map<std::string, std::string> PgTransaction::GetExtractHeaderAttribs(int64_t extractId, const string &name,
+	const string &publicUrl)
 {
-	// The IDs an extract is current to are its stored checkpoint, not the
-	// map's latest: the extract may be waiting for an update
-	TagMap headerAttribs;
 	std::vector<ExtractInfo> extracts, selected;
 	this->ListExtracts(extracts);
 	for(const ExtractInfo &info : extracts)
 		if(extractId ? info.extractId == extractId : info.name == name)
 			selected.push_back(info);
-	// Not found or ambiguous is reported by the export itself below
-	if(selected.size() == 1)
+	TagMap attribs;
+	if(selected.size() != 1)
+		return attribs; // Not found or ambiguous is reported by the export itself
+	const ExtractInfo &info = selected[0];
+	// The IDs an extract is current to are its stored checkpoint, not the
+	// map's latest: the extract may be waiting for an update
+	if(info.editActivityId >= 0 && info.atomicEditId >= 0)
 	{
-		if(editIds && selected[0].editActivityId >= 0 && selected[0].atomicEditId >= 0)
-		{
-			headerAttribs["edit_activity_id"] = std::to_string(selected[0].editActivityId);
-			headerAttribs["atomic_edit_id"] = std::to_string(selected[0].atomicEditId);
-		}
-		// A boundary that is not a rectangle, which the file's bounds cannot hold
-		if(!selected[0].rectangular)
-			headerAttribs["boundary"] = selected[0].boundaryWkt;
+		attribs["edit_activity_id"] = std::to_string(info.editActivityId);
+		attribs["atomic_edit_id"] = std::to_string(info.atomicEditId);
 	}
+	if(info.rectangular)
+	{
+		string bbox;
+		for(size_t i = 0; i < info.bbox.size(); i++)
+			bbox += (i ? "," : "") + ShortestDouble(info.bbox[i]);
+		attribs["bbox"] = bbox;
+	}
+	else
+		attribs["boundary"] = info.boundaryWkt;
+	// An extract kept up from another server follows that server's edits, and
+	// its checkpoint is in that server's numbering
+	if(!info.updateUrl.empty())
+		attribs["update_url"] = info.updateUrl;
+	else if(!publicUrl.empty())
+		attribs["update_url"] = publicUrl;
+	return attribs;
+}
+
+int64_t PgTransaction::ExportExtractToFile(int64_t extractId, const string &name,
+	const string &filename, bool updateInfo, const string &publicUrl)
+{
+	OsmFormat format = OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
+	TagMap headerAttribs;
+	if(updateInfo && OsmFileWriter::HasHeaderAttribs(format))
+		headerAttribs = this->GetExtractHeaderAttribs(extractId, name, publicUrl);
 	// The writer publishes only a complete file, keeping an existing one on failure
 	OsmFileWriter writer(filename, headerAttribs);
 	int64_t id = this->ExportExtract(extractId, name, writer.Encoder());
@@ -1871,12 +1892,16 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 	return true;
 }
 
-void PgTransaction::DumpToFile(const std::string &filename, bool editIds)
+void PgTransaction::DumpToFile(const std::string &filename, bool updateInfo, const std::string &publicUrl)
 {
 	OsmFormat format = OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
 	TagMap headerAttribs;
-	if(editIds && OsmFileWriter::HasHeaderAttribs(format))
+	if(updateInfo && OsmFileWriter::HasHeaderAttribs(format))
+	{
 		headerAttribs = this->GetLatestEditIdAttribs(); // From the same snapshot as the dump
+		if(!publicUrl.empty())
+			headerAttribs["update_url"] = publicUrl;
+	}
 	OsmFileWriter writer(filename, headerAttribs);
 	this->Dump(true, true, true, true, writer.Encoder());
 	writer.Close();

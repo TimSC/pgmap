@@ -22,7 +22,9 @@ int main(int argc, char **argv)
 		("save-db", "Save the extract to the database instead of a file, within --bbox or the --wkt polygon")
 		("name", po::value<string>()->default_value(""), "Optional database extract name")
 		("out", po::value<string>(), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
-		("edit-ids", "Add the latest edit activity ID and atomic edit ID to the file header (not available for .pbf)")
+		("no-update-info", "Leave out of the file header what keeping it up to date needs: the edit IDs it is current to, "
+			"its area (--bbox or the --wkt boundary) and the server to update from (public_url in config.cfg). .pbf has no room for them in any case")
+		("edit-ids", "Kept for scripts that give it: the edit IDs are written unless --no-update-info is given")
 	;
 
 	po::variables_map vm;
@@ -78,9 +80,10 @@ int main(int argc, char **argv)
 
 	if(vm.count("save-db"))
 	{
-		if((bbox.size() == 4) == (wkt.size() > 0) || vm.count("out") || vm.count("edit-ids"))
+		if((bbox.size() == 4) == (wkt.size() > 0) || vm.count("out") || vm.count("edit-ids") || vm.count("no-update-info"))
 		{
-			cerr << "--save-db requires one of --bbox and --wkt, and cannot be combined with --out or --edit-ids" << endl;
+			cerr << "--save-db requires one of --bbox and --wkt, and cannot be combined with --out, --edit-ids or "
+				"--no-update-info" << endl;
 			return 2;
 		}
 		try
@@ -124,6 +127,7 @@ int main(int argc, char **argv)
 		cerr << "--edit-ids is not available for .pbf output, which has nowhere to hold the IDs" << endl;
 		return 2;
 	}
+	bool updateInfo = !vm.count("no-update-info") && OsmFileWriter::HasHeaderAttribs(outFormat);
 
 	cout << "Reading settings from config.cfg" << endl;
 	std::map<string, string> config;
@@ -147,8 +151,17 @@ int main(int argc, char **argv)
 
 		// The edit IDs come from the same snapshot as the map query below.
 		TagMap rootAttribs;
-		if(vm.count("edit-ids"))
+		if(updateInfo)
+		{
 			rootAttribs = transaction->GetLatestEditIdAttribs();
+			if(bbox.size() == 4)
+				rootAttribs["bbox"] = ShortestDouble(bbox[0]) + "," + ShortestDouble(bbox[1]) + "," +
+					ShortestDouble(bbox[2]) + "," + ShortestDouble(bbox[3]);
+			else
+				rootAttribs["boundary"] = transaction->BufferExtractBoundary(wkt, 0); // As stored: checked and tidied
+			if(!config["public_url"].empty())
+				rootAttribs["update_url"] = config["public_url"];
+		}
 
 		OsmFileWriter writer(outFina, rootAttribs);
 		shared_ptr<IDataStreamHandler> enc = writer.Encoder();

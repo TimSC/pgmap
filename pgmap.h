@@ -157,11 +157,13 @@ public:
 		std::shared_ptr<IDataStreamHandler> enc);
 	// Write the whole map to a file, as the dump tool does. The file name
 	// selects the format: .osm, .o5m, .pbf or .json, optionally followed by
-	// .gz. With editIds, the latest edit activity ID and atomic edit ID of
-	// this snapshot go in the file header, in the formats that have somewhere
-	// to hold them (all but .pbf). The file appears under its name only once
-	// it is complete. Throws std::invalid_argument for an unusable name.
-	void DumpToFile(const std::string &filename, bool editIds);
+	// .gz. With updateInfo, what is needed to keep the file up to date goes
+	// in its header, in the formats that have somewhere to hold it (all but
+	// .pbf): the latest edit activity ID and atomic edit ID of this snapshot,
+	// and publicUrl, this server's address, as update_url if it is given. The
+	// file appears under its name only once it is complete. Throws
+	// std::invalid_argument for an unusable name.
+	void DumpToFile(const std::string &filename, bool updateInfo, const std::string &publicUrl = "");
 
 	int64_t GetAllocatedId(const std::string &type);
 	int64_t PeekNextAllocatedId(const std::string &type);
@@ -234,13 +236,21 @@ public:
 		int64_t editActivityId = -1, int64_t atomicEditId = -1);
 
 	// Write a stored extract to a file, the format chosen by the file's name
-	// (.osm, .o5m, .pbf or .json, optionally followed by .gz). With editIds,
-	// the extract's checkpoint goes in the file header, as does a boundary
-	// that is not a rectangle, where the format has room. The file appears
-	// only once complete. Select by positive ID, or by a unique name. Returns
-	// the extract's ID.
+	// (.osm, .o5m, .pbf or .json, optionally followed by .gz). With
+	// updateInfo, the header gets GetExtractHeaderAttribs, where the format has
+	// room. The file appears only once complete. Select by positive ID, or by a
+	// unique name. Returns the extract's ID.
 	int64_t ExportExtractToFile(int64_t extractId, const std::string &name,
-		const std::string &filename, bool editIds);
+		const std::string &filename, bool updateInfo, const std::string &publicUrl = "");
+	// What a file of a stored extract needs to be kept up to date, as header
+	// attributes: the edits it is current to (edit_activity_id,
+	// atomic_edit_id), its area (bbox, as west,south,east,north, or boundary,
+	// the WKT of one that is not a rectangle) and the server whose edits to
+	// follow (update_url: the extract's own update URL, or else publicUrl, this
+	// server's address, if given). Empty if the extract is not found or the
+	// name is ambiguous.
+	std::map<std::string, std::string> GetExtractHeaderAttribs(int64_t extractId, const std::string &name,
+		const std::string &publicUrl = "");
 	// Store a map file as a new extract, as StartImportExtract does, its
 	// boundary the bbox, the WKT polygon, or else what the file says. Returns
 	// {ID, nodes, ways, relations}. The caller commits.

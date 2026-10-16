@@ -535,19 +535,41 @@ place only when the output is complete, so a failed run leaves an existing file
 as it was. o5m and PBF store coordinates to seven decimal places, where XML
 keeps everything the database holds.
 
-Recording the edit IDs in an extract or dump
---------------------------------------------
+Recording what keeping a file up to date needs
+----------------------------------------------
 
-The `extract` and `dump` tools can record which edits their output includes:
+Files from the `extract` and `dump` tools, from stored extracts (`manage.py
+exportextract` and the downloads) and from `manage.py dumpplanet` say in their
+header what is needed to keep them up to date, so that a file can be updated
+(by pycrocosm's `importextract` and update, or `extractupdate.py`) with
+nothing else to go on:
 
-    ./extract --bbox=-1.078,50.788,-1.074,50.790 --out=portsmouth.osm.gz --edit-ids
-    ./dump --out=dump.o5m.gz --edit-ids
+* `edit_activity_id` and `atomic_edit_id`: the edits the file is current to.
+  For a dump or extract of the map they are the latest edit activity row ID
+  and atomic edit ID (zero if there is no activity), read in the same
+  transaction snapshot as the data, so the file contains exactly the edits up
+  to those IDs. For a stored extract they are its checkpoint, which is behind
+  the map if the extract is waiting for an update.
+* The area, for extracts: `bbox`, as `west,south,east,north`, for a
+  rectangle, or `boundary`, the WKT of a polygon or multipolygon. A dump has
+  none.
+* `update_url`: the address of the server whose edits to follow. For a stored
+  extract kept up to date from another server, that server's address, since
+  its checkpoint is in that server's numbering; otherwise this server's own,
+  the `public_url` setting in `config.cfg` (or `PGMAP_PUBLIC_URL`), which is
+  left out if not set. Django's `PUBLIC_URL` setting takes precedence for
+  the files the web server writes, and downloads fall back to the address
+  they were requested at.
 
-`--edit-ids` records two values in the file header: `edit_activity_id`, the latest
-edit activity row ID, and `atomic_edit_id`, the latest atomic edit ID (zero if
-there is no activity). They are read in the same transaction snapshot as the
-data, so the file contains exactly the edits up to those IDs. Where they go
-depends on the format:
+They are written by default. `--no-update-info` leaves them all out:
+
+    ./extract --bbox=-1.078,50.788,-1.074,50.790 --out=portsmouth.osm.gz --no-update-info
+    ./dump --out=dump.o5m.gz --no-update-info
+
+and the same option of `manage.py exportextract` and `manage.py dumpplanet`
+does the same. (`--edit-ids`, which once turned the edit IDs on, is still
+accepted, and does nothing more; `exportextract --no-edit-ids` is the same as
+`--no-update-info`.) Where they go depends on the format:
 
 * `.osm`: attributes of the root `<osm>` element.
 * `.json`: string members at the top of the document.
@@ -555,17 +577,14 @@ depends on the format:
   of cppo5m's own (type `0xc0`) straight after the header. Programs that do not
   know it skip it, as the o5m format requires, so the file reads normally
   elsewhere; osmconvert prints an "unknown .o5m dataset" warning, and drops
-  the IDs if it rewrites the file.
-* `.pbf`: not available; the tools stop with an error.
+  them if it rewrites the file.
+* `.pbf`: nowhere; the file is written without them. (`--edit-ids` with a
+  `.pbf` file is refused.)
 
-An exported stored extract records the same two names unless asked not to
-(`manage.py exportextract --no-edit-ids`), holding the extract's checkpoint: the edits the extract is current to, which is behind the
-map if the extract is waiting for an update. cppo5m reads the values back from
-all three formats as the document's attributes.
-
-Without the option the output is unchanged. `dump` writes `dump.o5m.gz` unless
-`--out` names another file.
-`PgTransaction::GetLatestEditIds` returns the same IDs through the bindings.
+cppo5m reads the values back from all three formats as the document's
+attributes. `dump` writes `dump.o5m.gz` unless `--out` names another file.
+`PgTransaction::GetLatestEditIds` returns the edit IDs through the bindings,
+and `PgTransaction::GetExtractHeaderAttribs` all of a stored extract's.
 
 Saving an extract to the database
 ---------------------------------
@@ -580,7 +599,7 @@ Connection and prefixes come from `config.cfg`. The new extract is stored in
 tables. The command prints the generated extract ID. Each invocation creates a
 new extract; it does not replace an existing one. `--save-db` requires one of
 `--bbox` and `--wkt` (a file holding a polygon or multipolygon), and cannot be
-combined with `--out` or `--edit-ids`. File output remains the existing default.
+combined with `--out`, `--edit-ids` or `--no-update-info`. File output remains the existing default.
 
 `--buffer` grows the `--wkt` boundary outwards by that many metres first, for
 `--save-db` or a file alike. `PgTransaction::BufferExtractBoundary` does this

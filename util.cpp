@@ -1,3 +1,4 @@
+#include <charconv>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -300,4 +301,11 @@ std::string Took(std::chrono::steady_clock::time_point started)
 	else
 		snprintf(text, sizeof(text), "%dh %02dm %02ds", (int)seconds / 3600, ((int)seconds / 60) % 60, (int)seconds % 60);
 	return text;
+}
+
+std::string ShortestDouble(double value)
+{
+	char text[32];
+	auto end = std::to_chars(text, text + sizeof(text), value).ptr;
+	return std::string(text, end);
 }
