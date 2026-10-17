@@ -309,11 +309,28 @@ bool DbDropExtractTables(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+// An index on each box column of edit_activity, as version 14 finds the
+// records concerning an area with; or with enabled false, none.
+static bool DbSetActivityBoxIndexes(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const string &tablePrefix, bool enabled, string &errStr)
+{
+	for(const char *column : {"existing_bbox", "updated_bbox",
+		"affectedparents_before_bbox", "affectedparents_after_bbox", "relation_reach_bbox"})
+	{
+		string index = c.quote_name(tablePrefix + "activity_gix_" + column);
+		string sql = enabled ? "CREATE INDEX IF NOT EXISTS " + index + " ON " +
+			c.quote_name(tablePrefix + "edit_activity") + " USING GIST (" + column + ");" :
+			"DROP INDEX IF EXISTS " + index + ";";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+	return true;
+}
+
 // What schema 14 has gained since it was introduced. Every step leaves alone
 // whatever is already there, so it both finishes an upgrade to version 14 and
 // brings an older version 14 up to date.
 bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
-	int verbose, const string &tablePrefix, string &errStr)
+	int verbose, const string &tablePrefix, bool boxIndexes, string &errStr)
 {
 	// related_parents: the relations holding an edit's related nodes. The four
 	// bbox columns: the boxes that go with the lists of existing, updated and
@@ -343,14 +360,11 @@ bool DbAmendSchema14(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_changeset") +
 		" ON " + c.quote_name(tablePrefix + "edit_activity") + " (changeset);";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
-	// Finding the records that concern an area, which tests each of these
-	for(const char *column : {"existing_bbox", "updated_bbox",
-		"affectedparents_before_bbox", "affectedparents_after_bbox", "relation_reach_bbox"})
-	{
-		sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_gix_" + column) +
-			" ON " + c.quote_name(tablePrefix + "edit_activity") + " USING GIST (" + column + ");";
-		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
-	}
+	// Finding the records that concern an area, which tests each of these.
+	// Version 15 has one index on the footprint in their place, so they are
+	// not made again for a map at 15.
+	if(boxIndexes && !DbSetActivityBoxIndexes(c, work, verbose, tablePrefix, true, errStr))
+		return false;
 	return DbCreateExtractTables(c, work, verbose, tablePrefix, errStr);
 }
 
@@ -456,19 +470,63 @@ static bool DbSetEditNotifications(pqxx::connection &c, pqxx::transaction_base *
 	return DbExec(work, sql, errStr, nullptr, verbose);
 }
 
+// The footprint of each edit activity record: the rectangle around all its
+// boxes (the four collections and relation_reach_bbox), or the whole world
+// when one of the collections was not recorded, as such a record may concern
+// anywhere. It is worked out by PostgreSQL as each row is written, and has
+// one GiST index together with the ID, so finding the records of a range of
+// IDs that may concern an area is one index scan, in place of a test of each
+// row against five columns. The exact test of the boxes follows, on the rows
+// this finds. The footprint takes the place of the indexes on the separate
+// boxes; with enabled false, they come back.
+//
+// btree_gist provides the ID's part of the index. It is a trusted extension,
+// which the owner of the database may create.
+static bool DbSetEditFootprint(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, bool enabled, std::string &errStr)
+{
+	string table = tablePrefix + "edit_activity";
+	if(work->exec("SELECT to_regclass(" + work->quote(c.quote_name(table)) + ")")[0][0].is_null())
+		return true; // No edit activity here
+	string sql;
+	if(!enabled)
+	{
+		// The index goes with the column
+		sql = "ALTER TABLE " + c.quote_name(table) + " DROP COLUMN IF EXISTS footprint;";
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		return DbSetActivityBoxIndexes(c, work, verbose, tablePrefix, true, errStr);
+	}
+	sql = "ALTER TABLE " + c.quote_name(table) + " ADD COLUMN IF NOT EXISTS footprint GEOMETRY(Geometry, 4326) "
+		"GENERATED ALWAYS AS (CASE WHEN existing_bbox IS NULL OR updated_bbox IS NULL "
+		"OR affectedparents_before_bbox IS NULL OR affectedparents_after_bbox IS NULL "
+		"THEN ST_MakeEnvelope(-180, -90, 180, 90, 4326) "
+		"ELSE ST_Envelope(ST_Collect(ARRAY[existing_bbox, updated_bbox, affectedparents_before_bbox, "
+		"affectedparents_after_bbox, relation_reach_bbox::geometry])) END) STORED;";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "CREATE EXTENSION IF NOT EXISTS btree_gist;";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "CREATE INDEX IF NOT EXISTS " + c.quote_name(tablePrefix + "activity_gix_footprint") +
+		" ON " + c.quote_name(table) + " USING GIST (id, footprint);";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	return DbSetActivityBoxIndexes(c, work, verbose, tablePrefix, false, errStr);
+}
+
 // What schema 15 has gained since it was introduced, as for schema 14: every
 // step leaves alone whatever is already there.
 bool DbAmendSchema15(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &tablePrefix, std::string &errStr)
 {
 	if(!DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, true, errStr)) return false;
+	if(!DbSetEditFootprint(c, work, verbose, tablePrefix, true, errStr)) return false;
 	return DbSetEditNotifications(c, work, verbose, tablePrefix, true, errStr);
 }
 
 // Version 15:
 //  - An extract's boundary may be a multipolygon as well as a polygon (see
-//    DbSetExtractBoundaryShapes), and edits are announced with NOTIFY (see
-//    DbSetEditNotifications). These came after version 15 was first in use,
+//    DbSetExtractBoundaryShapes), edits are announced with NOTIFY (see
+//    DbSetEditNotifications), and each edit activity record has a footprint,
+//    indexed with its ID (see DbSetEditFootprint), in place of an index on
+//    each of its boxes. These came after version 15 was first in use,
 //    so DbAmendSchema15 brings a map already at 15 up to date.
 //  - The member tables (way_mems, relation_mems_*) hold the members of the
 //    live version of each way and relation, and nothing else. Until now rows
@@ -526,6 +584,7 @@ bool DbDowngradeTables15To14(pqxx::connection &c, pqxx::transaction_base *work,
 {
 	if(!DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, false, errStr)) return false;
 	if(!DbSetEditNotifications(c, work, verbose, tablePrefix, false, errStr)) return false;
+	if(!DbSetEditFootprint(c, work, verbose, tablePrefix, false, errStr)) return false;
 	for(const auto &entry : MEMBER_TABLES)
 	{
 		string suffix = entry[0];
@@ -555,7 +614,7 @@ bool DbUpgradeTables13to14(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "CREATE UNIQUE INDEX " + c.quote_name(tablePrefix + "activity_atomic_block") +
 		" ON " + table + " (atomic_edit_id, block_index);";
 	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
-	return DbAmendSchema14(c, work, verbose, tablePrefix, errStr);
+	return DbAmendSchema14(c, work, verbose, tablePrefix, true, errStr);
 }
 
 bool DbDowngradeTables14To13(pqxx::connection &c, pqxx::transaction_base *work,
@@ -767,7 +826,7 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		// creating its extract tables leaves alone whatever is already there,
 		// so asking for the version a map already has, or a later one, brings
 		// an older version 14 up to date.
-		if(!DbAmendSchema14(c, work, verbose, tablePrefix, errStr)) return false;
+		if(!DbAmendSchema14(c, work, verbose, tablePrefix, schemaVersion < 15, errStr)) return false;
 	}
 
 	if(schemaVersion == 14 and targetVer > schemaVersion)

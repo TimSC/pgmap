@@ -257,6 +257,12 @@ bool DbGetEditActivityById(pqxx::connection &c,
 // after && has used the index): a collection holds a box for each object, so
 // an edit is kept only if one of its objects' boxes meets the shape, not its
 // rectangle. Give one or the other, or neither for no filter.
+//
+// A table with a footprint column (schema 15, see DbSetEditFootprint in
+// dbadmin.cpp) is first narrowed down by that: the rectangle around all of a
+// record's boxes, or the whole world for a record whose boxes were not all
+// recorded, indexed together with the ID. Every record the exact test below
+// keeps meets its footprint, so the footprint only saves time.
 static std::string ActivityAreaCondition(pqxx::transaction_base *work, const std::string &table,
 	const std::vector<double> &bbox, const std::string &wkt)
 {
@@ -281,6 +287,10 @@ static std::string ActivityAreaCondition(pqxx::transaction_base *work, const std
 		return test;
 	};
 	stringstream sql;
+	bool hasFootprint = !work->exec("SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(" + work->quote(table) +
+		") AND attname = 'footprint' AND NOT attisdropped").empty();
+	if(hasFootprint)
+		sql << " AND " << table << ".footprint && " << area.str();
 	sql << " AND (";
 	for(size_t i=0; i<ACTIVITY_COLLECTION_COUNT; i++)
 	{

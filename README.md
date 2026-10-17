@@ -460,9 +460,21 @@ to an area that neither it nor its members touch. When an edit creates,
 modifies or deletes a relation, `relation_reach_bbox` is set to a polygon of
 the extent of the ways that hold the relation's member nodes, and the filter
 tests that as well. It is NULL for every other edit, which here means nowhere
-more, not unknown. It and the four collections each have a GiST index. The
-`bbox` column the table had before version 14, which nothing filled in, is
-dropped by the schema step.
+more, not unknown. At version 14, it and the four collections each have a
+GiST index. The `bbox` column the table had before version 14, which nothing
+filled in, is dropped by the schema step.
+
+Version 15 replaces those five indexes with one. Each row has a `footprint`, a
+generated column PostgreSQL works out as the row is written: the rectangle
+around all five geometries, or the whole world when one of the four
+collections is NULL, since such a row could concern anywhere. A single GiST
+index of `(id, footprint)` (with the `btree_gist` extension, which the schema
+step creates) lets one index scan apply both a range of IDs and an area,
+where before every row of the range was read and tested against five columns.
+The filter tests `footprint && area` first, then the exact tests above on the
+rows that pass, so the answers are the same; it uses the footprint only when
+the table has one. Adding the column rewrites the table, which on a large map
+takes a while.
 
 Rows are written by the web API's upload and by the admin tool's "Apply
 diffs", both through `EditActivityRecorder` (dbeditactivity.h), where the
