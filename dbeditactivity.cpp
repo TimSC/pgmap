@@ -251,24 +251,45 @@ bool DbGetEditActivityById(pqxx::connection &c,
 // edited relation matters beyond its own box. A row where one of these was not
 // recorded could concern anywhere, and is kept. && compares the area with the
 // extent of a whole collection, so a row may be kept without need, never lost.
-static std::string ActivityBboxCondition(const std::string &table, const std::vector<double> &bbox)
+//
+// The area is a rectangle (bbox) or, given as WKT, a polygon or multipolygon.
+// For a WKT area each box must also meet the shape itself (ST_Intersects,
+// after && has used the index): a collection holds a box for each object, so
+// an edit is kept only if one of its objects' boxes meets the shape, not its
+// rectangle. Give one or the other, or neither for no filter.
+static std::string ActivityAreaCondition(pqxx::transaction_base *work, const std::string &table,
+	const std::vector<double> &bbox, const std::string &wkt)
 {
-	if(bbox.empty()) return "";
-	if(bbox.size() != 4)
-		throw invalid_argument("bbox must have four values");
+	if(bbox.empty() && wkt.empty()) return "";
+	if(!bbox.empty() && !wkt.empty())
+		throw invalid_argument("Give a bbox or a WKT area, not both");
 	stringstream area;
 	area.precision(17);
-	area << "ST_MakeEnvelope(" << bbox[0] << "," << bbox[1] << "," << bbox[2] << "," << bbox[3] << ",4326)";
+	if(!wkt.empty())
+		area << "ST_GeomFromText(" << work->quote(wkt) << ",4326)";
+	else
+	{
+		if(bbox.size() != 4)
+			throw invalid_argument("bbox must have four values");
+		area << "ST_MakeEnvelope(" << bbox[0] << "," << bbox[1] << "," << bbox[2] << "," << bbox[3] << ",4326)";
+	}
+	auto meets = [&](const string &column)
+	{
+		string test = column + " && " + area.str();
+		if(!wkt.empty())
+			test = "(" + test + " AND ST_Intersects(" + column + ", " + area.str() + "))";
+		return test;
+	};
 	stringstream sql;
 	sql << " AND (";
 	for(size_t i=0; i<ACTIVITY_COLLECTION_COUNT; i++)
 	{
 		string column = table + "." + ACTIVITY_BBOX_COLUMNS[i];
-		sql << (i ? " OR " : "") << column << " IS NULL OR " << column << " && " << area.str();
+		sql << (i ? " OR " : "") << column << " IS NULL OR " << meets(column);
 	}
 	// Where a relation of the edit matters through ways sharing its member
 	// nodes. Unset means nowhere more, not unknown.
-	sql << " OR " << table << ".relation_reach_bbox && " << area.str() << ")";
+	sql << " OR " << meets(table + ".relation_reach_bbox") << ")";
 	return sql.str();
 }
 
@@ -299,7 +320,7 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 	sql << ActivitySelect(table) << " WHERE timestamp>="<<sinceTimestamp;
 	if (untilTimestamp > 0)
 		sql << " AND timestamp<"<<untilTimestamp;
-	sql << ActivityBboxCondition(table, bbox) << ActivityOrder(limit, newest) << ";";
+	sql << ActivityAreaCondition(work, table, bbox, "") << ActivityOrder(limit, newest) << ";";
 
 	try
 	{
@@ -337,7 +358,8 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	std::string &errStr,
 	int64_t limit,
 	const std::vector<double> &bbox,
-	bool newest)
+	bool newest,
+	const std::string &wkt)
 {
 	string table = c.quote_name(tablePrefix + "edit_activity");
 
@@ -345,7 +367,7 @@ void DbQueryEditActivityByIds(pqxx::connection &c,
 	sql << ActivitySelect(table) << " WHERE id >= " << firstId;
 	if(lastId > 0) sql << " AND id <= " << lastId;
 	if(atomicEditId > 0) sql << " AND atomic_edit_id = " << atomicEditId;
-	sql << ActivityBboxCondition(table, bbox) << ActivityOrder(limit, newest) << ";";
+	sql << ActivityAreaCondition(work, table, bbox, wkt) << ActivityOrder(limit, newest) << ";";
 
 	try
 	{

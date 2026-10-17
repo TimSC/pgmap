@@ -108,13 +108,16 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, int64_t &editActivityId, int64_t &atomicEditId);
 
+// bbox, or else wkt (a polygon or multipolygon), keeps only the rows that may
+// concern that area; see ActivityAreaCondition.
 void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, int64_t firstId, int64_t lastId,
 	int64_t atomicEditId, std::vector<std::shared_ptr<class EditActivity> > &out,
 	std::string &errStr,
 	int64_t limit = 0,
 	const std::vector<double> &bbox = std::vector<double>(),
-	bool newest = false);
+	bool newest = false,
+	const std::string &wkt = "");
 
 // Builds the edit activity record of a block of changes: one action (create,
 // modify or delete) applied to a set of objects. It is used both by the web

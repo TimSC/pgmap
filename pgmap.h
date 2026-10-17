@@ -294,10 +294,13 @@ public:
 	std::map<std::string, std::string> GetLatestEditIdAttribs();
 	// Inclusive row range; lastId/atomicEditId zero means no corresponding filter.
 	// Both give rows in ID order. limit, if positive, is the most to return.
+	// bbox, or else wkt (a polygon or multipolygon), keeps only the rows that
+	// may concern that area.
 	void QueryEditActivityByIds(int64_t firstId, int64_t lastId, int64_t atomicEditId,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
 		class PgMapError &errStr, int64_t limit = 0,
-		const std::vector<double> &bbox = std::vector<double>(), bool newest = false);
+		const std::vector<double> &bbox = std::vector<double>(), bool newest = false,
+		const std::string &wkt = "");
 	void QueryEditActivityByTimestamp(int64_t sinceTimestamp,
 		int64_t untilTimestamp,
 		std::vector<std::shared_ptr<class EditActivity> > &editActivity,
