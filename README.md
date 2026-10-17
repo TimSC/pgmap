@@ -297,6 +297,14 @@ that already has it alone, so a map already at 15 gains it the next time its
 schema is set. Going back to version 14 narrows the column again, and is
 refused, changing nothing, while any extract has a multipolygon boundary.
 
+Also added to version 15 in the same way: a trigger on `edit_activity`
+(`<prefix>notify_edits`, see `DbSetEditNotifications`) that sends a
+PostgreSQL notification on the channel `<prefix>edits` whenever edit activity
+is recorded, once for each statement, with the highest `edit_activity_id` and
+`atomic_edit_id` added as JSON. PostgreSQL delivers it when the transaction
+commits. The parent project's `notify` app passes it on to subscribed clients.
+Going back to version 14 removes the trigger.
+
 Member tables and views (schema version 15)
 -------------------------------------------
 

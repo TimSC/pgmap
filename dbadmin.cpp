@@ -421,18 +421,55 @@ static bool DbSetExtractBoundaryShapes(pqxx::connection &c, pqxx::transaction_ba
 	return DbExec(work, sql, errStr, nullptr, verbose);
 }
 
+// Edits announce themselves: when rows are added to edit_activity, PostgreSQL
+// sends a notification on the channel <prefix>edits, with the highest edit
+// activity ID and atomic edit ID added, as JSON. It goes out when the
+// transaction commits, and not at all if it is rolled back, so whoever hears it
+// can read the edits at once. Only connections listening at the time hear it;
+// see notify/ in the parent project, which passes it on to clients.
+static bool DbSetEditNotifications(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, bool enabled, std::string &errStr)
+{
+	string table = tablePrefix + "edit_activity";
+	if(work->exec("SELECT to_regclass(" + work->quote(c.quote_name(table)) + ")")[0][0].is_null())
+		return true; // No edit activity here
+	string function = c.quote_name(tablePrefix + "notify_edits");
+	string sql = "DROP TRIGGER IF EXISTS " + c.quote_name(tablePrefix + "notify_edits") + " ON " + c.quote_name(table) + ";";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	if(!enabled)
+	{
+		sql = "DROP FUNCTION IF EXISTS " + function + "();";
+		return DbExec(work, sql, errStr, nullptr, verbose);
+	}
+	// Once for each statement, however many rows it adds: an upload adds
+	// several at a time
+	sql = "CREATE OR REPLACE FUNCTION " + function + "() RETURNS trigger LANGUAGE plpgsql AS $$\n"
+		"BEGIN\n"
+		"  PERFORM pg_notify(" + work->quote(tablePrefix + "edits") + ", (SELECT json_build_object("
+		"'edit_activity_id', max(id), 'atomic_edit_id', max(atomic_edit_id))::text FROM added));\n"
+		"  RETURN NULL;\n"
+		"END\n"
+		"$$;";
+	if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	sql = "CREATE TRIGGER " + c.quote_name(tablePrefix + "notify_edits") + " AFTER INSERT ON " + c.quote_name(table) +
+		" REFERENCING NEW TABLE AS added FOR EACH STATEMENT EXECUTE FUNCTION " + function + "();";
+	return DbExec(work, sql, errStr, nullptr, verbose);
+}
+
 // What schema 15 has gained since it was introduced, as for schema 14: every
 // step leaves alone whatever is already there.
 bool DbAmendSchema15(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &tablePrefix, std::string &errStr)
 {
-	return DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, true, errStr);
+	if(!DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, true, errStr)) return false;
+	return DbSetEditNotifications(c, work, verbose, tablePrefix, true, errStr);
 }
 
 // Version 15:
 //  - An extract's boundary may be a multipolygon as well as a polygon (see
-//    DbSetExtractBoundaryShapes). This came after version 15 was first in
-//    use, so DbAmendSchema15 brings a map already at 15 up to date.
+//    DbSetExtractBoundaryShapes), and edits are announced with NOTIFY (see
+//    DbSetEditNotifications). These came after version 15 was first in use,
+//    so DbAmendSchema15 brings a map already at 15 up to date.
 //  - The member tables (way_mems, relation_mems_*) hold the members of the
 //    live version of each way and relation, and nothing else. Until now rows
 //    were added for every version stored and never removed, and nothing
@@ -488,6 +525,7 @@ bool DbDowngradeTables15To14(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
 {
 	if(!DbSetExtractBoundaryShapes(c, work, verbose, tablePrefix, false, errStr)) return false;
+	if(!DbSetEditNotifications(c, work, verbose, tablePrefix, false, errStr)) return false;
 	for(const auto &entry : MEMBER_TABLES)
 	{
 		string suffix = entry[0];
