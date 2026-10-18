@@ -102,6 +102,9 @@ class PgTransaction : public PgCommon
 private:
 	int64_t atomicEditId = 0;
 	int64_t activityBlockIndex = 0;
+	// This transaction's atomic edit, allocated when first wanted; 0 on a map
+	// whose schema has no atomic edits
+	int64_t CurrentAtomicEditId(pqxx::transaction_base *work);
 	int64_t SaveExtractArea(const std::string &areaSql, const std::vector<double> &bbox,
 		const std::string &wkt, const std::string &name);
 	std::shared_ptr<class EditActivityRecorder> activityRecorder;
@@ -127,12 +130,18 @@ public:
 	void GetObjectsHistoryById(const std::string &type, const std::set<int64_t> &objectIds, 
 		std::shared_ptr<IDataStreamHandler> out);
 
+	// asEdit says the objects are new versions made by this transaction's
+	// edit, which records its atomic edit with each of them (schema 16), as
+	// InsertEditActivity records it with the edit's activity. Without it they
+	// are copies of versions the map already has, such as the parents of
+	// what an edit changes, and are recorded with none.
 	bool StoreObjects(class OsmData &data, 
 		std::map<int64_t, int64_t> &createdNodeIds, 
 		std::map<int64_t, int64_t> &createdWaysIds,
 		std::map<int64_t, int64_t> &createdRelationsIds,
 		bool saveToStaticTables,
-		class PgMapError &errStr);
+		class PgMapError &errStr,
+		bool asEdit = false);
 	int UpdateObjectBboxesById(
 		const std::string &objType,
 		const std::set<int64_t> &objectIds, int verbose, 

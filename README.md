@@ -338,6 +338,39 @@ every row. It can be run while nothing is editing the map. pgmap works with a
 map still at version 14, without removing old rows there. Downgrading to 14
 drops the key and puts the views back; the tables keep what they hold.
 
+Atomic edits of object versions (schema version 16)
+---------------------------------------------------
+
+Every row of the live and history tables (`livenodes`, `oldnodes` and so on)
+has an `atomic_edit_id`: the atomic edit that made that version of the
+object, the same ID as the edit's rows in `edit_activity`. An upload is one
+atomic edit, as is each diff file that "Apply diffs" applies. The ID is
+allocated by the first thing the edit stores, once the map is locked, so the
+objects and the activity records of one edit share it.
+
+It is NULL for a version that no recorded atomic edit made:
+
+* the imported map, in the static tables;
+* versions stored before version 16;
+* the copies of versions the map already has, which an edit makes of the ways
+  and relations holding what it changes, so that their boxes can be updated.
+  Such a copy is the version as it was, not a new one.
+
+A version keeps its ID when it moves from the live table to history, and when
+its live row is rewritten at the same version, as happens to the ways holding
+a node that moves. `StoreObjects` takes the ID to record (`asEdit` in
+`PgTransaction::StoreObjects`); without it, what it stores is taken as copies.
+
+The `visible*` views name their columns, as the table set's live table has
+them, rather than using `*`, so that a table set and its parent can be at
+different versions while the schema is being changed, and are defined again
+to show the column.
+
+Upgrading from version 15 adds the column, which takes no time however large
+the map: nothing is written to the existing rows, which read as NULL. pgmap
+works with a map still at version 15, and records nothing there. Downgrading
+to 15 drops the column and defines the views again.
+
 Atomic edit activity (schema version 14)
 ---------------------------------------
 

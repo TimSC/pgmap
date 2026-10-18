@@ -654,7 +654,8 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,
 	bool saveToStaticTables,
-	class PgMapError &errStr)
+	class PgMapError &errStr,
+	bool asEdit)
 {
 	std::string nativeErrStr;
 	if(this->shareMode != "EXCLUSIVE")
@@ -672,7 +673,10 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds, nativeErrStr);
+	// The static tables hold the imported map, which no atomic edit made
+	int64_t atomicEditId = asEdit && !saveToStaticTables ? this->CurrentAtomicEditId(work.get()) : 0;
+	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds,
+		nativeErrStr, atomicEditId);
 	errStr.errStr = nativeErrStr;
 
 	return ok;
@@ -1088,6 +1092,23 @@ bool PgTransaction::EditActivityAfterStore(const std::string &action, std::share
 	return this->InsertEditActivity(activity, errStr);
 }
 
+int64_t PgTransaction::CurrentAtomicEditId(pqxx::transaction_base *work)
+{
+	// Allocated only after the exclusive map locks have been acquired, by the
+	// first store or activity record of the edit. The next writer cannot
+	// allocate until this transaction commits or aborts.
+	if(atomicEditId == 0)
+	{
+		if(this->shareMode != "EXCLUSIVE")
+			throw runtime_error("Database must be locked in EXCLUSIVE mode");
+		string sequence = dbconn->quote_name(this->tableActivePrefix + "atomic_edit_id_seq");
+		if(work->exec("SELECT to_regclass(" + work->quote(sequence) + ")")[0][0].is_null())
+			return 0; // Before schema 14
+		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
+	}
+	return atomicEditId;
+}
+
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 		class PgMapError &errStr)
 {
@@ -1154,15 +1175,8 @@ bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
 
-	// Allocate only after the exclusive map locks have been acquired. The next
-	// writer cannot allocate until this transaction commits or aborts.
-	if(atomicEditId == 0)
-	{
-		string sequence = dbconn->quote_name(this->tableActivePrefix + "atomic_edit_id_seq");
-		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
-	}
 	EditActivity groupedActivity(activity);
-	groupedActivity.atomicEditId = atomicEditId;
+	groupedActivity.atomicEditId = this->CurrentAtomicEditId(work.get());
 	groupedActivity.blockIndex = activityBlockIndex;
 	bool ok = DbInsertEditActivity(*dbconn, work.get(), this->tableActivePrefix,
 		groupedActivity,

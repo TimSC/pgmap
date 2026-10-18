@@ -230,6 +230,10 @@ public:
 	// Build, then insert as the next block of this recorder's own atomic
 	// edit: one recorder used this way is one atomic edit.
 	bool AfterStore(const std::string &action, const class OsmData &block, std::string &errStr);
+	// This recorder's atomic edit, allocated when first wanted (the map must
+	// be locked), so that the objects it stores can be recorded with it too;
+	// 0 when not Enabled
+	int64_t AtomicEditId();
 
 private:
 	typedef std::pair<int, int64_t> ObjKey; // Type (0 node, 1 way, 2 relation) and ID

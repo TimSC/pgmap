@@ -45,7 +45,8 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 	int64_t &nextObjId,
 	const string &ocdn,
 	std::string &errStr,
-	int verbose)
+	int verbose,
+	int64_t atomicEditId)
 {
 	/*
 	 * Stores objPtrs[first..last), which must not name the same existing
@@ -72,6 +73,15 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string oldTable = c.quote_name(tablePrefix + "old" + typeStr + "s");
 	const string idsTable = c.quote_name(tablePrefix + typeStr + "ids");
 	const string extraColumns = isNode ? ", geom" : (isWay ? ", members" : ", members, memberroles");
+	// Which atomic edit wrote each version (schema 16): atomicEditId for the
+	// versions this store writes, NULL for one it is only copying (0), as an
+	// upload does with the parents of what it changes. A row rewritten at the
+	// version it has keeps its own, and a row moving from the live table to
+	// history takes its own along.
+	const bool atomicColumn = !work->exec("SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(" +
+		work->quote(liveTable) + ") AND attname = 'atomic_edit_id' AND NOT attisdropped").empty();
+	const string atomicColumns = atomicColumn ? ", atomic_edit_id" : "";
+	const string atomicValue = atomicColumn ? (atomicEditId > 0 ? "," + to_string(atomicEditId) : string(",NULL")) : "";
 
 	auto run = [&](const string &sql) {
 		if(verbose >= 1)
@@ -202,8 +212,8 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 			if(d.copyLiveToOld) ids.push_back(d.objId);
 		if(!ids.empty())
 			run("INSERT INTO " + oldTable + " (id, changeset, changeset_index, username, uid, timestamp, version, tags, visible" +
-				extraColumns + ") SELECT id, changeset, changeset_index, username, uid, timestamp, version, tags, true" +
-				extraColumns + " FROM " + liveTable + " WHERE id = ANY(" + IdArrayLiteral(ids) + ") " + ocdn + ";");
+				extraColumns + atomicColumns + ") SELECT id, changeset, changeset_index, username, uid, timestamp, version, tags, true" +
+				extraColumns + atomicColumns + " FROM " + liveTable + " WHERE id = ANY(" + IdArrayLiteral(ids) + ") " + ocdn + ";");
 
 		//Delete from the live table
 		ids.clear();
@@ -218,12 +228,12 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 		for(const StoreDecision &d : decisions)
 		{
 			if(!d.insertLive) continue;
-			sql << (rows ? "," : "") << "(" << d.objId << "," << metaValues(d) << extraValues(d) << ")";
+			sql << (rows ? "," : "") << "(" << d.objId << "," << metaValues(d) << extraValues(d) << atomicValue << ")";
 			rows ++;
 		}
 		if(rows > 0)
 			run("INSERT INTO " + liveTable + " (id, changeset, username, uid, timestamp, version, tags" +
-				extraColumns + ") VALUES " + sql.str() + ";");
+				extraColumns + atomicColumns + ") VALUES " + sql.str() + ";");
 
 		//Update rows of the live table in place. One statement for each row,
 		//sent together.
@@ -242,6 +252,9 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 				sql << ", members=" << work->quote(d.refsJson);
 			else
 				sql << ", members=" << work->quote(d.refsJson) << ", memberroles=" << work->quote(d.rolesJson);
+			// A new version is this edit's; the same version keeps whose it was
+			if(atomicColumn && m.version != liveVersions[d.objId])
+				sql << ", atomic_edit_id=" << atomicValue.substr(1);
 			sql << " WHERE id = " << d.objId << ";";
 			rows ++;
 		}
@@ -255,12 +268,12 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 		{
 			if(!d.insertOld) continue;
 			sql << (rows ? "," : "") << "(" << d.objId << "," << metaValues(d) << ","
-				<< (d.obj->metaData.visible ? "true" : "false") << extraValues(d) << ")";
+				<< (d.obj->metaData.visible ? "true" : "false") << extraValues(d) << atomicValue << ")";
 			rows ++;
 		}
 		if(rows > 0)
 			run("INSERT INTO " + oldTable + " (id, changeset, username, uid, timestamp, version, tags, visible" +
-				extraColumns + ") VALUES " + sql.str() + " " + ocdn + ";");
+				extraColumns + atomicColumns + ") VALUES " + sql.str() + " " + ocdn + ";");
 
 		//Update existing id lists (nodeids, wayids, relationids)
 		ids.clear();
@@ -357,7 +370,8 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 	std::map<int64_t, int64_t> &createdNodeIds,
 	map<string, int64_t> &nextIdMap,
 	std::string &errStr,
-	int verbose)
+	int verbose,
+	int64_t atomicEditId)
 {
 	auto it = nextIdMap.find(typeStr);
 	int64_t &nextObjId = it->second;
@@ -380,7 +394,7 @@ bool ObjectsToDatabase(pqxx::connection &c, pqxx::transaction_base *work, const 
 			last ++;
 		}
 		if(!StoreObjectBatch(c, work, tablePrefix, typeStr, objPtrs, first, last,
-			createdNodeIds, nextObjId, ocdn, errStr, verbose))
+			createdNodeIds, nextObjId, ocdn, errStr, verbose, atomicEditId))
 			return false;
 		first = last;
 	}
@@ -393,7 +407,8 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,
-	std::string &errStr)
+	std::string &errStr,
+	int64_t atomicEditId)
 {
 	map<string, int64_t> nextIdMapOriginal, nextIdMap;
 	bool ok = GetNextObjectIds(c, work, tablePrefix, nextIdMapOriginal, errStr);
@@ -405,7 +420,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	std::vector<const class OsmObject *> objPtrs;
 	for(size_t i=0; i<osmData.nodes.size(); i++)
 		objPtrs.push_back(&osmData.nodes[i]);
-	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr, 0);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "node", objPtrs, createdNodeIds, nextIdMap, errStr, 0, atomicEditId);
 	if(!ok)
 		return false;
 
@@ -450,7 +465,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	objPtrs.clear();
 	for(size_t i=0; i<osmData.ways.size(); i++)
 		objPtrs.push_back(&osmData.ways[i]);
-	ok = ObjectsToDatabase(c, work, tablePrefix, "way", objPtrs, createdWayIds, nextIdMap, errStr, 0);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "way", objPtrs, createdWayIds, nextIdMap, errStr, 0, atomicEditId);
 	if(!ok)
 		return false;
 
@@ -506,7 +521,7 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	objPtrs.clear();
 	for(size_t i=0; i<osmData.relations.size(); i++)
 		objPtrs.push_back(&osmData.relations[i]);
-	ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr, 0);
+	ok = ObjectsToDatabase(c, work, tablePrefix, "relation", objPtrs, createdRelationIds, nextIdMap, errStr, 0, atomicEditId);
 	if(!ok)
 		return false;
 

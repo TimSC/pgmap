@@ -26,7 +26,7 @@ bool DbImportMapFile(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &filename, const std::string &tablePrefix,
 	std::string &errStr);
 // The latest schema version of the map tables
-const int MAP_SCHEMA_VERSION = 15;
+const int MAP_SCHEMA_VERSION = 16;
 // The version of the indices that DbCreateIndices builds on the main map
 // tables. It is recorded separately from the schema version, as the indices
 // are built in a step of their own (see dbadmin.cpp), but numbered with it:

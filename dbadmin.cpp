@@ -138,6 +138,9 @@ bool DbUpgradeTables0to11(pqxx::connection &c, pqxx::transaction_base *work,
 	return ok;
 }
 
+static bool DbDefineVisibleViews(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
+	const std::string &parentPrefix, const std::string &tablePrefix, bool distinct, std::string &errStr);
+
 bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &parentPrefix, 
@@ -153,55 +156,8 @@ bool DbUpgradeTables11to12(pqxx::connection &c, pqxx::transaction_base *work,
 	sql = "ALTER TABLE "+c.quote_name(tablePrefix+"liverelations")+" ADD COLUMN bbox GEOMETRY(Geometry, 4326);";
 	ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
 
-	string vn = c.quote_name(tablePrefix+"visiblenodes");
-	string ln = c.quote_name(tablePrefix+"livenodes");
-	if(parentPrefix.size() > 0)
-	{
-		string pvn = c.quote_name(parentPrefix+"visiblenodes");
-		string nids = c.quote_name(tablePrefix+"nodeids");
-
-		sql = "CREATE VIEW "+vn+" AS SELECT "+pvn+".* FROM "+pvn+" LEFT JOIN "+nids+" ON "+nids+".id = "+pvn+".id WHERE "+nids+".id IS NULL UNION SELECT * FROM "+ln+";";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-	else
-	{
-		sql = "CREATE VIEW "+vn+" AS SELECT * FROM "+ln+";";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-
-	string vw = c.quote_name(tablePrefix+"visibleways");
-	string lw = c.quote_name(tablePrefix+"liveways");
-	if(parentPrefix.size() > 0)
-	{
-		string pvw = c.quote_name(parentPrefix+"visibleways");
-		string wids = c.quote_name(tablePrefix+"wayids");
-
-		sql = "CREATE VIEW "+vw+" AS SELECT "+pvw+".* FROM "+pvw+" LEFT JOIN "+wids+" ON "+wids+".id = "+pvw+".id WHERE "+wids+".id IS NULL UNION SELECT * FROM "+lw+";";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-	else
-	{
-		sql = "CREATE VIEW "+vw+" AS SELECT * FROM "+lw+";";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-
-	string vr = c.quote_name(tablePrefix+"visiblerelations");
-	string lr = c.quote_name(tablePrefix+"liverelations");
-	if(parentPrefix.size() > 0)
-	{
-		string pvr = c.quote_name(parentPrefix+"visiblerelations");
-		string rids = c.quote_name(tablePrefix+"relationids");
-
-		sql = "CREATE VIEW "+vr+" AS SELECT "+pvr+".* FROM "+pvr+" LEFT JOIN "+rids+" ON "+rids+".id = "+pvr+".id WHERE "+rids+".id IS NULL UNION SELECT * FROM "+lr+";";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-	else
-	{
-		sql = "CREATE VIEW "+vr+" AS SELECT * FROM "+lr+";";
-		ok = DbExec(work, sql, errStr, nullptr, verbose); if(!ok) return ok;
-	}
-
-	return ok;
+	// As tables were then: rows compared to remove duplicates
+	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, true, errStr);
 }
 
 bool DbUpgradeTables12to13(pqxx::connection &c, pqxx::transaction_base *work, 
@@ -373,21 +329,43 @@ static const char *MEMBER_TABLES[4][2] = {{"way_mems", "way"}, {"relation_mems_n
 	{"relation_mems_w", "relation"}, {"relation_mems_r", "relation"}};
 
 // The views of the objects a table set shows: its own live objects, and its
-// parent's except those it has taken over. distinct says whether rows are
-// also compared with each other to remove duplicates, as before version 15.
+// parent's except those it has taken over, or for a table set with no
+// parent, its live objects alone. distinct says whether rows are also
+// compared with each other to remove duplicates, as before version 15.
+//
+// The columns are named, as the table set's live table has them, rather
+// than taken as *: a table set and its parent are brought from one schema
+// version to the next one after the other, so while one is being changed
+// they can have different columns. Defined again, a view shows what columns
+// have been added since; a view's * would stand for the columns there were
+// when it was made.
 static bool DbDefineVisibleViews(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
 	const std::string &parentPrefix, const std::string &tablePrefix, bool distinct, std::string &errStr)
 {
-	if(parentPrefix.empty()) return true; // Such a view is just its live table
 	for(const char *kind : {"node", "way", "relation"})
 	{
 		string view = c.quote_name(tablePrefix + "visible" + kind + "s");
-		string parent = c.quote_name(parentPrefix + "visible" + kind + "s");
-		string ids = c.quote_name(tablePrefix + kind + "ids");
 		string live = c.quote_name(tablePrefix + "live" + kind + "s");
-		string sql = "CREATE OR REPLACE VIEW " + view + " AS SELECT " + parent + ".* FROM " + parent +
-			" LEFT JOIN " + ids + " ON " + ids + ".id = " + parent + ".id WHERE " + ids + ".id IS NULL " +
-			(distinct ? "UNION" : "UNION ALL") + " SELECT * FROM " + live + ";";
+		string sql;
+		if(parentPrefix.empty())
+			sql = "CREATE OR REPLACE VIEW " + view + " AS SELECT * FROM " + live + ";";
+		else
+		{
+			string parent = c.quote_name(parentPrefix + "visible" + kind + "s");
+			string ids = c.quote_name(tablePrefix + kind + "ids");
+			pqxx::result r = work->exec("SELECT attname FROM pg_attribute WHERE attrelid = to_regclass(" +
+				work->quote(live) + ") AND attnum > 0 AND NOT attisdropped ORDER BY attnum");
+			string ownColumns, parentColumns;
+			for(size_t i=0; i<r.size(); i++)
+			{
+				string column = c.quote_name(r[i][0].as<string>());
+				ownColumns += (i ? ", " : "") + column;
+				parentColumns += (i ? ", " : "") + parent + "." + column;
+			}
+			sql = "CREATE OR REPLACE VIEW " + view + " AS SELECT " + parentColumns + " FROM " + parent +
+				" LEFT JOIN " + ids + " ON " + ids + ".id = " + parent + ".id WHERE " + ids + ".id IS NULL " +
+				(distinct ? "UNION" : "UNION ALL") + " SELECT " + ownColumns + " FROM " + live + ";";
+		}
 		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	}
 	return true;
@@ -598,6 +576,41 @@ bool DbDowngradeTables15To14(pqxx::connection &c, pqxx::transaction_base *work,
 		}
 	}
 	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, true, errStr);
+}
+
+// Version 16: every version of every object records the atomic edit that
+// made it, as atomic_edit_id in the live and history tables, the same ID as
+// the edit's activity records. Versions from before this, the imported map
+// in the static tables, and copies of versions the map already had (as an
+// edit makes of the ways and relations holding what it changes) have NULL.
+// The views of visible objects are defined again to show the column.
+bool DbUpgradeTables15to16(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
+{
+	for(const char *kind : {"node", "way", "relation"})
+		for(const char *table : {"live", "old"})
+		{
+			string sql = "ALTER TABLE " + c.quote_name(tablePrefix + table + kind + "s") +
+				" ADD COLUMN IF NOT EXISTS atomic_edit_id BIGINT;";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, false, errStr);
+}
+
+// The column goes, and with it the views showing it: this table set's, and
+// those of any table set above it, whose own step defines them again (the
+// table sets are taken from the static ones up).
+bool DbDowngradeTables16To15(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
+{
+	for(const char *kind : {"node", "way", "relation"})
+		for(const char *table : {"live", "old"})
+		{
+			string sql = "ALTER TABLE " + c.quote_name(tablePrefix + table + kind + "s") +
+				" DROP COLUMN IF EXISTS atomic_edit_id CASCADE;";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, false, errStr);
 }
 
 // Legacy rows remain ungrouped: timestamps cannot recover upload boundaries.
@@ -842,7 +855,20 @@ bool DbSetSchemaVersion(pqxx::connection &c, pqxx::transaction_base *work,
 		if(!DbAmendSchema15(c, work, verbose, tablePrefix, errStr)) return false;
 	}
 
+	if(schemaVersion == 15 and targetVer > schemaVersion)
+	{
+		if(!DbUpgradeTables15to16(c, work, verbose, parentPrefix, tablePrefix, errStr)) return false;
+		if(!DbSetMetaValue(c, work, "schema_version", "16", tablePrefix, errStr)) return false;
+		schemaVersion = 16;
+	}
+
 	//Downgrading
+	if(targetVer < 16 and schemaVersion == 16)
+	{
+		if(!DbDowngradeTables16To15(c, work, verbose, parentPrefix, tablePrefix, errStr)) return false;
+		if(!DbSetMetaValue(c, work, "schema_version", "15", tablePrefix, errStr)) return false;
+		schemaVersion = 15;
+	}
 	if(targetVer < 15 and schemaVersion == 15)
 	{
 		if(!DbDowngradeTables15To14(c, work, verbose, parentPrefix, tablePrefix, errStr)) return false;
@@ -1835,8 +1861,10 @@ bool DbApplyDiffs(pqxx::connection &c, pqxx::transaction_base *work,
 				//Store objects
 				std::map<int64_t, int64_t> createdNodeIds, createdWayIds, createdRelationIds;
 
+				// New versions, made by the diff's atomic edit; the copies of
+				// affected parents below are not
 				bool ok = ::StoreObjects(c, work, tableModPrefix, block, 
-					createdNodeIds, createdWayIds, createdRelationIds, errStr);
+					createdNodeIds, createdWayIds, createdRelationIds, errStr, recorder.AtomicEditId());
 				if(!ok)
 					cout << "Warning: " << errStr << endl;
 				bool stored = ok;

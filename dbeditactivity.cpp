@@ -801,6 +801,17 @@ void EditActivityRecorder::Build(const std::string &action, const class OsmData 
 
 }
 
+int64_t EditActivityRecorder::AtomicEditId()
+{
+	// Allocated once the map is locked, as an upload does; see PgTransaction::CurrentAtomicEditId
+	if(atomicEditId == 0 && enabled)
+	{
+		string sequence = c.quote_name(tableActivePrefix + "atomic_edit_id_seq");
+		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
+	}
+	return atomicEditId;
+}
+
 bool EditActivityRecorder::AfterStore(const std::string &action, const class OsmData &block, std::string &errStr)
 {
 	if(!enabled) return true;
@@ -808,13 +819,7 @@ bool EditActivityRecorder::AfterStore(const std::string &action, const class Osm
 	class EditActivity activity;
 	Build(action, block, activity);
 
-	// Allocated once the map is locked, as an upload does; see PgTransaction::InsertEditActivity
-	if(atomicEditId == 0)
-	{
-		string sequence = c.quote_name(tableActivePrefix + "atomic_edit_id_seq");
-		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
-	}
-	activity.atomicEditId = atomicEditId;
+	activity.atomicEditId = AtomicEditId();
 	activity.blockIndex = blockIndex;
 	bool ok = DbInsertEditActivity(c, work, tableActivePrefix, activity, errStr, 0);
 	if(ok) blockIndex ++;

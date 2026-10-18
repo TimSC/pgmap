@@ -14,7 +14,11 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	std::map<int64_t, int64_t> &createdNodeIds, 
 	std::map<int64_t, int64_t> &createdWayIds,
 	std::map<int64_t, int64_t> &createdRelationIds,
-	std::string &errStr);
+	std::string &errStr,
+	// The atomic edit the objects are new versions of, recorded with each
+	// version written (schema 16); 0 for objects only being copied, such as
+	// the parents of what an edit changes, which are recorded as NULL
+	int64_t atomicEditId = 0);
 
 int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &wayIds,
