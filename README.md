@@ -361,6 +361,27 @@ its live row is rewritten at the same version, as happens to the ways holding
 a node that moves. `StoreObjects` takes the ID to record (`asEdit` in
 `PgTransaction::StoreObjects`); without it, what it stores is taken as copies.
 
+The history tables, and the tables of IDs a table set has taken over
+(`nodeids`, `wayids`, `relationids`), also have a `superseded_atomic_edit_id`:
+the atomic edit that made a version no longer current, by making the next
+version or deleting the object. A version is in history once it has been
+replaced, and is marked by the edit that replaced it. A deletion is the
+current version of an object that is not there, unmarked until the object
+comes back. The first edit a table set makes to its parent's object (one of
+the imported map's, say) hides the parent's version, whose own tables are not
+written to: the ID taken over records that edit instead. NULL means the
+version is current, was replaced before version 16, or (in the ID tables) the
+object is one the table set made, or only copied. So the version of an object
+current after atomic edit N is the one made at or before N (or imported) and
+not replaced by N. A version stored out of order, older than one the tables
+already have, replaces nothing and is not marked.
+
+The map query can be of the map as it was after an atomic edit
+(`PgMapQuery::SetAtomicEditId`), worked out from the edit activity records
+since, not from these columns: the objects those edits changed are read at
+their versions before the first of them, by ID and version, and the rest as
+they are now. It needs no indices beyond those the map has.
+
 The `visible*` views name their columns, as the table set's live table has
 them, rather than using `*`, so that a table set and its parent can be at
 different versions while the schema is being changed, and are defined again

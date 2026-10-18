@@ -11,7 +11,6 @@
 
 std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
 	const std::vector<double> &bbox, 
-	int64_t existsAtTimestamp,
 	const std::string &excludeTablePrefix);
 
 std::shared_ptr<pqxx::icursorstream> VisibleNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
@@ -58,20 +57,6 @@ void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &objType, const std::string &liveOrOld,
 	const std::set<int64_t> &objIds, std::set<int64_t>::const_iterator &it, 
 	size_t step, std::shared_ptr<IDataStreamHandler> enc);
-
-// Functions for historical querys at a specific timestamp
-
-void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const std::string &tablePrefix, 
-	const std::vector<double> &bbox, 
-	int64_t existsAtTimestamp,
-	std::shared_ptr<IDataStreamHandler> enc);
-
-void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const std::string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut);
 
 void GetVisibleObjectBboxesById(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 

@@ -584,16 +584,33 @@ bool DbDowngradeTables15To14(pqxx::connection &c, pqxx::transaction_base *work,
 // in the static tables, and copies of versions the map already had (as an
 // edit makes of the ways and relations holding what it changes) have NULL.
 // The views of visible objects are defined again to show the column.
+//
+// A version in history also records the atomic edit that made it no longer
+// current, as superseded_atomic_edit_id: the edit that made the next
+// version, or deleted the object. A version of the parent's that a table set
+// hides, from the first edit it makes to the object, is recorded the same
+// way in the table set's ID tables (nodeids, wayids, relationids), as the
+// parent's own tables (the imported map) are not written to. NULL means
+// current, or replaced before version 16, or (in the ID tables) an object
+// the table set made or only copied.
 bool DbUpgradeTables15to16(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
 {
 	for(const char *kind : {"node", "way", "relation"})
+	{
 		for(const char *table : {"live", "old"})
 		{
 			string sql = "ALTER TABLE " + c.quote_name(tablePrefix + table + kind + "s") +
 				" ADD COLUMN IF NOT EXISTS atomic_edit_id BIGINT;";
 			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 		}
+		for(const char *table : {"old", ""})
+		{
+			string name = tablePrefix + table + kind + (table[0] ? "s" : "ids");
+			string sql = "ALTER TABLE " + c.quote_name(name) + " ADD COLUMN IF NOT EXISTS superseded_atomic_edit_id BIGINT;";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	}
 	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, false, errStr);
 }
 
@@ -604,12 +621,20 @@ bool DbDowngradeTables16To15(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &parentPrefix, const std::string &tablePrefix, std::string &errStr)
 {
 	for(const char *kind : {"node", "way", "relation"})
+	{
 		for(const char *table : {"live", "old"})
 		{
 			string sql = "ALTER TABLE " + c.quote_name(tablePrefix + table + kind + "s") +
 				" DROP COLUMN IF EXISTS atomic_edit_id CASCADE;";
 			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 		}
+		for(const char *table : {"old", ""})
+		{
+			string name = tablePrefix + table + kind + (table[0] ? "s" : "ids");
+			string sql = "ALTER TABLE " + c.quote_name(name) + " DROP COLUMN IF EXISTS superseded_atomic_edit_id;";
+			if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+		}
+	}
 	return DbDefineVisibleViews(c, work, verbose, parentPrefix, tablePrefix, false, errStr);
 }
 

@@ -82,6 +82,14 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 		work->quote(liveTable) + ") AND attname = 'atomic_edit_id' AND NOT attisdropped").empty();
 	const string atomicColumns = atomicColumn ? ", atomic_edit_id" : "";
 	const string atomicValue = atomicColumn ? (atomicEditId > 0 ? "," + to_string(atomicEditId) : string(",NULL")) : "";
+	// And which atomic edit made a version no longer current: in the history
+	// table, where a version goes when a newer one replaces it, and in the
+	// table of IDs this table set has taken over, for a version of its
+	// parent's (the imported map, say) that it hid. Only an edit's new
+	// versions replace anything; a copy is the version it was.
+	const bool supersededColumn = atomicColumn && atomicEditId > 0 && !work->exec(
+		"SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(" + work->quote(oldTable) +
+		") AND attname = 'superseded_atomic_edit_id' AND NOT attisdropped").empty();
 
 	auto run = [&](const string &sql) {
 		if(verbose >= 1)
@@ -275,12 +283,44 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 			run("INSERT INTO " + oldTable + " (id, changeset, username, uid, timestamp, version, tags, visible" +
 				extraColumns + atomicColumns + ") VALUES " + sql.str() + " " + ocdn + ";");
 
-		//Update existing id lists (nodeids, wayids, relationids)
+		//The versions this edit's new ones replace, which have gone, or were
+		//already, into history: all of an object's earlier versions not yet
+		//marked, which is the one that was current. A version stored out of
+		//order, older than one the tables have, replaces nothing.
+		if(supersededColumn)
+		{
+			std::vector<int64_t> newIds, newVersions;
+			for(const StoreDecision &d : decisions)
+			{
+				int64_t version = d.obj->metaData.version;
+				auto live = liveVersions.find(d.objId);
+				auto old = oldVersions.find(d.objId);
+				if((live == liveVersions.end() || version > live->second) && (old == oldVersions.end() || version > old->second))
+				{
+					newIds.push_back(d.objId);
+					newVersions.push_back(version);
+				}
+			}
+			if(!newIds.empty())
+				run("UPDATE " + oldTable + " o SET superseded_atomic_edit_id = " + to_string(atomicEditId) +
+					" FROM unnest(" + IdArrayLiteral(newIds) + ", " + IdArrayLiteral(newVersions) + ") n(id, version)"
+					" WHERE o.id = n.id AND o.version < n.version AND o.superseded_atomic_edit_id IS NULL;");
+		}
+
+		//Update existing id lists (nodeids, wayids, relationids). An object
+		//this table set did not have before is either new, or its parent's,
+		//whose version this edit replaces and hides from now on.
 		ids.clear();
+		std::vector<int64_t> takenOver;
 		for(const StoreDecision &d : decisions)
-			if(d.insertLive || d.insertOld) ids.push_back(d.objId);
+			if(d.insertLive || d.insertOld)
+				(supersededColumn && d.obj->objId > 0 ? takenOver : ids).push_back(d.objId);
 		if(!ids.empty())
 			run("INSERT INTO " + idsTable + " (id) SELECT DISTINCT v FROM unnest(" + IdArrayLiteral(ids) +
+				") v WHERE NOT EXISTS (SELECT 1 FROM " + idsTable + " x WHERE x.id = v);");
+		if(!takenOver.empty())
+			run("INSERT INTO " + idsTable + " (id, superseded_atomic_edit_id) SELECT DISTINCT v, " +
+				to_string(atomicEditId) + " FROM unnest(" + IdArrayLiteral(takenOver) +
 				") v WHERE NOT EXISTS (SELECT 1 FROM " + idsTable + " x WHERE x.id = v);");
 
 		//Update member tables

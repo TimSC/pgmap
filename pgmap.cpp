@@ -198,6 +198,15 @@ int PgMapQuery::StartCommon(const vector<double> &bbox, int64_t timestamp, std::
 	return 0;
 }
 
+void PgMapQuery::SetAtomicEditId(int64_t atomicEditIdIn)
+{
+	if(mapQueryActive)
+		throw runtime_error("Query already active");
+	if(atomicEditIdIn < 0)
+		throw invalid_argument("Atomic edit ID must not be negative");
+	this->atomicEditId = atomicEditIdIn;
+}
+
 int PgMapQuery::Start(const vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc)
 {
 	if(mapQueryActive)
@@ -243,10 +252,11 @@ int PgMapQuery::Start(const std::string &wkt, int64_t timestamp, std::shared_ptr
 static const char *MAP_QUERY_SEEDS = "pgmap_mapquery_seeds";
 static const char *MAP_QUERY_WAYS = "pgmap_mapquery_ways";
 static const char *MAP_QUERY_EXTRA = "pgmap_mapquery_extra";
+static const char *MAP_QUERY_CHANGED = "pgmap_mapquery_changed";
 
 static void DropMapQueryTables(pqxx::transaction_base *work)
 {
-	for(const char *name : {MAP_QUERY_SEEDS, MAP_QUERY_WAYS, MAP_QUERY_EXTRA})
+	for(const char *name : {MAP_QUERY_SEEDS, MAP_QUERY_WAYS, MAP_QUERY_EXTRA, MAP_QUERY_CHANGED})
 		work->exec(string("DROP TABLE IF EXISTS ") + name);
 }
 
@@ -268,6 +278,18 @@ void PgMapQuery::SelectObjects()
 	 * taken it over (its ID is then in their *ids table). That is what the
 	 * visible* views do, without their removal of duplicates, which has
 	 * nothing to remove.
+	 *
+	 * The map as it was after an atomic edit (SetAtomicEditId) is the map as
+	 * it is with the edits since undone. The edit activity records since say
+	 * which objects those edits changed, and in their lists of existing
+	 * objects, the version each had before: the version before the first
+	 * edit since that changed an object is its version then, and an object
+	 * with none was made since. Every other object is as it was then, and is
+	 * found as now; the changed ones are found among their versions then, by
+	 * ID and version, in the live and history tables of every layer. So the
+	 * work grows with the edits since, not with the history of the map.
+	 * Stored boxes are of current shapes, so ways and relations are found
+	 * through their members, as without useBboxInQuery.
 	 */
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	pqxx::connection &c = *dbconn;
@@ -316,6 +338,58 @@ void PgMapQuery::SelectObjects()
 
 	DropMapQueryTables(work.get());
 
+	const bool past = this->atomicEditId > 0;
+	const bool byBoxes = this->useBboxInQuery && !past;
+	// What is read of an object of each kind, which the live and history
+	// tables both have
+	auto objectColumns = [](const string &kind) {
+		string columns = "o.id, o.changeset, o.username, o.uid, o.timestamp, o.version, o.tags";
+		if(kind == "node") return columns + ", o.geom";
+		if(kind == "way") return columns + ", o.members";
+		return columns + ", o.members, o.memberroles";
+	};
+	auto readColumns = [&](const string &kind) {
+		return kind == "node" ? objectColumns(kind) + ", ST_X(o.geom) AS lon, ST_Y(o.geom) AS lat" : objectColumns(kind);
+	};
+	if(past)
+	{
+		// The objects changed since, each with its version then, or NULL if made since
+		string activity = c.quote_name(tableActivePrefix + "edit_activity");
+		work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_CHANGED + " ON COMMIT DROP AS "
+			"SELECT DISTINCT ON (u.value->>0, (u.value->>1)::bigint) u.value->>0 AS kind, (u.value->>1)::bigint AS id, "
+			"(SELECT (x.value->>2)::bigint FROM jsonb_array_elements(a.existing) x "
+			"WHERE x.value->>0 = u.value->>0 AND x.value->>1 = u.value->>1 LIMIT 1) AS version "
+			"FROM " + activity + " a CROSS JOIN LATERAL jsonb_array_elements(a.updated) u "
+			"WHERE a.atomic_edit_id > " + to_string(this->atomicEditId) + " "
+			"ORDER BY u.value->>0, (u.value->>1)::bigint, a.atomic_edit_id, a.block_index");
+	}
+	// Rows of one kind of object as the map has them, or had them after the
+	// atomic edit: those unchanged since, chosen from each layer by choose as
+	// fromLayers does, and the versions then of those changed since, chosen
+	// by changed, a condition on o. A version can be in more than one layer
+	// (a static one the active tables copied), which is read once.
+	auto rowsOf = [&](const string &kind, std::function<string(const string &)> choose, const string &changed) {
+		if(!past)
+			return fromLayers(kind, kind == "node" ? nodeColumns : string("o.*"), choose);
+		string kindValue = c.quote(kind);
+		string sql = fromLayers(kind, readColumns(kind), [&](const string &prefix) {
+			return choose(prefix) + " AND NOT EXISTS (SELECT 1 FROM " + MAP_QUERY_CHANGED +
+				" ch WHERE ch.kind=" + kindValue + " AND ch.id=o.id)"; });
+		string versions;
+		int rank = 0;
+		for(auto layer = layers.rbegin(); layer != layers.rend(); ++layer)
+			for(const char *table : {"live", "old"})
+			{
+				if(!versions.empty()) versions += " UNION ALL ";
+				versions += "SELECT " + to_string(rank++) + " AS rank, " + objectColumns(kind) + " FROM " +
+					c.quote_name(layer->first + table + kind + "s") + " o JOIN " + MAP_QUERY_CHANGED +
+					" ch ON ch.kind=" + kindValue + " AND ch.id=o.id AND ch.version=o.version" +
+					(string(table) == "old" ? " WHERE o.visible" : "");
+			}
+		return sql + " UNION ALL (SELECT DISTINCT ON (o.id) " + readColumns(kind) + " FROM (" + versions +
+			") o WHERE " + changed + " ORDER BY o.id, o.rank)";
+	};
+
 	// The tables of nodes and ways hold whole rows, which are then written
 	// out from them. Holding only IDs and reading the objects again by ID was
 	// tried and measured: it was 10 to 15% slower on large areas, and more on
@@ -323,14 +397,18 @@ void PgMapQuery::SelectObjects()
 
 	// 1. Nodes in the area
 	work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_SEEDS + " ON COMMIT DROP AS " +
-		fromLayers("node", nodeColumns, [&](const string &) { return "WHERE " + within("o.geom"); }));
+		rowsOf("node", [&](const string &) { return "WHERE " + within("o.geom"); }, within("o.geom")));
 
-	// 2. Ways
-	if(!useBboxInQuery)
+	// 2. Ways. The member tables are of live versions, which are the versions
+	// then of the ways unchanged since; a way's own list of members is read
+	// for its version then.
+	if(!byBoxes)
 		work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_WAYS + " ON COMMIT DROP AS " +
-			fromLayers("way", "o.*", [&](const string &prefix) {
+			rowsOf("way", [&](const string &prefix) {
 				return "JOIN (SELECT DISTINCT m.id, m.version FROM " + c.quote_name(prefix + "way_mems") +
-					" m JOIN " + MAP_QUERY_SEEDS + " s ON m.member=s.id) w ON o.id=w.id AND o.version=w.version WHERE true"; }));
+					" m JOIN " + MAP_QUERY_SEEDS + " s ON m.member=s.id) w ON o.id=w.id AND o.version=w.version WHERE true"; },
+				string("EXISTS (SELECT 1 FROM jsonb_array_elements(o.members) m JOIN ") + MAP_QUERY_SEEDS +
+					" s ON s.id = m.value::text::bigint)"));
 	else
 		work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_WAYS + " ON COMMIT DROP AS " +
 			fromLayers("way", "o.*", [&](const string &) { return "WHERE " + within("o.bbox"); }));
@@ -340,19 +418,24 @@ void PgMapQuery::SelectObjects()
 		"SELECT DISTINCT member.value::text::bigint AS id FROM " + MAP_QUERY_WAYS +
 		" w CROSS JOIN LATERAL jsonb_array_elements(w.members) member"
 		" EXCEPT SELECT id FROM " + MAP_QUERY_SEEDS);
-	this->extraNodesSql = fromLayers("node", nodeColumns, [&](const string &) {
-		return string("JOIN ") + MAP_QUERY_EXTRA + " s ON o.id=s.id WHERE true"; });
+	this->extraNodesSql = rowsOf("node", [&](const string &) {
+		return string("JOIN ") + MAP_QUERY_EXTRA + " s ON o.id=s.id WHERE true"; },
+		string("o.id IN (SELECT id FROM ") + MAP_QUERY_EXTRA + ")");
 
 	// 4. Relations
-	if(!useBboxInQuery)
-		this->relationsSql = fromLayers("relation", "o.*", [&](const string &prefix) {
+	if(!byBoxes)
+		this->relationsSql = rowsOf("relation", [&](const string &prefix) {
 			string holders;
 			for(const char *selected : {MAP_QUERY_SEEDS, MAP_QUERY_EXTRA})
 				holders += "SELECT m.id, m.version FROM " + c.quote_name(prefix + "relation_mems_n") +
 					" m JOIN " + selected + " s ON m.member=s.id UNION ";
 			holders += "SELECT m.id, m.version FROM " + c.quote_name(prefix + "relation_mems_w") +
 				" m JOIN " + MAP_QUERY_WAYS + " s ON m.member=s.id";
-			return "JOIN (" + holders + ") r ON o.id=r.id AND o.version=r.version WHERE true"; });
+			return "JOIN (" + holders + ") r ON o.id=r.id AND o.version=r.version WHERE true"; },
+			string("EXISTS (SELECT 1 FROM jsonb_array_elements(o.members) m WHERE "
+				"(m.value->>0 = 'node' AND (m.value->>1)::bigint IN (SELECT id FROM ") + MAP_QUERY_SEEDS +
+				" UNION ALL SELECT id FROM " + MAP_QUERY_EXTRA + ")) OR "
+				"(m.value->>0 = 'way' AND (m.value->>1)::bigint IN (SELECT id FROM " + MAP_QUERY_WAYS + ")))");
 	else
 		this->relationsSql = fromLayers("relation", "o.*", [&](const string &) { return "WHERE " + within("o.bbox"); });
 }
@@ -453,6 +536,7 @@ void PgMapQuery::Reset()
 	this->cursor.reset();
 	this->extraNodesSql.clear();
 	this->relationsSql.clear();
+	this->atomicEditId = 0;
 }
 
 // *********************************************

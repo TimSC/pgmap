@@ -76,6 +76,7 @@ private:
 	std::string extraNodesSql, relationsSql;
 	class DbUsernameLookup &dbUsernameLookup;
 	bool useBboxInQuery;
+	int64_t atomicEditId = 0; // The map as it was after this atomic edit; 0 for as it is
 
 	int StartCommon(const std::vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
 	void SelectObjects();
@@ -89,6 +90,12 @@ public:
 	virtual ~PgMapQuery();
 	PgMapQuery& operator=(const PgMapQuery&);
 
+	// The next query is of the map as it was just after an atomic edit, not as
+	// it is now; 0 goes back to now. It works from the edit activity records
+	// made since, so it cannot reach back before the first of them that pgmap
+	// keeps (schema 14). Ways and relations are found through their members,
+	// as stored boxes are of their current shapes.
+	void SetAtomicEditId(int64_t atomicEditId);
 	int Start(const std::vector<double> &bbox, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
 	int Start(const std::string &wkt, int64_t timestamp, std::shared_ptr<IDataStreamHandler> &enc);
 	int Continue();

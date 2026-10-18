@@ -7,7 +7,6 @@ using namespace std;
 
 std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
 	const std::vector<double> &bbox, 
-	int64_t existsAtTimestamp,
 	const string &excludeTablePrefix)
 {
 	if(bbox.size() != 4)
@@ -28,8 +27,6 @@ std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c
 	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
 	if(excludeTable.size() > 0)
 		sql << " AND "<<excludeTable<<".id IS NULL";
-	if(existsAtTimestamp != 0)
-		sql << " AND timestamp <= " << existsAtTimestamp;
 	sql <<";";
 
 	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
@@ -288,79 +285,6 @@ void DbGetObjectsHistoryById(pqxx::connection &c, pqxx::transaction_base *work,
 	{
 		std::set<int64_t> skipIds;
 		RelationResultsToEncoder(cursor, usernames, skipIds, enc);
-	}
-}
-
-void QueryOldNodesInBbox(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const string &tablePrefix, 
-	const std::vector<double> &bbox, 
-	int64_t existsAtTimestamp,
-	std::shared_ptr<IDataStreamHandler> enc)
-{
-	if(bbox.size() != 4)
-		throw invalid_argument("Bbox has wrong length");
-	string liveNodeTable = c.quote_name(tablePrefix + "oldnodes");
-
-	stringstream sql;
-	sql.precision(9);
-	sql << "SELECT "<<liveNodeTable<<".*, ST_X("<<liveNodeTable<<".geom) as lon, ST_Y("<<liveNodeTable<<".geom) AS lat";
-	sql << " FROM ";
-	sql << liveNodeTable;
-	sql << " WHERE "<<liveNodeTable<<".geom && ST_MakeEnvelope(";
-	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
-	if(existsAtTimestamp != 0)
-		sql << " AND timestamp <= " << existsAtTimestamp;
-	sql <<";";
-
-	pqxx::icursorstream cursor( *work, sql.str(), "oldnodesinbbox", 1000 );
-
-	int ret = 1;
-	while(ret > 0)
-		ret = NodeResultsToEncoder(cursor, usernames, enc);
-}
-
-void GetWayIdVersThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const string &tablePrefix, 
-	const std::set<int64_t> &nodeIds, std::set<std::pair<int64_t, int64_t> > &wayIdVersOut)
-{
-	string wayMemTable = c.quote_name(tablePrefix + "way_mems");
-	int step = 1000;
-
-	auto it=nodeIds.begin();
-	while(it != nodeIds.end())
-	{
-		stringstream sqlFrags;
-		int count = 0;
-		for(; it != nodeIds.end() && count < step; it++)
-		{
-			if(count >= 1)
-				sqlFrags << " OR ";
-			sqlFrags << wayMemTable << ".member = " << *it;
-			count ++;
-		}
-
-		string sql = "SELECT * FROM "+wayMemTable;
-		sql += " WHERE ("+sqlFrags.str()+")";
-		sql += ";";
-
-		pqxx::icursorstream cursor( *work, sql, "wayidverscontainingnodes", 1000 );	
-
-		int records = 1;
-		while (records>0)
-		{
-			std::vector<int64_t> idsList, verList;
-			records = ObjectResultsToListIdVer(cursor,
-				&idsList,
-				&verList);
-
-			for (size_t i=0; i<idsList.size(); i++)
-			{
-				std::pair<int64_t, int64_t> idVer(idsList[i], verList[i]);
-				wayIdVersOut.insert(wayIdVersOut.begin(), idVer);
-			}
-		}
 	}
 }
 
