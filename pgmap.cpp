@@ -1881,6 +1881,15 @@ std::pair<int64_t, int64_t> PgTransaction::GetLatestEditIds()
 	return ids;
 }
 
+int64_t PgTransaction::GetAtomicEditIdAtTime(int64_t timestamp)
+{
+	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work) throw runtime_error("Transaction has been deleted");
+	return DbGetAtomicEditIdAtTime(*dbconn, work.get(), this->tableActivePrefix, timestamp);
+}
+
 std::map<std::string, std::string> PgTransaction::GetLatestEditIdAttribs()
 {
 	auto ids = this->GetLatestEditIds();

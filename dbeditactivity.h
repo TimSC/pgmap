@@ -108,6 +108,12 @@ void DbQueryEditActivityByTimestamp(pqxx::connection &c,
 void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, int64_t &editActivityId, int64_t &atomicEditId);
 
+// The atomic edit the map was at a moment (seconds since 1970, UTC): the
+// latest recorded at or before it, by the time its activity records give; of
+// several in the same second, the last. Zero if none was recorded by then.
+int64_t DbGetAtomicEditIdAtTime(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, int64_t timestamp);
+
 // bbox, or else wkt (a polygon or multipolygon), keeps only the rows that may
 // concern that area; see ActivityAreaCondition.
 void DbQueryEditActivityByIds(pqxx::connection &c, pqxx::transaction_base *work,

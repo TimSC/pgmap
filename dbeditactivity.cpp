@@ -495,6 +495,16 @@ void DbGetLatestEditIds(pqxx::connection &c, pqxx::transaction_base *work,
 	atomicEditId = latest[0][1].as<int64_t>();
 }
 
+int64_t DbGetAtomicEditIdAtTime(pqxx::connection &c, pqxx::transaction_base *work,
+	const std::string &tablePrefix, int64_t timestamp)
+{
+	// Found from the end of the table's index of times, going back
+	auto found = work->exec("SELECT atomic_edit_id FROM " + c.quote_name(tablePrefix + "edit_activity") +
+		" WHERE timestamp <= " + to_string(timestamp) + " AND atomic_edit_id IS NOT NULL"
+		" ORDER BY timestamp DESC, atomic_edit_id DESC LIMIT 1");
+	return found.empty() ? 0 : found[0][0].as<int64_t>();
+}
+
 // ************* Recording activity outside an upload *************
 
 static const char *ACTIVITY_TYPE_NAMES[3] = {"node", "way", "relation"};

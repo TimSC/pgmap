@@ -306,6 +306,10 @@ public:
 	// snapshot, in that order; zero when there is no activity. Anything read in
 	// the same transaction reflects exactly the edits up to these IDs.
 	std::pair<int64_t, int64_t> GetLatestEditIds();
+	// The atomic edit the map was at a moment, in seconds since 1970 (UTC): the
+	// latest whose activity records are timed at or before it; 0 if none is.
+	// For a map query of that moment, with PgMapQuery::SetAtomicEditId.
+	int64_t GetAtomicEditIdAtTime(int64_t timestamp);
 	// The same IDs as attributes for the root element of an OSM XML document.
 	std::map<std::string, std::string> GetLatestEditIdAttribs();
 	// Inclusive row range; lastId/atomicEditId zero means no corresponding filter.
