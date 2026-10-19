@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 		("help", "produce help message")
 		("out", po::value<string>()->default_value("dump.o5m.gz"), (string("Output file name, ending in ") + OsmFileWriter::SupportedNames()).c_str())
 		("no-update-info", "Leave out of the file header what keeping it up to date needs: the edit IDs it is current to, "
-			"its area and the server to update from (public_url in config.cfg). .pbf has no room for them in any case")
+			"its area and the server to update from (public_url in config.cfg).")
 		("edit-ids", "Kept for scripts that give it: the edit IDs are written unless --no-update-info is given")
 	;
 	po::variables_map vm;
@@ -36,22 +36,16 @@ int main(int argc, char **argv)
 	}
 
 	string outFina = vm["out"].as<string>();
-	OsmFormat outFormat = OsmFormat::O5m;
 	try
 	{
-		outFormat = OsmFileWriter::FormatOf(outFina);
+		OsmFileWriter::FormatOf(outFina); // An unusable name is refused before any work
 	}
 	catch(const invalid_argument &error)
 	{
 		cerr << error.what() << endl;
 		return 2;
 	}
-	if(vm.count("edit-ids") && !OsmFileWriter::HasHeaderAttribs(outFormat))
-	{
-		cerr << "--edit-ids is not available for .pbf output, which has nowhere to hold the IDs" << endl;
-		return 2;
-	}
-	bool updateInfo = !vm.count("no-update-info") && OsmFileWriter::HasHeaderAttribs(outFormat);
+	bool updateInfo = !vm.count("no-update-info");
 
 	cout << "Reading settings from config.cfg" << endl;
 	std::map<string, string> config;

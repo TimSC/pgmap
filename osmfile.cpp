@@ -35,11 +35,6 @@ OsmFormat OsmFileWriter::FormatOf(const std::string &filename)
 	throw invalid_argument(std::string("Output file name must end in ") + SupportedNames());
 }
 
-bool OsmFileWriter::HasHeaderAttribs(OsmFormat format)
-{
-	return format != OsmFormat::Pbf;
-}
-
 OsmFileWriter::OsmFileWriter(const std::string &destinationIn, const TagMap &headerAttribs) :
 	destination(destinationIn)
 {

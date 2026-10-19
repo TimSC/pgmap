@@ -1005,9 +1005,9 @@ std::map<std::string, std::string> PgTransaction::GetExtractHeaderAttribs(int64_
 int64_t PgTransaction::ExportExtractToFile(int64_t extractId, const string &name,
 	const string &filename, bool updateInfo, const string &publicUrl)
 {
-	OsmFormat format = OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
+	OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
 	TagMap headerAttribs;
-	if(updateInfo && OsmFileWriter::HasHeaderAttribs(format))
+	if(updateInfo)
 		headerAttribs = this->GetExtractHeaderAttribs(extractId, name, publicUrl);
 	// The writer publishes only a complete file, keeping an existing one on failure
 	OsmFileWriter writer(filename, headerAttribs);
@@ -1978,9 +1978,9 @@ bool PgTransaction::UpdateUsername(int uid, const std::string &username,
 
 void PgTransaction::DumpToFile(const std::string &filename, bool updateInfo, const std::string &publicUrl)
 {
-	OsmFormat format = OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
+	OsmFileWriter::FormatOf(filename); // Refuse an unusable name before any work
 	TagMap headerAttribs;
-	if(updateInfo && OsmFileWriter::HasHeaderAttribs(format))
+	if(updateInfo)
 	{
 		headerAttribs = this->GetLatestEditIdAttribs(); // From the same snapshot as the dump
 		if(!publicUrl.empty())

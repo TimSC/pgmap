@@ -321,7 +321,8 @@ void LoadFromPbfBytes(PyObject *data, IDataStreamHandler &output)
 class PyPbfEncode : public PbfEncode
 {
 public:
-	PyPbfEncode(PyObject *obj) : PbfEncode(std::make_shared<PySink>(obj)) {}
+	PyPbfEncode(PyObject *obj, const TagMap &customAttribs = TagMap()) :
+		PbfEncode(std::make_shared<PySink>(obj), customAttribs) {}
 
 	///Sends later output to another file object, such as a fresh buffer
 	void SetOutput(PyObject *obj)
