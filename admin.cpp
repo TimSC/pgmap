@@ -135,6 +135,7 @@ int main(int argc, char **argv)
 		cout << "g. Upgrade/downgrade db schema" << endl;
 		cout << "h. Upgrade/downgrade index version" << endl;
 		cout << "i. Create/drop bbox indices" << endl;
+		cout << "j. Add/drop way and relation shapes (for map renderers)" << endl;
 
 		cout << endl << "q. Quit" << endl;
 
@@ -513,6 +514,35 @@ int main(int argc, char **argv)
 				cout << "All done, in " << Took(started) << "." << endl;
 			else
 				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
+			continue;
+		}
+
+		if(inputStr == "j")
+		{
+			cout << "Ways and relations can keep their shapes, as lines and areas, for map renderers. "
+				"Edits keep them up to date, and \"Update way/relation bboxes\" (e) fills them in." << endl;
+			cout << "Add or drop (a/d)?" << endl;
+			std::string action;
+			ReadWord(action);
+			if(action != "a" && action != "d")
+			{
+				cout << "\"" << action << "\" is not a or d. Nothing was changed." << endl;
+				continue;
+			}
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->SetObjectShapes(action == "a", verbose, errStr);
+			if(ok)
+			{
+				admin->Commit();
+				cout << "All done, in " << Took(started) << "." << endl;
+				if(action == "a")
+					cout << "Run \"Update way/relation bboxes\" (e) to work out the shapes of what is there." << endl;
+			}
+			else
+			{
+				admin->Abort();
+				cout << errStr.errStr << endl << "Nothing was changed, after " << Took(started) << "." << endl;
+			}
 			continue;
 		}
 

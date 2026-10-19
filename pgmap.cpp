@@ -334,7 +334,6 @@ void PgMapQuery::SelectObjects()
 	auto within = [&](const string &column) {
 		return polygon ? "ST_Intersects(" + column + ", " + area + ")" : column + " && " + area;
 	};
-	const string nodeColumns = "o.*, ST_X(o.geom) AS lon, ST_Y(o.geom) AS lat";
 
 	DropMapQueryTables(work.get());
 
@@ -369,8 +368,10 @@ void PgMapQuery::SelectObjects()
 	// by changed, a condition on o. A version can be in more than one layer
 	// (a static one the active tables copied), which is read once.
 	auto rowsOf = [&](const string &kind, std::function<string(const string &)> choose, const string &changed) {
+		// Columns named, not *, so that what is not sent, such as a shape kept
+		// for map renderers, is not read
 		if(!past)
-			return fromLayers(kind, kind == "node" ? nodeColumns : string("o.*"), choose);
+			return fromLayers(kind, readColumns(kind), choose);
 		string kindValue = c.quote(kind);
 		string sql = fromLayers(kind, readColumns(kind), [&](const string &prefix) {
 			return choose(prefix) + " AND NOT EXISTS (SELECT 1 FROM " + MAP_QUERY_CHANGED +
@@ -411,7 +412,7 @@ void PgMapQuery::SelectObjects()
 					" s ON s.id = m.value::text::bigint)"));
 	else
 		work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_WAYS + " ON COMMIT DROP AS " +
-			fromLayers("way", "o.*", [&](const string &) { return "WHERE " + within("o.bbox"); }));
+			fromLayers("way", readColumns("way"), [&](const string &) { return "WHERE " + within("o.bbox"); }));
 
 	// 3. Nodes of those ways that are outside the area
 	work->exec(string("CREATE TEMP TABLE ") + MAP_QUERY_EXTRA + " ON COMMIT DROP AS "
@@ -437,7 +438,7 @@ void PgMapQuery::SelectObjects()
 				" UNION ALL SELECT id FROM " + MAP_QUERY_EXTRA + ")) OR "
 				"(m.value->>0 = 'way' AND (m.value->>1)::bigint IN (SELECT id FROM " + MAP_QUERY_WAYS + ")))");
 	else
-		this->relationsSql = fromLayers("relation", "o.*", [&](const string &) { return "WHERE " + within("o.bbox"); });
+		this->relationsSql = fromLayers("relation", readColumns("relation"), [&](const string &) { return "WHERE " + within("o.bbox"); });
 }
 
 int PgMapQuery::Continue()
@@ -2546,9 +2547,37 @@ bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, cl
 		if(!ok) return ok;
 	}
 
+	// The shapes kept for map renderers, where there are tables for them: the
+	// base tables' first, which the active ones' relations may be made from,
+	// and in each, ways before the relations made from them
+	std::vector<std::string> prefixes;
+	if(updateStatic) prefixes.push_back(this->tableStaticPrefix);
+	if(updateActive) prefixes.push_back(this->tableModPrefix);
+	for(const std::string &prefix : prefixes)
+		for(const char *kind : {"way", "relation"})
+		{
+			ok = DbUpdateObjectShapes(*dbconn, work.get(), verbose, prefix, kind, onlyMissingWays, nativeErrStr);
+			errStr.errStr = nativeErrStr;
+			if(!ok) return ok;
+		}
+
 	work->commit();
 
 	return true;
+}
+
+bool PgAdmin::SetObjectShapes(bool enabled, int verbose, class PgMapError &errStr)
+{
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+	// The base tables first, as the others' views show their columns
+	std::string nativeErrStr;
+	bool ok = DbSetObjectShapes(*dbconn, work.get(), verbose, "", this->tableStaticPrefix, enabled, nativeErrStr) &&
+		DbSetObjectShapes(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableModPrefix, enabled, nativeErrStr) &&
+		DbSetObjectShapes(*dbconn, work.get(), verbose, this->tableStaticPrefix, this->tableTestPrefix, enabled, nativeErrStr);
+	errStr.errStr = nativeErrStr;
+	return ok;
 }
 
 bool PgAdmin::CreateBboxIndices(int verbose, class PgMapError &errStr)

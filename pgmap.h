@@ -430,6 +430,10 @@ public:
 	bool UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr,
 		bool onlyMissingWays = false);
 	bool CreateBboxIndices(int verbose, class PgMapError &errStr);
+	// Makes or drops the tables of the shapes of ways and relations, kept for
+	// map renderers, on every table set (see DbSetObjectShapes). "Update
+	// way/relation bboxes" fills them in, and edits keep them up to date.
+	bool SetObjectShapes(bool enabled, int verbose, class PgMapError &errStr);
 	bool DropBboxIndices(int verbose, class PgMapError &errStr);
 
 	bool CheckNodesExistForWays(class PgMapError &errStr);

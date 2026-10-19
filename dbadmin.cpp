@@ -1,4 +1,5 @@
 #include "dbadmin.h"
+#include <limits>
 #include "dbids.h"
 #include "dbcommon.h"
 #include "dbstore.h"
@@ -62,6 +63,12 @@ bool ResetActiveTables(pqxx::connection &c, pqxx::transaction_base *work,
 	ok = ClearTable(c, work, tableActivePrefix + "usernames", errStr);            if(!ok) return false;
 	ok = ClearTable(c, work, tableActivePrefix + "edit_activity", errStr);            if(!ok) return false;
 	ok = ClearTable(c, work, tableActivePrefix + "query_activity", errStr);            if(!ok) return false;
+	for(const char *shapes : {"way_shapes", "relation_shapes"})
+		if(DbCheckTableExists(c, work, tableActivePrefix + shapes))
+		{
+			ok = ClearTable(c, work, tableActivePrefix + shapes, errStr);
+			if(!ok) return false;
+		}
 
 	map<string, int64_t> nextIdMap;
 	ok = GetNextObjectIds(c, work, 
@@ -780,7 +787,7 @@ bool DbDropMapTables(pqxx::connection &c, pqxx::transaction_base *work,
 		string sql = "DROP VIEW IF EXISTS " + c.quote_name(tablePrefix + name) + " CASCADE;";
 		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
 	}
-	for(const char *name : {"edit_activity", "query_activity", "oldnodes", "oldways",
+	for(const char *name : {"way_shapes", "relation_shapes", "edit_activity", "query_activity", "oldnodes", "oldways",
 		"oldrelations", "livenodes", "liveways", "liverelations", "nodeids", "wayids",
 		"relationids", "way_mems", "relation_mems_n", "relation_mems_w",
 		"relation_mems_r", "nextids", "changesets", "usernames", "meta"})
@@ -2278,5 +2285,89 @@ int DbUpdateRelationBboxes(pqxx::connection &conn, pqxx::transaction_base *work,
 		boxes + " t WHERE t.id = r.id);");
 	for(const string &name : {boxes, edges, outside})
 		work->exec("DROP TABLE " + name + ";");
+
 	return 1;
+}
+
+// Shapes of ways and relations, for map renderers, in tables of their own:
+// <prefix>way_shapes and <prefix>relation_shapes, each an ID and a shape
+// (see WayShapeSql and RelationShapeSql), for the live ways and relations of
+// the table set. Kept apart from the live tables, filling them in only adds
+// rows, where updating every live row would write the tables out again, and
+// nothing else reads them. Every edit keeps them up to date, and "Update
+// way/relation bboxes" fills them in; they have no index but their key.
+//
+// <prefix>visible_way_shapes and <prefix>visible_relation_shapes show the
+// shapes of what is visible, as the visible* views do the objects: the table
+// set's own, and its parent's other than those it has taken over. A table
+// set's views are made on its parent's, so the parent's shapes come first.
+bool DbSetObjectShapes(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
+	const std::string &parentPrefix, const std::string &tablePrefix, bool enabled, std::string &errStr)
+{
+	for(const char *kind : {"way", "relation"})
+	{
+		string table = c.quote_name(tablePrefix + kind + "_shapes");
+		string view = c.quote_name(tablePrefix + "visible_" + kind + "_shapes");
+		string sql;
+		if(!enabled)
+			sql = "DROP TABLE IF EXISTS " + table + " CASCADE;"; // The views go with it
+		else
+		{
+			sql = "CREATE TABLE IF NOT EXISTS " + table + " (id BIGINT PRIMARY KEY, shape GEOMETRY(" +
+				(string(kind) == "way" ? "LineString" : "Geometry") + ", 4326));";
+			if(parentPrefix.empty())
+				sql += "CREATE OR REPLACE VIEW " + view + " AS SELECT id, shape FROM " + table + ";";
+			else
+			{
+				string parent = c.quote_name(parentPrefix + "visible_" + kind + "_shapes");
+				string ids = c.quote_name(tablePrefix + kind + "ids");
+				sql += "CREATE OR REPLACE VIEW " + view + " AS SELECT p.id, p.shape FROM " + parent + " p WHERE NOT EXISTS "
+					"(SELECT 1 FROM " + ids + " x WHERE x.id = p.id) UNION ALL SELECT id, shape FROM " + table + ";";
+			}
+		}
+		if(!DbExec(work, sql, errStr, nullptr, verbose)) return false;
+	}
+	return true;
+}
+
+// Works out the shape of every live way or relation of a table set, a batch
+// of IDs at a time, where it keeps them, and removes those of what it no
+// longer has. With onlyMissing, those with a shape (or one that could not be
+// drawn) are passed over. Ways first: relations are made from their shapes.
+bool DbUpdateObjectShapes(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
+	const std::string &tablePrefix, const std::string &kind, bool onlyMissing, std::string &errStr)
+{
+	if(!DbCheckTableExists(c, work, tablePrefix + kind + "_shapes"))
+		return true;
+	string shapes = c.quote_name(tablePrefix + kind + "_shapes");
+	string live = c.quote_name(tablePrefix + "live" + kind + "s");
+	string shape = kind == "way" ? WayShapeSql(c, tablePrefix, "o") : RelationShapeSql(c, tablePrefix, "o");
+	if(!onlyMissing)
+		work->exec("DELETE FROM " + shapes + " s WHERE NOT EXISTS (SELECT 1 FROM " + live + " o WHERE o.id = s.id);");
+	string missing = onlyMissing ? " AND NOT EXISTS (SELECT 1 FROM " + shapes + " x WHERE x.id = o.id)" : "";
+	auto fill = [&](const string &condition) {
+		work->exec("INSERT INTO " + shapes + " (id, shape) SELECT o.id, " + shape + " FROM " + live + " o WHERE " +
+			condition + missing + " ON CONFLICT (id) DO UPDATE SET shape = EXCLUDED.shape;");
+	};
+	// Batches are ranges of ID, which need the primary key to be found by
+	if(DbCountPrimaryKeyCols(c, work, tablePrefix + "live" + kind + "s") == 0)
+	{
+		fill("true");
+		return true;
+	}
+	int64_t last = std::numeric_limits<int64_t>::min(), done = 0;
+	while(true)
+	{
+		pqxx::result r = work->exec("SELECT max(id), count(*) FROM (SELECT id FROM " + live +
+			" WHERE id > " + to_string(last) + " ORDER BY id LIMIT " + to_string(BBOX_WAYS_PER_BATCH) + ") batch;");
+		int64_t count = r[0][1].as<int64_t>();
+		if(count == 0) break;
+		int64_t upTo = r[0][0].as<int64_t>();
+		fill("o.id > " + to_string(last) + " AND o.id <= " + to_string(upTo));
+		last = upTo;
+		done += count;
+		if(verbose >= 1)
+			cout << tablePrefix << kind << "_shapes: " << done << " " << kind << "s" << endl;
+	}
+	return true;
 }

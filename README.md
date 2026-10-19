@@ -259,6 +259,46 @@ are done by one statement that keeps nothing until it has finished. Set the
 server to read only while it runs, or edits made meanwhile to a way not yet
 reached are worked out twice, which is harmless but wasted.
 
+### Shapes of ways and relations, for map renderers
+
+"Add/drop way and relation shapes" (option j of the admin tool) makes, or
+drops, tables of the shapes of every table set's live ways and relations: a
+cache for map renderers, which would otherwise build each line and area from
+its nodes on every query. Each is an ID (the primary key) and a shape, with no
+other index:
+
+* `<prefix>way_shapes`: a `GEOMETRY(LineString, 4326)` through the way's nodes
+  in order. A closed way is a closed line; whether it is an area is for the
+  renderer to decide by its tags (`ST_MakePolygon(shape)`). It is NULL for a
+  way with fewer than two nodes or a node that is not there.
+* `<prefix>relation_shapes`: a `GEOMETRY(Geometry, 4326)`. For a multipolygon
+  or boundary, the `MultiPolygon` its ways enclose (`ST_BuildArea`, which
+  tells holes from outlines without the roles); for any other relation, the
+  collection of its nodes' points and its ways' lines, in member order. Member
+  relations are left out. It is NULL when a node or way member is not there or
+  has no shape, when there are no such members, or when a multipolygon's ways
+  enclose no area.
+
+`<prefix>visible_way_shapes` and `<prefix>visible_relation_shapes` show the
+shapes of what is visible, as the `visible*` views show the objects: the table
+set's own, and those of its parent it has not taken over. A renderer joins
+them to the visible ways and relations by `id` for their tags.
+
+The shapes are kept in tables of their own, not as columns of the live
+tables, so that nothing else reads them (the live tables are as wide as ever)
+and so that filling them in only adds rows: an `UPDATE` of every live way
+would write the whole table out again, doubling it until vacuumed. On a planet
+the way shapes come to about 230 bytes a way, some 29 GB for 124 million ways,
+and the relation shapes perhaps 3 to 8 GB.
+
+Once the tables are there, every edit keeps them up to date along with the
+boxes: an edited way, a way holding a moved node, and the relations holding
+either; a deleted way or relation loses its shape. "Update way/relation
+bboxes" works out the shapes of everything there, after the boxes, ways
+before relations and the base tables before the active ones, and removes
+those of objects that have gone; with "only missing" it does only those
+without one. "Reset active tables" empties the active ones.
+
 ### Indices for boxes and tags
 
 "Create/drop bbox indices" in the admin tool builds the optional indices that

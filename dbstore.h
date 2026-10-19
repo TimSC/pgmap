@@ -20,6 +20,13 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	// the parents of what an edit changes, which are recorded as NULL
 	int64_t atomicEditId = 0);
 
+// The shapes of ways and relations, kept for map renderers in tables of their
+// own where a table set has them (see DbSetObjectShapes in dbadmin.cpp). Each
+// is an SQL expression for the shape of the way or relation whose live row
+// alias names, from what is visible in the table set with tablePrefix.
+std::string WayShapeSql(pqxx::connection &c, const std::string &tablePrefix, const std::string &alias);
+std::string RelationShapeSql(pqxx::connection &c, const std::string &tablePrefix, const std::string &alias);
+
 int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &wayIds,
     int verbose,

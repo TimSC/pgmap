@@ -104,6 +104,16 @@ bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
+// Makes (enabled) or drops a table set's tables of the shapes of its ways and
+// relations, kept for map renderers, and their visible_*_shapes views. Every
+// table set of a map is to have them or not, the base tables first.
+bool DbSetObjectShapes(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
+	const std::string &parentPrefix, const std::string &tablePrefix, bool enabled, std::string &errStr);
+// Works out the shapes of a table set's ways or relations (kind "way" or
+// "relation"), where it keeps them; see DbSetObjectShapes.
+bool DbUpdateObjectShapes(pqxx::connection &c, pqxx::transaction_base *work, int verbose,
+	const std::string &tablePrefix, const std::string &kind, bool onlyMissing, std::string &errStr);
+
 bool DbDropBboxIndices(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tablePrefix, 

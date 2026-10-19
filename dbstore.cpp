@@ -223,12 +223,16 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 				extraColumns + atomicColumns + ") SELECT id, changeset, changeset_index, username, uid, timestamp, version, tags, true" +
 				extraColumns + atomicColumns + " FROM " + liveTable + " WHERE id = ANY(" + IdArrayLiteral(ids) + ") " + ocdn + ";");
 
-		//Delete from the live table
+		//Delete from the live table, and the shape kept for it, if any
 		ids.clear();
 		for(const StoreDecision &d : decisions)
 			if(d.deleteLive) ids.push_back(d.objId);
 		if(!ids.empty())
+		{
 			run("DELETE FROM " + liveTable + " WHERE id = ANY(" + IdArrayLiteral(ids) + ");");
+			if(!isNode && DbCheckTableExists(c, work, tablePrefix + typeStr + "_shapes"))
+				run("DELETE FROM " + c.quote_name(tablePrefix + typeStr + "_shapes") + " WHERE id = ANY(" + IdArrayLiteral(ids) + ");");
+		}
 
 		//Insert into the live table
 		stringstream sql;
@@ -571,6 +575,40 @@ bool StoreObjects(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
+// A way's shape is the line through its nodes, in order. It is NULL when it
+// cannot be drawn whole: with fewer than two nodes, or with a node that is
+// not to be found (as at the edge of an extract). A closed way is a closed
+// line; whether it is an area is for the renderer, by its tags.
+std::string WayShapeSql(pqxx::connection &c, const std::string &tablePrefix, const std::string &alias)
+{
+	return "(SELECT CASE WHEN count(*) >= 2 AND count(n.geom) = count(*) THEN ST_MakeLine(n.geom ORDER BY e.ord) END "
+		"FROM jsonb_array_elements_text(" + alias + ".members) WITH ORDINALITY AS e(ref, ord) "
+		"LEFT JOIN " + c.quote_name(tablePrefix + "visiblenodes") + " n ON n.id = e.ref::bigint)";
+}
+
+// A relation's shape is made from its node and way members. A multipolygon or
+// boundary is the area its ways enclose, as a MultiPolygon (roles are not
+// needed to tell holes from outlines); any other relation is the collection
+// of its nodes' points and its ways' lines, in the order of its members.
+// Member relations are left out.
+// It is NULL with no node or way members, when one of them is not to be found
+// or has no shape, or when a multipolygon's ways enclose no area.
+std::string RelationShapeSql(pqxx::connection &c, const std::string &tablePrefix, const std::string &alias)
+{
+	string area = alias + ".tags->>'type' IN ('multipolygon', 'boundary')";
+	return "(SELECT CASE WHEN s.total = 0 OR s.found < s.total THEN NULL "
+		"WHEN " + area + " THEN CASE WHEN ST_IsEmpty(s.area) THEN NULL ELSE s.area END "
+		"ELSE s.everything END FROM ("
+		"SELECT count(*) AS total, count(p.g) AS found, "
+		"ST_Multi(ST_CollectionExtract(ST_BuildArea(ST_Collect(p.g) FILTER (WHERE p.kind = 'way' AND " + area + ")), 3)) AS area, "
+		"ST_Collect(p.g ORDER BY p.ord) AS everything FROM ("
+		"SELECT m.value->>0 AS kind, m.ord, CASE m.value->>0 WHEN 'node' THEN n.geom ELSE w.shape END AS g "
+		"FROM jsonb_array_elements(" + alias + ".members) WITH ORDINALITY m(value, ord) "
+		"LEFT JOIN " + c.quote_name(tablePrefix + "visiblenodes") + " n ON m.value->>0 = 'node' AND n.id = (m.value->>1)::bigint "
+		"LEFT JOIN " + c.quote_name(tablePrefix + "visible_way_shapes") + " w ON m.value->>0 = 'way' AND w.id = (m.value->>1)::bigint "
+		"WHERE m.value->>0 IN ('node', 'way')) p) s)";
+}
+
 int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &wayIds,
 	int verbose,
@@ -580,6 +618,7 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	stringstream sqlFrags;
 	int count = 0;
 	string wayTable = tablePrefix+"liveways";
+	string shape;
 	for(std::set<int64_t>::const_iterator it = wayIds.begin(); it != wayIds.end(); it++)
 	{
 		if(count >= 1)
@@ -605,6 +644,16 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 		//cout << sql << endl;
 
 		work->exec(sql);
+	}
+
+	// The shapes, where the table set keeps them, of those ways it has. A way
+	// it does not have, deleted say, lost its shape as it went (StoreObjects).
+	if(!wayIds.empty() && DbCheckTableExists(c, work, tablePrefix + "way_shapes"))
+	{
+		std::vector<int64_t> ids(wayIds.begin(), wayIds.end());
+		work->exec("INSERT INTO " + c.quote_name(tablePrefix + "way_shapes") + " (id, shape) SELECT w.id, " +
+			WayShapeSql(c, tablePrefix, "w") + " FROM " + c.quote_name(wayTable) + " w WHERE w.id = ANY(" +
+			IdArrayLiteral(ids) + ") ON CONFLICT (id) DO UPDATE SET shape = EXCLUDED.shape;");
 	}
 
 	return 0;	
@@ -743,6 +792,17 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		if(verbose >= 2) cout << sql.str() << endl;
 
 		work->exec(sql.str());
+	}
+
+	// The shape, where the table set keeps them. The member ways' shapes are
+	// brought up to date first, as their boxes are.
+	if(DbCheckTableExists(conn, work, tablePrefix + "relation_shapes"))
+	{
+		string sql = "INSERT INTO " + conn.quote_name(tablePrefix + "relation_shapes") + " (id, shape) SELECT r.id, " +
+			RelationShapeSql(conn, tablePrefix, "r") + " FROM " + conn.quote_name(tablePrefix + "liverelations") +
+			" r WHERE r.id = " + to_string(rel.objId) + " ON CONFLICT (id) DO UPDATE SET shape = EXCLUDED.shape;";
+		if(verbose >= 2) cout << sql << endl;
+		work->exec(sql);
 	}
 }
 
