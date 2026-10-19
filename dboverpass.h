@@ -6,26 +6,6 @@
 #include "cppo5m/model.h"
 #include "dbusername.h"
 
-//Returns complete objects
-void DbXapiQueryVisible(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const std::string &tablePrefix, 
-	const std::string &objType,
-	const std::string &tagKey,
-	const std::string &tagValue,
-	const std::vector<double> &bbox, 
-	std::shared_ptr<IDataStreamHandler> enc);
-
-//Returns only objects of specified type
-void DbXapiQueryObjVisible(pqxx::connection &c, pqxx::transaction_base *work, 
-	class DbUsernameLookup &usernames, 
-	const std::string &tablePrefix, 
-	const std::string &objType,
-	const std::string &tagKey,
-	const std::string &tagValue,
-	const std::vector<double> &bbox, 
-	std::shared_ptr<IDataStreamHandler> enc);
-
 ///One condition on the tags of an object, as written in an Overpass query:
 ///[key], [!key], [key=value], [key!=value], [key~regex] or [key!~regex].
 ///The two negative value conditions also match objects without the key.

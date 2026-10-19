@@ -182,7 +182,6 @@ public:
 	void DumpToFile(const std::string &filename, bool updateInfo, const std::string &publicUrl = "");
 
 	int64_t GetAllocatedId(const std::string &type);
-	int64_t PeekNextAllocatedId(const std::string &type);
 
 	int GetChangeset(int64_t objId,
 		class PgChangeset &changesetOut,
@@ -350,11 +349,6 @@ public:
 	bool UpdateUsername(int uid, const std::string &username,
 		class PgMapError &errStr);
 
-	void XapiQuery(const std::string &objType,
-		const std::string &tagKey,
-		const std::string &tagValue,
-		const std::vector<double> &bbox, 
-		std::shared_ptr<IDataStreamHandler> enc);
 	// Finds visible objects of one type by tag conditions, bbox and IDs, without
 	// completing ways or relations. See DbOverpassQueryObjVisible.
 	void OverpassQuery(const std::string &objType,

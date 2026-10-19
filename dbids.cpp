@@ -61,25 +61,6 @@ bool ClearNextIdValuesById(pqxx::connection &c, pqxx::transaction_base *work,
 	return true;
 }
 
-bool SetNextIdValue(pqxx::connection &c,
-	pqxx::transaction_base *work, 
-	const string &tablePrefix,
-	const string &objType,
-	int64_t value)
-{
-	stringstream ss;
-	ss << "INSERT INTO "<<c.quote_name(tablePrefix+"nextids") << "(id, maxid) VALUES ($1, $2);";
-
-	prepare_deduplicated(c, tablePrefix+"setnextId", ss.str());
-	pqxx::params params;
-	params.reserve(2);
-	params.append(objType);
-	params.append(value);
-
-	work->exec_prepared(tablePrefix+"setnextId", params);
-	return true;
-}
-
 bool GetNextId(pqxx::connection &c, pqxx::transaction_base *work, 
 	const string &tablePrefix,
 	const string &objType,
@@ -327,29 +308,6 @@ bool UpdateNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work,
 			}
 		}
 	}
-	return true;
-}
-
-bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::transaction_base *work, 
-	const string &objType,
-	const string &tableActivePrefix, 
-	const string &tableStaticPrefix,
-	std::string &errStr)
-{
-	stringstream ss;
-	ss << tableStaticPrefix << objType << "s";
-	int64_t maxStaticNode, maxActiveNode;
-	bool ok = GetMaxFieldInTable(c, work, ss.str(), "id", errStr, maxStaticNode);
-	if(!ok) return false;
-	stringstream ss2;
-	ss2 << tableActivePrefix << objType << "s";
-	ok = GetMaxFieldInTable(c, work, ss2.str(), "id", errStr, maxActiveNode);
-	if(!ok) return false;
-	if(maxStaticNode < 1) maxStaticNode = 1;
-	if(maxActiveNode == -1) maxActiveNode = maxStaticNode;
-	
-	SetNextIdValue(c, work, tableStaticPrefix, objType, maxStaticNode+1);
-	SetNextIdValue(c, work, tableActivePrefix, objType, maxActiveNode+1);
 	return true;
 }
 

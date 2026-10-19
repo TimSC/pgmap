@@ -1388,24 +1388,6 @@ int64_t PgTransaction::GetAllocatedId(const string &type)
 	return val;
 }
 
-int64_t PgTransaction::PeekNextAllocatedId(const string &type)
-{
-	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
-		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
-
-	string errStr;
-	int64_t val;
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
-	if(!work)
-		throw runtime_error("Transaction has been deleted");
-	bool ok = GetAllocatedIdFromDb(*dbconn, work.get(),
-		this->tableActivePrefix,
-		type, false, errStr, val);
-	if(!ok)
-		throw runtime_error(errStr);
-	return val;
-}
-
 int PgTransaction::GetChangeset(int64_t objId,
 	class PgChangeset &changesetOut,
 	class PgMapError &errStr)
@@ -2167,28 +2149,6 @@ void PgTransaction::SetStatementTimeout(int64_t milliseconds)
 		throw runtime_error("Transaction has been deleted");
 	// SET LOCAL lasts until the transaction ends, so nothing leaks to its next user
 	work->exec("SET LOCAL statement_timeout = " + to_string(milliseconds));
-}
-
-void PgTransaction::XapiQuery(const std::string &objType,
-	const std::string &tagKey,
-	const std::string &tagValue,
-	const std::vector<double> &bbox, 
-	std::shared_ptr<IDataStreamHandler> enc)
-{
-	if(this->shareMode != "ACCESS SHARE" && this->shareMode != "EXCLUSIVE")
-		throw runtime_error("Database must be locked in ACCESS SHARE or EXCLUSIVE mode");
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
-	if(!work)
-		throw runtime_error("Transaction has been deleted");
-
-	DbXapiQueryVisible(*dbconn, work.get(), 
-		this->dbUsernameLookup, 
-		this->tableActivePrefix, 
-		objType,
-		tagKey,
-		tagValue,
-		bbox, 
-		enc);
 }
 
 void PgTransaction::GetMostActiveUsers(int64_t startTimestamp,

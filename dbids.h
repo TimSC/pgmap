@@ -21,12 +21,6 @@ bool ClearNextIdValuesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix,
 	const std::string &key);
 
-bool SetNextIdValue(pqxx::connection &c,
-	pqxx::transaction_base *work, 
-	const std::string &tablePrefix,
-	const std::string &objType,
-	int64_t value);
-
 bool GetNextId(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix,
 	const std::string &objType,
@@ -54,12 +48,6 @@ bool UpdateNextObjectIds(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix,
 	const std::map<std::string, int64_t> &nextIdMap,
 	const std::map<std::string, int64_t> &nextIdMapOriginal,
-	std::string &errStr);
-
-bool UpdateNextIdsOfType(pqxx::connection &c, pqxx::transaction_base *work, 
-	const std::string &objType,
-	const std::string &tableActivePrefix, 
-	const std::string &tableStaticPrefix,
 	std::string &errStr);
 
 #endif //_DB_IDS_H

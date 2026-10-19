@@ -266,8 +266,6 @@ namespace std {
 	%template(vectorextractinfo) vector<ExtractInfo>;
 };
 
-%ignore DbXapiQueryVisible;
-%ignore DbXapiQueryObjVisible;
 %ignore DbOverpassQueryObjVisible;
 %ignore DbOverpassQueryIdsVisible;
 %include "dboverpass.h"
