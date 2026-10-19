@@ -9,17 +9,6 @@
 
 //Functions for querying current (live) data
 
-std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
-	const std::vector<double> &bbox, 
-	const std::string &excludeTablePrefix);
-
-std::shared_ptr<pqxx::icursorstream> VisibleNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const std::string &tablePrefix, 
-	const std::string &wkt, int srid,
-	const std::string &excludeTablePrefix);
-
-int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, class DbUsernameLookup &usernames, 
-	std::shared_ptr<IDataStreamHandler> enc);
-
 void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const std::string &tablePrefix, 

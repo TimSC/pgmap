@@ -5,64 +5,6 @@ using namespace std;
 
 // ************* Basic query methods ***************
 
-std::shared_ptr<pqxx::icursorstream> VisibleNodesInBboxStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
-	const std::vector<double> &bbox, 
-	const string &excludeTablePrefix)
-{
-	if(bbox.size() != 4)
-		throw invalid_argument("Bbox has wrong length");
-	string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
-
-	stringstream sql;
-	sql.precision(9);
-	sql << fixed << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
-	sql << " FROM ";
-	sql << vNodeTable;
-	if(excludeTable.size() > 0)
-		sql << " LEFT JOIN "<<excludeTable<<" ON "<<vNodeTable<<".id = "<<excludeTable<<".id";
-	sql << " WHERE "<<vNodeTable<<".geom && ST_MakeEnvelope(";
-	sql << bbox[0] <<","<< bbox[1] <<","<< bbox[2] <<","<< bbox[3] << ", 4326)";
-	if(excludeTable.size() > 0)
-		sql << " AND "<<excludeTable<<".id IS NULL";
-	sql <<";";
-
-	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
-}
-
-std::shared_ptr<pqxx::icursorstream> VisibleNodesInWktStart(pqxx::connection &c, pqxx::transaction_base *work, const string &tablePrefix, 
-	const std::string &wkt, int srid,
-	const string &excludeTablePrefix)
-{
-	string vNodeTable = c.quote_name(tablePrefix + "visiblenodes");
-	string excludeTable;
-	if(excludeTablePrefix.size() > 0)
-		excludeTable = c.quote_name(excludeTablePrefix + "nodeids");
-
-	stringstream sql;
-	sql << "SELECT "<<vNodeTable<<".*, ST_X("<<vNodeTable<<".geom) as lon, ST_Y("<<vNodeTable<<".geom) AS lat";
-	sql << " FROM ";
-	sql << vNodeTable;
-	if(excludeTable.size() > 0)
-		sql << " LEFT JOIN "<<excludeTable<<" ON "<<vNodeTable<<".id = "<<excludeTable<<".id";
-	sql << " WHERE "<<vNodeTable<<".geom && ST_GeomFromText(";
-	sql << c.quote(wkt) << ", "<< srid << ")";
-	if(excludeTable.size() > 0)
-		sql << " AND "<<excludeTable<<".id IS NULL";
-	sql <<";";
-
-	return std::shared_ptr<pqxx::icursorstream>(new pqxx::icursorstream( *work, sql.str(), "nodesinbbox", 1000 ));
-}
-
-int LiveNodesInBboxContinue(std::shared_ptr<pqxx::icursorstream> cursor, class DbUsernameLookup &usernames, 
-	std::shared_ptr<IDataStreamHandler> enc)
-{
-	pqxx::icursorstream *c = cursor.get();
-	return NodeResultsToEncoder(*c, usernames, enc);
-}
-
 void GetLiveWaysThatContainNodes(pqxx::connection &c, pqxx::transaction_base *work, 
 	class DbUsernameLookup &usernames, 
 	const string &tablePrefix, 

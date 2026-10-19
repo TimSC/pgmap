@@ -813,7 +813,8 @@ void EditActivityRecorder::Build(const std::string &action, const class OsmData 
 
 int64_t EditActivityRecorder::AtomicEditId()
 {
-	// Allocated once the map is locked, as an upload does; see PgTransaction::CurrentAtomicEditId
+	// The first time it is wanted, by the edit's first store or activity
+	// record, once the map is locked; nothing on a map before schema 14
 	if(atomicEditId == 0 && enabled)
 	{
 		string sequence = c.quote_name(tableActivePrefix + "atomic_edit_id_seq");

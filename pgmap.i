@@ -20,6 +20,7 @@ using std::string;
 #include "cppo5m/cppo5m.h"
 #include "cppo5m/pysink.h"
 #include "util.h"
+#include "dbadmin.h"
 
 // Python classes for the cppo5m exception types, created when the module loads
 static PyObject *pyOsmDecodeError = nullptr;
@@ -244,6 +245,8 @@ namespace std {
 %shared_ptr(PgCommon)
 
 %include "pgcommon.h"
+// The latest schema version, which CreateMapTables can bring a map to
+%constant int MAP_SCHEMA_VERSION = MAP_SCHEMA_VERSION;
 %shared_ptr(PgExtractExport)
 %shared_ptr(PgExtractImport)
 %shared_ptr(PgExtractPatch)

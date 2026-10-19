@@ -107,14 +107,14 @@ class EditActivityRecorder;
 class PgTransaction : public PgCommon
 {
 private:
-	int64_t atomicEditId = 0;
 	int64_t activityBlockIndex = 0;
-	// This transaction's atomic edit, allocated when first wanted; 0 on a map
-	// whose schema has no atomic edits
-	int64_t CurrentAtomicEditId(pqxx::transaction_base *work);
 	int64_t SaveExtractArea(const std::string &areaSql, const std::vector<double> &bbox,
 		const std::string &wkt, const std::string &name);
+	// What this transaction's edit records, made when first wanted. It holds
+	// the edit's atomic edit ID, which the objects stored and the activity
+	// recorded share.
 	std::shared_ptr<class EditActivityRecorder> activityRecorder;
+	class EditActivityRecorder &Recorder(pqxx::transaction_base *work);
 	void LockExtractTables(const std::string &accessMode);
 
 

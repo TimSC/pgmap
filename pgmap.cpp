@@ -758,7 +758,7 @@ bool PgTransaction::StoreObjects(class OsmData &data,
 		throw runtime_error("Transaction has been deleted");
 
 	// The static tables hold the imported map, which no atomic edit made
-	int64_t atomicEditId = asEdit && !saveToStaticTables ? this->CurrentAtomicEditId(work.get()) : 0;
+	int64_t atomicEditId = asEdit && !saveToStaticTables ? this->Recorder(work.get()).AtomicEditId() : 0;
 	bool ok = ::StoreObjects(*dbconn, work.get(), tablePrefix, data, createdNodeIds, createdWayIds, createdRelationIds,
 		nativeErrStr, atomicEditId);
 	errStr.errStr = nativeErrStr;
@@ -1153,9 +1153,7 @@ void PgTransaction::EditActivityBeforeStore(const std::string &action, std::shar
 	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
 	if(!work)
 		throw runtime_error("Transaction has been deleted");
-	if(!activityRecorder)
-		activityRecorder.reset(new class EditActivityRecorder(*dbconn, work.get(), this->tableActivePrefix, this));
-	if(!activityRecorder->Enabled())
+	if(!this->Recorder(work.get()).Enabled())
 		throw runtime_error("Edit activity needs map schema version 14");
 	activityRecorder->BeforeStore(action, *block);
 	if(affectedParentsOut)
@@ -1176,21 +1174,16 @@ bool PgTransaction::EditActivityAfterStore(const std::string &action, std::share
 	return this->InsertEditActivity(activity, errStr);
 }
 
-int64_t PgTransaction::CurrentAtomicEditId(pqxx::transaction_base *work)
+class EditActivityRecorder &PgTransaction::Recorder(pqxx::transaction_base *work)
 {
-	// Allocated only after the exclusive map locks have been acquired, by the
-	// first store or activity record of the edit. The next writer cannot
-	// allocate until this transaction commits or aborts.
-	if(atomicEditId == 0)
-	{
-		if(this->shareMode != "EXCLUSIVE")
-			throw runtime_error("Database must be locked in EXCLUSIVE mode");
-		string sequence = dbconn->quote_name(this->tableActivePrefix + "atomic_edit_id_seq");
-		if(work->exec("SELECT to_regclass(" + work->quote(sequence) + ")")[0][0].is_null())
-			return 0; // Before schema 14
-		atomicEditId = work->exec("SELECT nextval(" + work->quote(sequence) + "::regclass)")[0][0].as<int64_t>();
-	}
-	return atomicEditId;
+	// Only an edit records, and the edit's atomic edit ID is allocated only
+	// once the exclusive map locks are held, so that the next writer cannot
+	// allocate until this transaction commits or aborts
+	if(this->shareMode != "EXCLUSIVE")
+		throw runtime_error("Database must be locked in EXCLUSIVE mode");
+	if(!activityRecorder)
+		activityRecorder.reset(new class EditActivityRecorder(*dbconn, work, this->tableActivePrefix, this));
+	return *activityRecorder;
 }
 
 bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
@@ -1260,7 +1253,7 @@ bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 		throw runtime_error("Transaction has been deleted");
 
 	EditActivity groupedActivity(activity);
-	groupedActivity.atomicEditId = this->CurrentAtomicEditId(work.get());
+	groupedActivity.atomicEditId = this->Recorder(work.get()).AtomicEditId();
 	groupedActivity.blockIndex = activityBlockIndex;
 	bool ok = DbInsertEditActivity(*dbconn, work.get(), this->tableActivePrefix,
 		groupedActivity,
