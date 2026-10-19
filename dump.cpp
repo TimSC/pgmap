@@ -82,6 +82,8 @@ int main(int argc, char **argv)
 		}
 
 		OsmFileWriter writer(outFina, rootAttribs);
+		if(order)
+			writer.SetSortedTypeThenId();
 		transaction->Dump(order, true, true, true, writer.Encoder());
 		writer.Close();
 	}

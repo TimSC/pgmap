@@ -356,7 +356,7 @@ static bool DbDefineVisibleViews(pqxx::connection &c, pqxx::transaction_base *wo
 			pqxx::result r = work->exec("SELECT attname FROM pg_attribute WHERE attrelid = to_regclass(" +
 				work->quote(live) + ") AND attnum > 0 AND NOT attisdropped ORDER BY attnum");
 			string ownColumns, parentColumns;
-			for(size_t i=0; i<r.size(); i++)
+			for(pqxx::result::size_type i=0; i<r.size(); i++)
 			{
 				string column = c.quote_name(r[i][0].as<string>());
 				ownColumns += (i ? ", " : "") + column;

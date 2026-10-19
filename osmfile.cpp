@@ -1,4 +1,5 @@
 #include "osmfile.h"
+#include "cppo5m/pbf.h"
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
@@ -82,6 +83,13 @@ OsmFileWriter::~OsmFileWriter()
 std::shared_ptr<IDataStreamHandler> OsmFileWriter::Encoder()
 {
 	return encoder;
+}
+
+void OsmFileWriter::SetSortedTypeThenId()
+{
+	auto pbf = std::dynamic_pointer_cast<PbfEncode>(encoder);
+	if(pbf)
+		pbf->sortedTypeThenId = true;
 }
 
 void OsmFileWriter::Close()

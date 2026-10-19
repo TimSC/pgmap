@@ -43,6 +43,11 @@ public:
 	///Send the map data here. It must be sent Finish before Close is called.
 	std::shared_ptr<IDataStreamHandler> Encoder();
 
+	///Says the objects will come nodes, then ways, then relations, each in
+	///ascending ID order. A format with a place for that (PBF's header) says
+	///so; one out of order is then refused. Call it before sending anything.
+	void SetSortedTypeThenId();
+
 	///Completes the file and moves it into place. Throws if it cannot be written.
 	void Close();
 };

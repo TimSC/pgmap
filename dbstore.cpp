@@ -261,7 +261,7 @@ static bool StoreObjectBatch(pqxx::connection &c, pqxx::transaction_base *work, 
 			else
 				sql << ", members=" << work->quote(d.refsJson) << ", memberroles=" << work->quote(d.rolesJson);
 			// A new version is this edit's; the same version keeps whose it was
-			if(atomicColumn && m.version != liveVersions[d.objId])
+			if(atomicColumn && (int64_t)m.version != liveVersions[d.objId])
 				sql << ", atomic_edit_id=" << atomicValue.substr(1);
 			sql << " WHERE id = " << d.objId << ";";
 			rows ++;

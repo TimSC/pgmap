@@ -1011,6 +1011,7 @@ int64_t PgTransaction::ExportExtractToFile(int64_t extractId, const string &name
 		headerAttribs = this->GetExtractHeaderAttribs(extractId, name, publicUrl);
 	// The writer publishes only a complete file, keeping an existing one on failure
 	OsmFileWriter writer(filename, headerAttribs);
+	writer.SetSortedTypeThenId(); // As an extract is exported
 	int64_t id = this->ExportExtract(extractId, name, writer.Encoder());
 	writer.Close();
 	return id;
@@ -1986,6 +1987,7 @@ void PgTransaction::DumpToFile(const std::string &filename, bool updateInfo, con
 			headerAttribs["update_url"] = publicUrl;
 	}
 	OsmFileWriter writer(filename, headerAttribs);
+	writer.SetSortedTypeThenId(); // Each kind in ID order, as asked for here
 	this->Dump(true, true, true, true, writer.Encoder());
 	writer.Close();
 }
