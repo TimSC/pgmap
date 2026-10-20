@@ -104,8 +104,9 @@ int DbUpdateRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 // what is spread across the antimeridian does: those that are spread across
 // it get two boxes, one either side (see FindOuterBboxes). A relation's box
 // is worked out that way as edits arrive; this mends boxes from before that,
-// and DbUpdateRelationBboxes ends with it. Returns how many it worked out,
-// or -1 on failure.
+// and those DbUpdateRelationBboxes works out (PgAdmin::UpdateBboxes runs it
+// after). It needs a transaction, not a nontransaction: it reads through
+// cursors. Returns how many it worked out, or -1 on failure.
 int64_t DbSplitWrappedRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	int verbose, const std::string &tablePrefix, std::string &errStr);
 

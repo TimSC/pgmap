@@ -2286,9 +2286,7 @@ int DbUpdateRelationBboxes(pqxx::connection &conn, pqxx::transaction_base *work,
 	for(const string &name : {boxes, edges, outside})
 		work->exec("DROP TABLE " + name + ";");
 
-	// Taken as one rectangle, what is spread across the antimeridian goes
-	// round the world: those relations are worked out again, in two pieces
-	return DbSplitWrappedRelationBboxes(conn, work, verbose, tablePrefix, errStr) < 0 ? 0 : 1;
+	return 1;
 }
 
 int64_t DbSplitWrappedRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,

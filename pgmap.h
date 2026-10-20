@@ -386,6 +386,11 @@ private:
 	std::string tableModPrefix;
 	std::string tableTestPrefix;
 
+	// DbSplitWrappedRelationBboxes on each table set named. It reads through
+	// cursors, which need a transaction: without one, as GetAdmin() gives, it
+	// runs in one of its own, on a connection of its own, and is committed.
+	bool SplitWrapped(const std::vector<std::string> &prefixes, int verbose, class PgMapError &errStr);
+
 public:
 	PgAdmin(std::shared_ptr<pqxx::connection> dbconnIn,
 		const std::string &tableStaticPrefixIn, 

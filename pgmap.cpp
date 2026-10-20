@@ -2550,12 +2550,18 @@ bool PgAdmin::UpdateBboxes(int verbose, bool updateStatic, bool updateActive, cl
 		if(!ok) return ok;
 	}
 
-	// The shapes kept for map renderers, where there are tables for them: the
-	// base tables' first, which the active ones' relations may be made from,
-	// and in each, ways before the relations made from them
 	std::vector<std::string> prefixes;
 	if(updateStatic) prefixes.push_back(this->tableStaticPrefix);
 	if(updateActive) prefixes.push_back(this->tableModPrefix);
+
+	// Taken as one rectangle, what is spread across the antimeridian goes
+	// round the world: those relations are worked out again, in two pieces
+	if(!SplitWrapped(prefixes, verbose, errStr))
+		return false;
+
+	// The shapes kept for map renderers, where there are tables for them: the
+	// base tables' first, which the active ones' relations may be made from,
+	// and in each, ways before the relations made from them
 	for(const std::string &prefix : prefixes)
 		for(const char *kind : {"way", "relation"})
 		{
@@ -2602,25 +2608,43 @@ bool PgAdmin::CreateBboxIndices(int verbose, class PgMapError &errStr)
 	return ok;
 }
 
-bool PgAdmin::SplitWrappedRelationBboxes(int verbose, class PgMapError &errStr)
+bool PgAdmin::SplitWrapped(const std::vector<std::string> &prefixes, int verbose, class PgMapError &errStr)
 {
 	std::string nativeErrStr;
-	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
-	if(!work)
+	if(!this->sharedWork->work)
 		throw runtime_error("Transaction has been deleted");
-
-	// The base tables first: the active ones' relations may hold theirs
-	for(const std::string &prefix : {this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix})
-	{
-		if(!DbCheckTableExists(*dbconn, work.get(), prefix + "liverelations"))
-			continue;
-		if(DbSplitWrappedRelationBboxes(*dbconn, work.get(), verbose, prefix, nativeErrStr) < 0)
+	auto split = [&](pqxx::transaction_base *work) {
+		for(const std::string &prefix : prefixes)
 		{
-			errStr.errStr = nativeErrStr;
-			return false;
+			if(!DbCheckTableExists(*dbconn, work, prefix + "liverelations"))
+				continue;
+			if(DbSplitWrappedRelationBboxes(*dbconn, work, verbose, prefix, nativeErrStr) < 0)
+			{
+				errStr.errStr = nativeErrStr;
+				return false;
+			}
 		}
-	}
+		return true;
+	};
+
+	if(dynamic_cast<pqxx::nontransaction *>(this->sharedWork->work.get()) == nullptr)
+		return split(this->sharedWork->work.get());
+
+	// A transaction of its own, on a connection of its own: this one's
+	// session is kept, as other things hold it, and, without a transaction,
+	// holds no locks the other could wait for
+	pqxx::connection own(dbconn->connection_string());
+	pqxx::work work(own);
+	if(!split(&work))
+		return false;
+	work.commit();
 	return true;
+}
+
+bool PgAdmin::SplitWrappedRelationBboxes(int verbose, class PgMapError &errStr)
+{
+	// The base tables first: the active ones' relations may hold theirs
+	return SplitWrapped({this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix}, verbose, errStr);
 }
 
 bool PgAdmin::DropBboxIndices(int verbose, class PgMapError &errStr)
