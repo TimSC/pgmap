@@ -659,12 +659,46 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	return 0;	
 }
 
+// The stored boxes of relations, as the boxes they are made of: one, or two
+// for a relation spread across the antimeridian (see FindOuterBboxes). A
+// relation without a box is there with none.
+static void GetVisibleRelationBoxPiecesById(pqxx::connection &c, pqxx::transaction_base *work,
+	const string &tablePrefix, const std::set<int64_t> &ids,
+	std::map<int64_t, std::vector<std::vector<double> > > &out)
+{
+	if(ids.empty())
+		return;
+	string relations = c.quote_name(tablePrefix + "visiblerelations");
+	pqxx::result rows = work->exec("SELECT v.id, ST_XMin(d.geom), ST_YMin(d.geom), ST_XMax(d.geom), ST_YMax(d.geom) "
+		"FROM " + relations + " v LEFT JOIN LATERAL ST_Dump(v.bbox) d ON true "
+		"WHERE v.id = ANY(" + IdArrayLiteral(std::vector<int64_t>(ids.begin(), ids.end())) + ");");
+	for(const pqxx::row &row : rows)
+	{
+		std::vector<std::vector<double> > &pieces = out[row[0].as<int64_t>()];
+		if(!row[1].is_null())
+			pieces.push_back({row[1].as<double>(), row[2].as<double>(), row[3].as<double>(), row[4].as<double>()});
+	}
+}
+
+// A relation's box as SQL: one envelope, or two collected as a multipolygon
+static string RelationBoxSql(const std::vector<std::vector<double> > &pieces)
+{
+	stringstream sql;
+	sql.precision(17);
+	for(size_t i = 0; i < pieces.size(); i++)
+	{
+		const std::vector<double> &b = pieces[i];
+		sql << (i ? ", " : "") << "ST_MakeEnvelope(" << b[0] << ", " << b[1] << ", " << b[2] << ", " << b[3] << ", 4326)";
+	}
+	return pieces.size() == 1 ? sql.str() : "ST_Multi(ST_Collect(ARRAY[" + sql.str() + "]))";
+}
+
 void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 
 	OsmRelation &rel,
 	const std::set<int64_t> &pendingRelIds,
 	const std::set<int64_t> &skipRelIds,  
-	std::set<int64_t> &nextPassIds, int verbose)
+	std::set<int64_t> &nextPassIds, int verbose, bool shapes)
 {
 	class DbUsernameLookup dbUsernameLookup(conn, work, "", ""); //Don't care about accurate usernames
 
@@ -690,7 +724,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		return;
 	}
 
-	std::map<int64_t, vector<double> > memBboxesOfType1, memBboxesOfType2, memBboxesOfType3;
+	std::map<int64_t, vector<double> > memBboxesOfType1, memBboxesOfType2;
 	std::vector<vector<double> > memBboxes;
 	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
 		tablePrefix, "node", memNodeIds, memBboxesOfType1);
@@ -745,15 +779,17 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 		memBboxes.push_back(bb);
 	}
 
-	GetVisibleObjectBboxesById(conn, work, dbUsernameLookup,
-		tablePrefix, "relation", memRelIds, memBboxesOfType3);
+	// Each piece of a member relation's box, as one spread across the
+	// antimeridian is two
+	std::map<int64_t, std::vector<std::vector<double> > > memRelationPieces;
+	GetVisibleRelationBoxPiecesById(conn, work, tablePrefix, memRelIds, memRelationPieces);
 
 	// A member relation's box cannot be had so cheaply. Without one, and with
 	// members of its own that might have an extent, this relation's box is not
 	// known, and is stored as NULL, which is what that means everywhere else.
 	std::set<int64_t> unboxedRelationIds;
-	for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
-		if(it->second.size() != 4)
+	for(auto it=memRelationPieces.begin(); it!=memRelationPieces.end(); it++)
+		if(it->second.empty())
 			unboxedRelationIds.insert(it->first);
 	if(!unboxedRelationIds.empty())
 	{
@@ -765,25 +801,21 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 			if(!member.members.empty())
 				extentUnknown = true;
 	}
-	for(auto it=memBboxesOfType3.begin(); it!=memBboxesOfType3.end(); it++)
-	{
-		vector<double> &bb = it->second; 
-		memBboxes.push_back(bb);
-	}
+	for(auto it=memRelationPieces.begin(); it!=memRelationPieces.end(); it++)
+		for(const vector<double> &piece : it->second)
+			memBboxes.push_back(piece);
 
-	std::vector<double> outerBbox;
+	// One box, or two either side of the antimeridian
+	std::vector<std::vector<double> > outerBboxes;
 	if(!extentUnknown)
-		FindOuterBbox(memBboxes, outerBbox);
+		FindOuterBboxes(memBboxes, outerBboxes);
 
-	if(outerBbox.size() == 4)
+	if(!outerBboxes.empty())
 	{
-		stringstream sql;
-		sql << "UPDATE " << tablePrefix << "liverelations SET bbox=ST_MakeEnvelope($1,$2,$3,$4, 4326) WHERE (id = $5);";
-		if(verbose >= 2) cout << sql.str() << endl;
-
-		prepare_deduplicated(conn, tablePrefix+"update_relation_bbox", sql.str());
-
-		work->exec_prepared(tablePrefix+"update_relation_bbox", outerBbox[0], outerBbox[1], outerBbox[2], outerBbox[3], rel.objId);
+		string sql = "UPDATE " + conn.quote_name(tablePrefix + "liverelations") + " SET bbox=" +
+			RelationBoxSql(outerBboxes) + " WHERE id = " + to_string(rel.objId) + ";";
+		if(verbose >= 2) cout << sql << endl;
+		work->exec(sql);
 	}
 	else
 	{
@@ -796,7 +828,7 @@ void UpdateSingleRelation(pqxx::connection &conn, pqxx::transaction_base *work,
 
 	// The shape, where the table set keeps them. The member ways' shapes are
 	// brought up to date first, as their boxes are.
-	if(DbCheckTableExists(conn, work, tablePrefix + "relation_shapes"))
+	if(shapes && DbCheckTableExists(conn, work, tablePrefix + "relation_shapes"))
 	{
 		string sql = "INSERT INTO " + conn.quote_name(tablePrefix + "relation_shapes") + " (id, shape) SELECT r.id, " +
 			RelationShapeSql(conn, tablePrefix, "r") + " FROM " + conn.quote_name(tablePrefix + "liverelations") +
@@ -810,7 +842,8 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 	const std::set<int64_t> &objectIds,
 	int verbose,
 	const std::string &tablePrefix, 
-	std::string &errStr)
+	std::string &errStr,
+	bool shapes)
 {
 	class DbUsernameLookup dbUsernameLookup(conn, work, "", ""); //Don't care about accurate usernames
 	std::set<int64_t> pendingRelIds = objectIds;
@@ -841,7 +874,7 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 	
 			UpdateSingleRelation(conn, work, tablePrefix, rel, 
 				pendingRelIds, emptySet, 
-				nextPassIds, verbose);
+				nextPassIds, verbose, shapes);
 		}
 		
 		if(pendingRelIds.size() == nextPassIds.size())
@@ -883,7 +916,7 @@ int UpdateRelationBboxesById(pqxx::connection &conn, pqxx::transaction_base *wor
 
 			UpdateSingleRelation(conn, work, tablePrefix, rel, 
 				emptySet, skipRelIds, 
-				unused, verbose);
+				unused, verbose, shapes);
 		}
 	}
 

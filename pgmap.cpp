@@ -438,7 +438,10 @@ void PgMapQuery::SelectObjects()
 				" UNION ALL SELECT id FROM " + MAP_QUERY_EXTRA + ")) OR "
 				"(m.value->>0 = 'way' AND (m.value->>1)::bigint IN (SELECT id FROM " + MAP_QUERY_WAYS + ")))");
 	else
-		this->relationsSql = fromLayers("relation", readColumns("relation"), [&](const string &) { return "WHERE " + within("o.bbox"); });
+		// A relation's box may be two, either side of the antimeridian, which
+		// the index sees as one round the world: what && finds is checked
+		this->relationsSql = fromLayers("relation", readColumns("relation"), [&](const string &) {
+			return "WHERE " + within("o.bbox") + (polygon ? "" : " AND ST_Intersects(o.bbox, " + area + ")"); });
 }
 
 int PgMapQuery::Continue()
@@ -2597,6 +2600,27 @@ bool PgAdmin::CreateBboxIndices(int verbose, class PgMapError &errStr)
 	errStr.errStr = nativeErrStr;
 
 	return ok;
+}
+
+bool PgAdmin::SplitWrappedRelationBboxes(int verbose, class PgMapError &errStr)
+{
+	std::string nativeErrStr;
+	std::shared_ptr<pqxx::transaction_base> work(this->sharedWork->work);
+	if(!work)
+		throw runtime_error("Transaction has been deleted");
+
+	// The base tables first: the active ones' relations may hold theirs
+	for(const std::string &prefix : {this->tableStaticPrefix, this->tableModPrefix, this->tableTestPrefix})
+	{
+		if(!DbCheckTableExists(*dbconn, work.get(), prefix + "liverelations"))
+			continue;
+		if(DbSplitWrappedRelationBboxes(*dbconn, work.get(), verbose, prefix, nativeErrStr) < 0)
+		{
+			errStr.errStr = nativeErrStr;
+			return false;
+		}
+	}
+	return true;
 }
 
 bool PgAdmin::DropBboxIndices(int verbose, class PgMapError &errStr)

@@ -259,6 +259,28 @@ are done by one statement that keeps nothing until it has finished. Set the
 server to read only while it runs, or edits made meanwhile to a way not yet
 reached are worked out twice, which is harmless but wasted.
 
+#### Relations across the antimeridian
+
+One rectangle around what is spread across the antimeridian, such as Russia
+with Chukotka, or the United States with the far Aleutians, goes round the
+world, and every search of an area at those latitudes would find it, and
+every relation holding it. So such a relation's box is two rectangles, one
+either side, stored as a multipolygon: the smallest stretch of longitude
+covering its members is the whole circle less its widest gap, and when that
+gap is not the one across the antimeridian, the stretch crosses it and is
+split there. Every other relation, and every way (OpenStreetMap splits ways
+at the antimeridian), has one rectangle, as before.
+
+An index sees the two rectangles as one round the world, so a search by box
+checks what `&&` finds with `ST_Intersects`; the map call (in bbox mode),
+Overpass and extracts do. `ST_XMin`/`ST_XMax` of such a box still give -180
+and 180.
+
+Edits and "Update way/relation bboxes" work boxes out this way. For a map
+whose boxes were worked out before, "Split relation bboxes that go round the
+world" (option k) works out again only the boxes wider than half the world,
+on every table set: on a planet, about 800 relations, in seconds.
+
 ### Shapes of ways and relations, for map renderers
 
 "Add/drop way and relation shapes" (option j of the admin tool) makes, or

@@ -99,6 +99,16 @@ int DbUpdateRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
 	class PgCommon *adminObj,
 	std::string &errStr);
 
+// Works out again the boxes of the relations whose box goes more than half
+// way round the world, which is what a box taken as one rectangle around
+// what is spread across the antimeridian does: those that are spread across
+// it get two boxes, one either side (see FindOuterBboxes). A relation's box
+// is worked out that way as edits arrive; this mends boxes from before that,
+// and DbUpdateRelationBboxes ends with it. Returns how many it worked out,
+// or -1 on failure.
+int64_t DbSplitWrappedRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, std::string &errStr);
+
 bool DbCreateBboxIndices(pqxx::connection &c, pqxx::transaction_base *work, 
 	int verbose, 
 	const std::string &tablePrefix, 

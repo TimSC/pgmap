@@ -281,5 +281,17 @@ double tiley2lat(int y, int z);
 
 void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vector<double> &bboxOut);
 
+// The boxes around boxes (each {lon1, lat1, lon2, lat2}; others are passed
+// over), where longitude wraps round at +/-180: one box, or two when what
+// they cover is spread across the antimeridian. The smallest stretch of
+// longitude that covers them is the whole circle less its widest gap; if
+// that gap is not the one across the antimeridian, the stretch crosses it,
+// and it is given as two boxes, either side, each as wide and as tall as
+// the boxes in it. Nothing in, nothing out. A relation holding the far east
+// of Russia and the rest of it gets two boxes, rather than one round the
+// world.
+void FindOuterBboxes(const std::vector<std::vector<double> > &bboxesIn,
+	std::vector<std::vector<double> > &bboxesOut);
+
 #endif //_UTIL_H
 

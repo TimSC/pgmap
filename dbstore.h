@@ -33,11 +33,16 @@ int UpdateWayBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::string &tablePrefix, 
 	std::string &errStr);
 
+// Works out the boxes of relations, and of the relations holding them, and,
+// with shapes, their shapes where the table set keeps them. A relation
+// spread across the antimeridian gets two boxes, as a multipolygon (see
+// FindOuterBboxes).
 int UpdateRelationBboxesById(pqxx::connection &c, pqxx::transaction_base *work,
 	const std::set<int64_t> &objectIds,
     int verbose,
 	const std::string &tablePrefix, 
-	std::string &errStr);
+	std::string &errStr,
+	bool shapes = true);
 
 bool DbInsertQueryActivity(pqxx::connection &c, pqxx::transaction_base *work, 
 	const std::string &tablePrefix, 

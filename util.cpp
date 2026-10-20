@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <cmath>
+#include <algorithm>
 #include "util.h"
 #include <cstring>
 #include <cctype>
@@ -288,6 +289,65 @@ void FindOuterBbox(const std::vector<std::vector<double> > &bboxesIn, std::vecto
 			if(bi[3] > bboxOut[3]) bboxOut[3] = bi[3];
 		}
 	}	
+}
+
+void FindOuterBboxes(const std::vector<std::vector<double> > &bboxesIn,
+	std::vector<std::vector<double> > &bboxesOut)
+{
+	bboxesOut.clear();
+	std::vector<const std::vector<double> *> boxes;
+	for(const std::vector<double> &box : bboxesIn)
+		if(box.size() == 4)
+			boxes.push_back(&box);
+	if(boxes.empty())
+		return;
+
+	// The stretches of longitude covered, west to east, overlaps merged
+	std::sort(boxes.begin(), boxes.end(), [](const std::vector<double> *a, const std::vector<double> *b) {
+		return (*a)[0] < (*b)[0]; });
+	std::vector<std::pair<double, double> > covered;
+	for(const std::vector<double> *box : boxes)
+	{
+		if(!covered.empty() && (*box)[0] <= covered.back().second)
+			covered.back().second = std::max(covered.back().second, (*box)[2]);
+		else
+			covered.push_back({(*box)[0], (*box)[2]});
+	}
+
+	// The widest gap between them. The gap across the antimeridian wins a
+	// tie, so that one box is kept when two would be no smaller.
+	double widest = (covered.front().first + 360.0) - covered.back().second;
+	size_t after = covered.size();
+	for(size_t i = 0; i + 1 < covered.size(); i++)
+	{
+		double gap = covered[i + 1].first - covered[i].second;
+		if(gap > widest)
+		{
+			widest = gap;
+			after = i;
+		}
+	}
+
+	if(after == covered.size())
+	{
+		// The stretch does not cross the antimeridian: one box
+		std::vector<double> outer;
+		FindOuterBbox(bboxesIn, outer);
+		bboxesOut.push_back(outer);
+		return;
+	}
+
+	// It does: the boxes west of the gap, and those east of it
+	double split = covered[after].second;
+	std::vector<std::vector<double> > west, east;
+	for(const std::vector<double> *box : boxes)
+		((*box)[2] <= split ? west : east).push_back(*box);
+	for(const std::vector<std::vector<double> > *side : {&west, &east})
+	{
+		std::vector<double> outer;
+		FindOuterBbox(*side, outer);
+		bboxesOut.push_back(outer);
+	}
 }
 
 std::string Took(std::chrono::steady_clock::time_point started)

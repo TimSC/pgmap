@@ -136,6 +136,7 @@ int main(int argc, char **argv)
 		cout << "h. Upgrade/downgrade index version" << endl;
 		cout << "i. Create/drop bbox indices" << endl;
 		cout << "j. Add/drop way and relation shapes (for map renderers)" << endl;
+		cout << "k. Split relation bboxes that go round the world (across the antimeridian)" << endl;
 
 		cout << endl << "q. Quit" << endl;
 
@@ -483,6 +484,20 @@ int main(int argc, char **argv)
 			{
 				errStr.errStr = e.what();
 			}
+
+			if(ok)
+				cout << "All done, in " << Took(started) << "." << endl;
+			else
+				cout << errStr.errStr << endl << "Stopped after " << Took(started) << "." << endl;
+			continue;
+		}
+
+		if(inputStr == "k")
+		{
+			std::shared_ptr<class PgAdmin> admin = pgMap.GetAdmin();
+			bool ok = admin->SplitWrappedRelationBboxes(verbose, errStr);
+			if(ok)
+				admin->Commit();
 
 			if(ok)
 				cout << "All done, in " << Took(started) << "." << endl;

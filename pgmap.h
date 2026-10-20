@@ -430,6 +430,12 @@ public:
 	bool UpdateBboxes(int verbose, bool updateStatic, bool updateActive, class PgMapError &errStr,
 		bool onlyMissingWays = false);
 	bool CreateBboxIndices(int verbose, class PgMapError &errStr);
+	// Works out again, on every table set, the boxes of relations stored as
+	// one rectangle round the world when what they hold is spread across the
+	// antimeridian: they get two boxes, one either side (see
+	// DbSplitWrappedRelationBboxes). Quicker than UpdateBboxes, which ends
+	// with this, for maps whose boxes were worked out before it.
+	bool SplitWrappedRelationBboxes(int verbose, class PgMapError &errStr);
 	// Makes or drops the tables of the shapes of ways and relations, kept for
 	// map renderers, on every table set (see DbSetObjectShapes). "Update
 	// way/relation bboxes" fills them in, and edits keep them up to date.

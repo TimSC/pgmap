@@ -2286,7 +2286,33 @@ int DbUpdateRelationBboxes(pqxx::connection &conn, pqxx::transaction_base *work,
 	for(const string &name : {boxes, edges, outside})
 		work->exec("DROP TABLE " + name + ";");
 
-	return 1;
+	// Taken as one rectangle, what is spread across the antimeridian goes
+	// round the world: those relations are worked out again, in two pieces
+	return DbSplitWrappedRelationBboxes(conn, work, verbose, tablePrefix, errStr) < 0 ? 0 : 1;
+}
+
+int64_t DbSplitWrappedRelationBboxes(pqxx::connection &c, pqxx::transaction_base *work,
+	int verbose, const std::string &tablePrefix, std::string &errStr)
+{
+	// Two boxes only beat one where the gap between them is wider than the
+	// one across the antimeridian, so only a box wider than half the world
+	// can need splitting. Every such box covers longitude 0, which the index
+	// finds them by. Those already in two pieces are passed over.
+	pqxx::result rows = work->exec("SELECT id FROM " + c.quote_name(tablePrefix + "liverelations") +
+		" WHERE bbox && ST_MakeEnvelope(0, -90, 0, 90, 4326) AND ST_XMax(bbox) - ST_XMin(bbox) > 180"
+		" AND ST_NumGeometries(bbox) = 1;");
+	std::set<int64_t> ids;
+	for(const pqxx::row &row : rows)
+		ids.insert(row[0].as<int64_t>());
+	if(verbose >= 1)
+		cout << tablePrefix << "liverelations: " << ids.size() << " boxes going more than half way round the world" << endl;
+	if(ids.empty())
+		return 0;
+	// Their shapes are left as they are: a box says where a relation is, not
+	// what it is
+	if(UpdateRelationBboxesById(c, work, ids, verbose >= 2 ? verbose : 0, tablePrefix, errStr, false) != 0)
+		return -1;
+	return ids.size();
 }
 
 // Shapes of ways and relations, for map renderers, in tables of their own:

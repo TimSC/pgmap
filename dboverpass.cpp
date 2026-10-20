@@ -90,6 +90,10 @@ static std::string OverpassQuerySql(pqxx::connection &c, pqxx::transaction_base 
 		sql2.precision(9);
 		sql2 << fixed << " AND " << (objType == "node" ? "geom" : "bbox")
 			<< " && ST_MakeEnvelope("<<bbox[0]<<","<<bbox[1]<<","<<bbox[2]<<","<<bbox[3]<<", 4326)";
+		// A relation's box may be two, either side of the antimeridian, which
+		// the index sees as one round the world: what && finds is checked
+		if(objType == "relation")
+			sql2 << " AND ST_Intersects(bbox, ST_MakeEnvelope("<<bbox[0]<<","<<bbox[1]<<","<<bbox[2]<<","<<bbox[3]<<", 4326))";
 		sql += sql2.str();
 	}
 
