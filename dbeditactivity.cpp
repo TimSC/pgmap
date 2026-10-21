@@ -537,15 +537,28 @@ void EditActivityRecorder::Boxes(const class OsmData &objs, BoxMap &out)
 	for(size_t i=0; i<objs.ways.size(); i++) wayIds.insert(objs.ways[i].objId);
 	for(size_t i=0; i<objs.relations.size(); i++) relationIds.insert(objs.relations[i].objId);
 
-	for(int type=1; type<=2; type++)
+	if(!wayIds.empty())
 	{
-		const std::set<int64_t> &ids = type == 1 ? wayIds : relationIds;
-		if(ids.empty()) continue;
 		std::map<int64_t, std::vector<double> > stored;
-		common->GetObjectBboxes(ACTIVITY_TYPE_NAMES[type], ids, stored);
+		common->GetObjectBboxes("way", wayIds, stored);
 		for(auto it=stored.begin(); it!=stored.end(); it++)
 			if(it->second.size() == 4)
-				out[ObjKey(type, it->first)] = it->second;
+				out[ObjKey(1, it->first)] = {it->second};
+	}
+
+	// A relation's box piece by piece: one spread across the antimeridian has
+	// two, where its extent would go round the world
+	if(!relationIds.empty())
+	{
+		std::stringstream ids;
+		for(int64_t id : relationIds)
+			ids << (ids.tellp() > 0 ? "," : "") << id;
+		pqxx::result rows = work->exec("SELECT v.id, ST_XMin(d.geom), ST_YMin(d.geom), ST_XMax(d.geom), ST_YMax(d.geom) "
+			"FROM " + c.quote_name(tableActivePrefix + "visiblerelations") + " v CROSS JOIN LATERAL ST_Dump(v.bbox) d "
+			"WHERE v.id = ANY('{" + ids.str() + "}'::bigint[]) ORDER BY v.id, d.path;");
+		for(const pqxx::row &row : rows)
+			out[ObjKey(2, row[0].as<int64_t>())].push_back(
+				{row[1].as<double>(), row[2].as<double>(), row[3].as<double>(), row[4].as<double>()});
 	}
 
 	std::set<int64_t> unboxed;
@@ -582,7 +595,7 @@ void EditActivityRecorder::Boxes(const class OsmData &objs, BoxMap &out)
 			}
 		}
 		if(!box.empty())
-			out[ObjKey(1, found->ways[i].objId)] = box;
+			out[ObjKey(1, found->ways[i].objId)] = {box};
 	}
 }
 
@@ -602,32 +615,51 @@ void EditActivityRecorder::ReachBoxes(const class OsmData &objs)
 	BoxMap boxes;
 	Boxes(*ways, boxes);
 	for(auto it=boxes.begin(); it!=boxes.end(); it++)
-		reachBoxes.push_back(it->second);
+		for(const std::vector<double> &box : it->second)
+			reachBoxes.push_back(box);
 }
 
 static void AppendNodePositions(const std::vector<OsmNode> &nodes,
-	std::map<std::pair<int, int64_t>, std::vector<double> > &out)
+	std::map<std::pair<int, int64_t>, std::vector<std::vector<double> > > &out)
 {
 	for(const OsmNode &node : nodes)
-		out[std::make_pair(0, node.objId)] = {node.lon, node.lat, node.lon, node.lat};
+		out[std::make_pair(0, node.objId)] = {{node.lon, node.lat, node.lon, node.lat}};
 }
 
-static std::string BoxPolygonWkt(const std::vector<double> &box)
+static std::string BoxRingWkt(const std::vector<double> &box)
 {
 	stringstream wkt;
 	wkt.precision(17);
-	wkt << "POLYGON((" << box[0] << " " << box[1] << "," << box[0] << " " << box[3] << ","
+	wkt << "((" << box[0] << " " << box[1] << "," << box[0] << " " << box[3] << ","
 		<< box[2] << " " << box[3] << "," << box[2] << " " << box[1] << "," << box[0] << " " << box[1] << "))";
 	return wkt.str();
 }
 
+static std::string BoxPolygonWkt(const std::vector<double> &box)
+{
+	return "POLYGON" + BoxRingWkt(box);
+}
+
+// A box, or the pieces of one (as of a relation spread across the
+// antimeridian) as a multipolygon
+static std::string BoxPiecesWkt(const std::vector<std::vector<double> > &pieces)
+{
+	if(pieces.size() == 1)
+		return BoxPolygonWkt(pieces[0]);
+	string wkt = "MULTIPOLYGON(";
+	for(size_t i = 0; i < pieces.size(); i++)
+		wkt += (i ? "," : "") + BoxRingWkt(pieces[i]);
+	return wkt + ")";
+}
+
 // One geometry for each object of a list, in order: a point for a node, the
-// rectangle of its box for a way or relation. An object without one has an
+// rectangle of its box for a way or relation, or for a relation spread across
+// the antimeridian a multipolygon of its two. An object without one has an
 // empty polygon where that is expected, as of deleted objects; otherwise the
 // box is not known and nothing is returned, which leaves the column unset.
 static std::string BoxCollectionWkt(const std::vector<std::string> &types,
 	const std::vector<std::pair<int64_t, int64_t> > &idVers,
-	const std::map<std::pair<int, int64_t>, std::vector<double> > &boxes, bool noneExpected)
+	const std::map<std::pair<int, int64_t>, std::vector<std::vector<double> > > &boxes, bool noneExpected)
 {
 	if(types.empty()) return "GEOMETRYCOLLECTION EMPTY";
 	stringstream wkt;
@@ -638,15 +670,15 @@ static std::string BoxCollectionWkt(const std::vector<std::string> &types,
 		int type = types[i] == "node" ? 0 : (types[i] == "way" ? 1 : 2);
 		auto it = boxes.find(std::make_pair(type, idVers[i].first));
 		if(i > 0) wkt << ",";
-		if(it == boxes.end())
+		if(it == boxes.end() || it->second.empty())
 		{
 			if(!noneExpected) return "";
 			wkt << "POLYGON EMPTY";
 		}
 		else if(type == 0)
-			wkt << "POINT(" << it->second[0] << " " << it->second[1] << ")";
+			wkt << "POINT(" << it->second[0][0] << " " << it->second[0][1] << ")";
 		else
-			wkt << BoxPolygonWkt(it->second);
+			wkt << BoxPiecesWkt(it->second);
 	}
 	wkt << ")";
 	return wkt.str();

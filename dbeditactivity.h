@@ -42,7 +42,9 @@ public:
 	// Where the objects of the lists above are. Each is the WKT of an
 	// SRID-4326 GeometryCollection with one geometry for every object of its
 	// list, in the same order: a point for a node, a polygon of its box for a
-	// way or relation, and POLYGON EMPTY, which keeps the positions in step,
+	// way or relation (for a relation spread across the antimeridian, a
+	// multipolygon of its two boxes), and POLYGON EMPTY, which keeps the
+	// positions in step,
 	// for an object that has been deleted. An empty string means it was not
 	// recorded, either because the row is older than this or because the box
 	// of one of the objects was not known; a list with no objects has an
@@ -243,7 +245,10 @@ public:
 
 private:
 	typedef std::pair<int, int64_t> ObjKey; // Type (0 node, 1 way, 2 relation) and ID
-	typedef std::map<ObjKey, std::vector<double> > BoxMap;
+	// Where each object is: its box, {min lon, min lat, max lon, max lat}, or
+	// for a relation spread across the antimeridian its two (see
+	// FindOuterBboxes); a node's position as a box of no size
+	typedef std::map<ObjKey, std::vector<std::vector<double> > > BoxMap;
 
 	pqxx::connection &c;
 	pqxx::transaction_base *work;

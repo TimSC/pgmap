@@ -1224,7 +1224,8 @@ bool PgTransaction::InsertEditActivity(const class EditActivity &activity,
 	 * and affectedparents_before_bbox/affectedparents_after_bbox for
 	 * affectedparents. Component i+1 of a collection belongs to entry i of its
 	 * list: counts AND ordering must agree. A way or relation has its bounding
-	 * rectangle; a node, whose position is in the object itself, or an object
+	 * rectangle (a relation spread across the antimeridian, a MultiPolygon of
+	 * its two, one either side); a node, whose position is in the object itself, or an object
 	 * whose extent is unknown, has POLYGON EMPTY as a placeholder. Both sides
 	 * matter for an affected parent because its version does not change when a
 	 * node moves, yet its extent can, so it may enter or leave a rectangle.

@@ -552,7 +552,9 @@ in the same order:
   the extent of the ways and relations holding it without changing their
   version, so this is the only record of that change.
 
-A node has a point at its position and a way or relation a polygon of its box.
+A node has a point at its position and a way or relation a polygon of its box;
+a relation spread across the antimeridian has a multipolygon of its two boxes,
+one either side (see "Relations across the antimeridian").
 A way's box is the stored one, or is worked out from its nodes on a map that
 does not store boxes. Where the box of an object is not known, as for a
 relation on such a map, the whole column is left NULL for that row. The web
